@@ -14,7 +14,6 @@ import { toast } from 'sonner'
 import { Pin, PinOff, Star, Settings, Plus, CirclePlus, Trash2, Pencil, PanelLeft, PanelRight, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, FolderInput, FolderPlus, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, ChevronsDownUp, Blocks, Brain, ListTodo, GitBranch, Download, Loader2, RotateCw, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { ModeSwitcher } from './ModeSwitcher'
 import { SearchDialog } from './SearchDialog'
 import { UserAvatar } from '@/components/chat/UserAvatar'
 import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
@@ -707,7 +706,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   // 会话高亮按"激活 Tab 所属会话"判定：预览 Tab 激活时其 owner 会话仍保持高亮
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
-  const { createChat, createAgent } = useCreateSession()
+  const { createAgent } = useCreateSession()
   const openSession = useOpenSession()
   const syncActiveTabSideEffects = useSyncActiveTabSideEffects()
   const store = useStore()
@@ -927,12 +926,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       .catch(console.error)
   }, [currentWorkspaceSlug, mode, activeView, capabilitiesVersion])
 
-  /** 置顶对话列表（仅活跃模式显示，排除 draft） */
-  const pinnedConversations = React.useMemo(
-    () => viewMode === 'active' ? conversations.filter((c) => c.pinned && !draftSessionIds.has(c.id)) : [],
-    [conversations, viewMode, draftSessionIds]
-  )
-
   /** 置顶 Agent 会话列表（仅活跃模式显示，跨项目展示，排除 draft） */
   const pinnedAgentSessions = React.useMemo(
     () => {
@@ -962,23 +955,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       ),
     })),
     [agentIndicatorMap, agentSessions, draftSessionIds, pinnedAgentSessions],
-  )
-
-  /** 对话按日期分组（根据 viewMode 过滤归档状态，排除 draft） */
-  const conversationGroups = React.useMemo(
-    () => {
-      const filtered = viewMode === 'archived'
-        ? conversations.filter((c) => c.archived && !draftSessionIds.has(c.id))
-        : conversations.filter((c) => !c.archived && !c.pinned && !draftSessionIds.has(c.id))
-      return groupByDate(filtered)
-    },
-    [conversations, viewMode, draftSessionIds]
-  )
-
-  /** 已归档对话数量 */
-  const archivedConversationCount = React.useMemo(
-    () => conversations.filter((c) => c.archived).length,
-    [conversations]
   )
 
   /** 已归档 Agent 会话数量由主进程轻量统计返回，active 视图不扫描归档元数据。 */
@@ -1060,78 +1036,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setViewMode('active')
   }, [mode, setViewMode])
 
-  /** 选择对话（打开或聚焦标签页） */
-  const handleSelectConversation = React.useCallback((id: string, title: string): void => {
-    openSession('chat', id, title)
-    setActiveView('conversations')
-  }, [openSession, setActiveView])
-
   /** 请求删除对话（弹出确认框） */
   const handleRequestDelete = React.useCallback((id: string): void => {
     setPendingDeleteId(id)
   }, [])
-
-  /** 重命名对话标题 */
-  const handleRename = React.useCallback(async (id: string, newTitle: string): Promise<void> => {
-    try {
-      const updated = await window.electronAPI.updateConversationTitle(id, newTitle)
-      setConversations((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
-      )
-      // 同步更新标签页标题
-      setTabs((prev) => updateTabTitle(prev, id, newTitle))
-    } catch (error) {
-      console.error('[侧边栏] 重命名对话失败:', error)
-    }
-  }, [setConversations, setTabs])
-
-  /** 切换对话置顶状态 */
-  const handleTogglePin = React.useCallback(async (id: string): Promise<void> => {
-    try {
-      const original = store.get(conversationsAtom).find((c) => c.id === id)
-      const updated = await window.electronAPI.togglePinConversation(id)
-      setConversations((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
-      )
-      // 归档会话被置顶时会自动取消归档
-      if (original?.archived && updated.pinned && !updated.archived) {
-        toast.success('已取消归档并置顶')
-      }
-    } catch (error) {
-      console.error('[侧边栏] 切换置顶失败:', error)
-    }
-  }, [store, setConversations])
-
-  /** 切换对话归档状态 */
-  const handleToggleArchive = React.useCallback(async (id: string): Promise<void> => {
-    try {
-      const updated = await window.electronAPI.toggleArchiveConversation(id)
-      setConversations((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
-      )
-      // 归档时自动关闭该对话的标签页，并同步新激活标签的副作用
-      // （appMode、currentXxxId 等），避免文件面板/工具栏等 per-tab
-      // 状态被遗留为旧值或被错误地置 null。
-      if (updated.archived) {
-        const currentTabs = store.get(tabsAtom)
-        const currentActiveTabId = store.get(activeTabIdAtom)
-        const wasActive = currentActiveTabId === id
-        const tabResult = closeTab(currentTabs, currentActiveTabId, id)
-        setTabs(tabResult.tabs)
-        setActiveTabId(tabResult.activeTabId)
-        cleanupMapAtoms(id)
-        if (wasActive) {
-          const newActiveTab = tabResult.activeTabId
-            ? tabResult.tabs.find((t) => t.id === tabResult.activeTabId) ?? null
-            : null
-          syncActiveTabSideEffects(newActiveTab)
-        }
-      }
-      toast.success(updated.archived ? '已归档' : '已取消归档')
-    } catch (error) {
-      console.error('[侧边栏] 切换归档失败:', error)
-    }
-  }, [store, setConversations, setTabs, setActiveTabId, cleanupMapAtoms, syncActiveTabSideEffects])
 
   /** 确认删除对话 */
   const handleConfirmDelete = async (cascade: boolean = false): Promise<void> => {
@@ -1869,9 +1777,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     viewMode,
     conversations,
     agentSessions,
-    pinnedConversations,
     pinnedAgentSessions,
-    conversationGroups,
     expandedExtraCountMap,
     collapsedWorkspaceIds,
     expandedArchivedProjectIds,
@@ -1907,11 +1813,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
         event.preventDefault()
         event.stopPropagation()
-        if (target.type === 'agent') {
-          handleSelectAgentSession(target.id, target.title)
-        } else {
-          handleSelectConversation(target.id, target.title)
-        }
+        if (target.type === 'agent') handleSelectAgentSession(target.id, target.title)
         return
       }
 
@@ -1964,7 +1866,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     settingsOpen,
     searchDialogOpen,
     handleSelectAgentSession,
-    handleSelectConversation,
     refreshQuickSwitchTargets,
   ])
 
@@ -2270,76 +2171,26 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }))
   }, [agentSessions, draftSessionIds, viewMode, workspaces])
 
-  const handleRailModeSwitch = React.useCallback((targetMode: AppMode) => {
+  /** Chat 已退役：rail 的 Agent 入口只负责回到最近的活跃会话，或保持在当前会话。 */
+  const handleRailModeSwitch = React.useCallback(() => {
     setViewMode('active')
-    if (targetMode === mode) return
-
-    const isChatMode = targetMode === 'chat'
-    const sessions = isChatMode ? conversations : agentSessions
-    const lastId = isChatMode ? currentConversationId : currentAgentSessionId
-
-    if (lastId) {
-      const match = sessions.find((s) => s.id === lastId)
+    if (currentAgentSessionId) {
+      const match = agentSessions.find((session) => session.id === currentAgentSessionId)
       if (match) {
-        openSession(targetMode, match.id, match.title)
+        openSession('agent', match.id, match.title)
         return
       }
     }
-
-    const tab = tabs.find((t) => t.type === targetMode)
+    const tab = tabs.find((item) => item.type === 'agent')
     if (tab) {
-      openSession(targetMode, tab.sessionId, tab.title)
+      openSession('agent', tab.sessionId, tab.title)
       return
     }
-
-    const recent = isChatMode
-      ? conversations.find((conversation) => !conversation.archived && !draftSessionIds.has(conversation.id))
-      : agentSessions.find((session) => !session.archived && !session.isDraft && !draftSessionIds.has(session.id))
-    if (recent) {
-      openSession(targetMode, recent.id, recent.title)
-      return
-    }
-
-    setMode(targetMode)
-  }, [
-    mode,
-    conversations,
-    agentSessions,
-    currentConversationId,
-    currentAgentSessionId,
-    tabs,
-    draftSessionIds,
-    openSession,
-    setMode,
-    setViewMode,
-  ])
+    const recent = agentSessions.find((session) => !session.archived && !session.isDraft && !draftSessionIds.has(session.id))
+    if (recent) openSession('agent', recent.id, recent.title)
+  }, [currentAgentSessionId, agentSessions, tabs, draftSessionIds, openSession, setViewMode])
 
   const railRecentItems = React.useMemo<RailRecentItem[]>(() => {
-    if (mode === 'chat') {
-      return conversations
-        .filter((c) => !c.archived && !draftSessionIds.has(c.id))
-        .sort((a, b) => {
-          const activeDelta = Number(b.id === activeSessionId) - Number(a.id === activeSessionId)
-          if (activeDelta !== 0) return activeDelta
-          const streamingDelta = Number(streamingIds.has(b.id)) - Number(streamingIds.has(a.id))
-          if (streamingDelta !== 0) return streamingDelta
-          const pinnedDelta = Number(!!b.pinned) - Number(!!a.pinned)
-          if (pinnedDelta !== 0) return pinnedDelta
-          return b.updatedAt - a.updatedAt
-        })
-        .slice(0, 5)
-        .map((conversation) => ({
-          id: conversation.id,
-          title: conversation.title,
-          type: 'chat' as const,
-          initial: getRailInitial(conversation.title),
-          active: conversation.id === activeSessionId,
-          status: streamingIds.has(conversation.id) ? 'running' as const : 'idle' as const,
-          pinned: !!conversation.pinned,
-          workspaceName: undefined,
-        }))
-    }
-
     const eligibleSessions = agentSessions.filter((session) => (
       !session.archived
       && !session.isDraft
@@ -2525,133 +2376,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       onMoved={handleSessionMoved}
     />
   )
-
-  // Chat 历史展平为固定行：日期标题、置顶标题和每个会话各占一行，供虚拟列表
-  // 按需挂载。不要把整个日期组作为一行，否则大量会话仍会同时留在 DOM。
-  const chatActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
-    const rows: VirtualSidebarRow[] = []
-    if (pinnedConversations.length > 0) {
-      rows.push({
-        id: 'chat-pinned-heading',
-        estimateSize: 32,
-        content: <div className="pl-6 pr-3.5 pt-2 pb-1 text-[15px] font-medium leading-5 text-foreground/45 select-none">置顶</div>,
-      })
-      for (const conv of pinnedConversations) {
-        rows.push({
-          id: `chat-pinned-${conv.id}`,
-          estimateSize: 34,
-          content: (
-            <div className="px-2">
-              <div className="ml-4">
-                <ConversationItem
-                  conversation={conv}
-                  active={conv.id === activeSessionId}
-                  streaming={streamingIds.has(conv.id)}
-                  showPinIcon={false}
-                  relativeTimeNow={relativeTimeNow}
-                  onSelect={handleSelectConversation}
-                  onRequestDelete={handleRequestDelete}
-                  onRename={handleRename}
-                  onTogglePin={handleTogglePin}
-                  onToggleArchive={handleToggleArchive}
-                />
-              </div>
-            </div>
-          ),
-        })
-      }
-    }
-
-    rows.push({
-      id: 'chat-history-heading',
-      estimateSize: 34,
-      content: (
-        <div className="group/chat-section relative flex items-center px-2 pt-2 pb-1">
-          <span className="ml-[4px] px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">对话</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="新建对话"
-                onClick={() => { void createChat() }}
-                className="absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-foreground/30 transition-colors hover:bg-foreground/[0.055] hover:text-foreground/65 titlebar-no-drag"
-              >
-                <Plus size={13} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {`新建对话${newChatShortcutLabel ? ` (${newChatShortcutLabel})` : ''}`}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      ),
-    })
-
-    for (const group of conversationGroups) {
-      rows.push({
-        id: `chat-date-${group.label}`,
-        estimateSize: 30,
-        content: <div className="ml-[4px] px-3.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">{group.label}</div>,
-      })
-      for (const conv of group.items) {
-        rows.push({
-          id: `chat-${conv.id}`,
-          estimateSize: 34,
-          content: (
-            <div className="px-2">
-              <ConversationItem
-                conversation={conv}
-                active={conv.id === activeSessionId}
-                streaming={streamingIds.has(conv.id)}
-                showPinIcon={!!conv.pinned}
-                relativeTimeNow={relativeTimeNow}
-                onSelect={handleSelectConversation}
-                onRequestDelete={handleRequestDelete}
-                onRename={handleRename}
-                onTogglePin={handleTogglePin}
-                onToggleArchive={handleToggleArchive}
-              />
-            </div>
-          ),
-        })
-      }
-    }
-    return rows
-  }, [activeSessionId, conversationGroups, createChat, handleRename, handleRequestDelete, handleSelectConversation, handleToggleArchive, handleTogglePin, newChatShortcutLabel, pinnedConversations, relativeTimeNow, streamingIds])
-
-  const chatArchivedVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
-    const rows: VirtualSidebarRow[] = []
-    for (const group of conversationGroups) {
-      rows.push({
-        id: `chat-archived-date-${group.label}`,
-        estimateSize: 30,
-        content: <div className="px-3 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">{group.label}</div>,
-      })
-      for (const conv of group.items) {
-        rows.push({
-          id: `chat-archived-${conv.id}`,
-          estimateSize: 34,
-          content: (
-            <div className="px-3">
-              <ConversationItem
-                conversation={conv}
-                active={conv.id === activeSessionId}
-                streaming={streamingIds.has(conv.id)}
-                showPinIcon={!!conv.pinned}
-                relativeTimeNow={relativeTimeNow}
-                onSelect={handleSelectConversation}
-                onRequestDelete={handleRequestDelete}
-                onRename={handleRename}
-                onTogglePin={handleTogglePin}
-                onToggleArchive={handleToggleArchive}
-              />
-            </div>
-          ),
-        })
-      }
-    }
-    return rows
-  }, [activeSessionId, conversationGroups, handleRename, handleRequestDelete, handleSelectConversation, handleToggleArchive, handleTogglePin, relativeTimeNow, streamingIds])
 
   const agentArchivedVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
     const rows: VirtualSidebarRow[] = []
@@ -3251,7 +2975,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             <button
               type="button"
               aria-label="切换到 Agent 模式（悬停查看项目）"
-              onClick={() => handleRailModeSwitch("agent")}
+              onClick={() => handleRailModeSwitch()}
               className="group relative flex size-10 items-center justify-center p-1 titlebar-no-drag"
             >
               <span
@@ -3267,43 +2991,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </button>
           </CollapsedWorkspacePopover>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="切换到 Chat 模式"
-                onClick={() => handleRailModeSwitch("chat")}
-                className="group relative flex size-10 items-center justify-center p-1 titlebar-no-drag"
-              >
-                <span
-                  className={cn(
-                    "flex size-8 items-center justify-center rounded-[10px] transition-[background-color,color,box-shadow] duration-150",
-                    mode === "chat"
-                      ? "bg-primary/10 text-foreground shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]"
-                      : "text-foreground/45 group-hover:bg-foreground/[0.06] group-hover:text-foreground/75",
-                  )}
-                >
-                  <MessageSquare size={15} />
-                </span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Chat 模式</TooltipContent>
-          </Tooltip>
-
           <div className="my-1 h-px w-6 bg-border/70" />
 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={
-                  mode === "agent" ? "新建 Agent 会话" : "新建 Chat 对话"
-                }
-                onClick={() => {
-                  void (mode === "agent"
-                    ? createAgentSessionInWorkspace()
-                    : createChat());
-                }}
+                aria-label="新建 Agent 会话"
+                onClick={() => { void createAgentSessionInWorkspace() }}
                 className="group flex size-10 items-center justify-center p-1 titlebar-no-drag"
               >
                 <span className="flex size-8 items-center justify-center rounded-[10px] text-foreground/65 transition-[background-color,color] duration-150 group-hover:bg-foreground/[0.07] group-hover:text-foreground">
@@ -3313,7 +3008,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </TooltipTrigger>
             <TooltipContent side="right">
               <span className="flex items-center gap-2">
-                <span>{mode === "agent" ? "新会话" : "新对话"}</span>
+                <span>新会话</span>
                 <ShortcutKeycaps
                   shortcutId="new-session"
                   keycapClassName="h-5 min-w-5 px-1 text-[11px]"
@@ -3370,13 +3065,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           agentIndicatorMap={agentIndicatorMap}
           miniMapDisabled={!sessionHoverPreviewEnabled}
           onSelectChild={handleSelectRailChild}
-          onSelect={(selected) => {
-            if (selected.type === "agent") {
-              handleSelectAgentSession(selected.id, selected.title);
-            } else {
-              handleSelectConversation(selected.id, selected.title);
-            }
-          }}
+          onSelect={(selected) => handleSelectAgentSession(selected.id, selected.title)}
         />
 
         {/* 底部只保留全局状态与账户入口，工作区工具统一从搜索下方进入。 */}
@@ -3438,10 +3127,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       {/* macOS 需要避开左上角红绿灯；边栏覆盖全局标题栏拖拽层，因此留白自身也要可拖拽。 */}
       <div className={cn('w-full flex-shrink-0 titlebar-drag-region', isMac ? 'h-[30px]' : 'h-1')} />
 
-      {/* 模式切换器 + 折叠按钮 */}
+      {/* 模式入口（Chat 已退役）+ 折叠按钮 */}
       <div className={cn('titlebar-drag-region flex items-start gap-1.5 px-3', isMac && 'pt-[5px]')}>
-        <div className="flex-1 min-w-0">
-          <ModeSwitcher />
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1 pb-1 pt-1.5 text-[13px] font-medium text-foreground/70">
+          <Bot size={15} />
+          <span className="truncate">Agent</span>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -3474,12 +3164,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label={mode === 'agent' ? '新建任务' : '新建对话'}
-              onClick={() => { void (mode === 'agent' ? createAgentSessionInWorkspace() : createChat()) }}
+              aria-label="新建任务"
+              onClick={() => { void createAgentSessionInWorkspace() }}
               className="group flex h-9 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 text-[13px] text-[hsl(var(--sidebar-primary-foreground))] transition-[background-color,color,transform] hover:bg-foreground/[0.055] hover:text-[hsl(var(--sidebar-primary-foreground))] active:scale-[0.96] titlebar-no-drag"
             >
               <CirclePlus size={16} className="shrink-0" />
-              <span>{mode === 'agent' ? '新建任务' : '新建对话'}</span>
+              <span>新建任务</span>
               <span className="ml-auto flex shrink-0 items-center opacity-70 group-hover:opacity-100">
                 <ShortcutKeycaps
                   shortcutId="new-session"
@@ -3542,7 +3232,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <WorkspaceComponentSidebarEntry
             label="Obsidian"
             icon={<ObsidianIcon size={16} />}
-            active={mode === 'chat' ? activeView === 'vault' : isWorkspaceComponentActive('vault')}
+            active={isWorkspaceComponentActive('vault')}
             onClick={handleOpenVault}
           />
         )}
@@ -3585,16 +3275,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       </div>
 
       {/* 原生与虚拟列表共享顶部反馈，切换视图时不沿用上一列表的滚动状态。 */}
-      {mode === 'chat' && viewMode === 'active' ? (
-        <SidebarScrollBoundary key="chat-active-boundary">
-          <VirtualSidebarList
-            key="chat-active-list"
-            className="flex-1"
-            rows={chatActiveVirtualRows}
-            activeRowId={activeSessionId ? `chat-${activeSessionId}` : null}
-          />
-        </SidebarScrollBoundary>
-      ) : mode === 'agent' && viewMode === 'active' ? (
+      {viewMode === 'active' ? (
         <SidebarScrollBoundary key="agent-active-boundary">
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin titlebar-no-drag px-2 pb-3">
             {agentActiveVirtualRows.map((row) => (
@@ -3608,31 +3289,20 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           {viewMode === 'archived' && (
             <div className="px-6 pt-3 pb-1">
               <div className="text-[12px] font-medium text-foreground/40">
-                已归档{mode === 'agent' ? '会话' : '对话'}
+                已归档会话
               </div>
             </div>
           )}
 
           {/* 归档视图：单列表布局 */}
-          {mode === 'chat' ? (
-            <SidebarScrollBoundary key="chat-archived-boundary">
-              <VirtualSidebarList
-                key="chat-archived-list"
-                className="flex-1 px-3 pt-2 pb-3"
-                rows={chatArchivedVirtualRows}
-                activeRowId={activeSessionId ? `chat-archived-${activeSessionId}` : null}
-              />
-            </SidebarScrollBoundary>
-          ) : (
-            <SidebarScrollBoundary key="agent-archived-boundary">
-              <VirtualSidebarList
-                key="agent-archived-list"
-                className="flex-1 px-3 pt-2 pb-3"
-                rows={agentArchivedVirtualRows}
-                activeRowId={activeSessionId ? `agent-archived-${activeSessionId}` : null}
-              />
-            </SidebarScrollBoundary>
-          )}
+          <SidebarScrollBoundary key="agent-archived-boundary">
+            <VirtualSidebarList
+              key="agent-archived-list"
+              className="flex-1 px-3 pt-2 pb-3"
+              rows={agentArchivedVirtualRows}
+              activeRowId={activeSessionId ? `agent-archived-${activeSessionId}` : null}
+            />
+          </SidebarScrollBoundary>
         </>
       )}
 
@@ -3640,16 +3310,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       <div className="px-3 pb-1">
         {viewMode === 'active' ? (
           <>
-            {mode === 'chat' && archivedConversationCount > 0 && (
-              <button
-                onClick={() => setViewMode('archived')}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
-              >
-                <Archive size={13} className="text-foreground/30" />
-                <span>已归档 ({archivedConversationCount})</span>
-              </button>
-            )}
-            {mode === 'agent' && archivedAgentSessionCount > 0 && (
+            {archivedAgentSessionCount > 0 && (
               <button
                 onClick={() => setViewMode('archived')}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
@@ -3665,7 +3326,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/60 bg-foreground/[0.04] hover:bg-foreground/[0.07] hover:text-foreground/80 transition-colors titlebar-no-drag"
           >
             <ArrowLeft size={13} className="text-foreground/50" />
-            <span>返回活跃{mode === 'agent' ? '会话' : '对话'}</span>
+            <span>返回活跃会话</span>
           </button>
         )}
       </div>

@@ -105,14 +105,6 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     readonly: true,
   },
   {
-    id: 'toggle-mode',
-    name: '切换模式',
-    description: '在 Chat 和 Agent 模式之间切换',
-    defaultMac: 'Cmd+Shift+M',
-    defaultWin: 'Ctrl+Shift+M',
-    category: 'app',
-  },
-  {
     id: 'global-search',
     name: '全局搜索',
     description: '搜索对话和会话',

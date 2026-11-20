@@ -42,7 +42,6 @@ const SHORTCUT_DISPLAY_ORDER: Record<ShortcutCategory, readonly string[]> = {
     'zoom-out',
     'reset-zoom',
     'open-settings',
-    'toggle-mode',
     'close-tab',
     'toggle-right-panel',
   ],

@@ -430,16 +430,14 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         magnifierOffsetX: 70,
         magnifierImageOffset: { x: 0.09, y: 0.33 },
         highlight: '入门篇 · 第 1 步',
-        title: 'Agent 和 Chat 模式的区别',
+        title: 'Agent 是唯一主入口',
         paragraphs: [
-          <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
+          <>Proma 现在只有 <b className="font-medium text-neutral-900">Agent</b> 一个主入口，所有对话都在 Agent 中进行。</>,
           <>
-            <b className="font-medium text-neutral-900">Chat</b> 是一问一答的对话——快速提问、不涉及任何对电脑的操作，
-            核心偏向满足好奇心和完成简单的文字工作。
+            <b className="font-medium text-neutral-900">Chat 模式已退役</b>：历史对话仍然保留，可在「设置 → 历史 Chat」中检索，并逐条交给 Agent 继续。
           </>,
           <>
-            <b className="font-medium text-neutral-900">Agent</b> 则能自主规划做调研、操作电脑、写代码、PPT 和文档，
-            为你的想法赋形。
+            Agent 能自主规划做调研、操作电脑、写代码、PPT 和文档，为你的想法赋形；简单的概念提问也直接在 Agent 里问即可。
           </>,
         ],
       }}
@@ -451,13 +449,13 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         <div className="space-y-16 md:space-y-20">
           <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
             <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
-              <img src={guideChatExample} alt="Chat 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
+              <img src={guideChatExample} alt="用 Agent 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
             </figure>
             <div>
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · Chat</div>
-              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">快速厘清一个概念用 Chat</h3>
+              <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · 快速提问</div>
+              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">快速厘清一个概念</h3>
               <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-                AI 最常见的场景，随意询问一件事，得到简单快速的解释。Chat 专注对话和文字回答，不会有任何产出。
+                最常见的场景：随意询问一件事，得到简单快速的解释。不需要产出文件时，直接在 Agent 里问即可。
               </p>
               <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
                 <div className="text-base font-medium leading-7 text-[#1b3f2d]">你可以这样说</div>

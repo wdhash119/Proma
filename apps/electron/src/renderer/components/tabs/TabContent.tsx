@@ -1,14 +1,13 @@
 /**
  * TabContent — 标签内容渲染器
  *
- * 根据标签类型渲染参数化的 ChatView 或 AgentView。
- * 直接传递 sessionId/conversationId prop，无需桥接全局 atoms。
+ * 根据标签类型渲染 AgentView 或预览内容。
+ * Chat 模式已退役，历史 chat 标签会给出可执行的恢复指引。
  */
 
 import * as React from 'react'
 import { useAtomValue } from 'jotai'
 import { tabsAtom } from '@/atoms/tab-atoms'
-import { ChatView } from '@/components/chat'
 import { AgentView } from '@/components/agent'
 import { PreviewTabContent } from '@/components/diff/PreviewTabContent'
 import { TabErrorBoundary } from './TabErrorBoundary'
@@ -37,10 +36,12 @@ export function TabContent({ tabId }: TabContentProps): React.ReactElement {
   }
 
   if (tab.type === 'chat') {
+    // Chat 模式已退役：旧标签不再渲染 ChatView，避免把已下线的界面重新带回主入口。
     return (
-      <TabErrorBoundary key={tab.sessionId} sessionId={tab.sessionId}>
-        <ChatView conversationId={tab.sessionId} />
-      </TabErrorBoundary>
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+        <span>Chat 模式已退役</span>
+        <span className="text-xs">历史对话可在「设置 → 历史 Chat」中检索并交给 Agent 继续。</span>
+      </div>
     )
   }
 

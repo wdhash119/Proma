@@ -289,43 +289,21 @@ export function SearchDialog(): React.ReactElement {
     setLoading(true)
     setSelectedIndex(0)
 
-    const isChatMode = appMode === 'chat'
-    const isAgentMode = appMode === 'agent'
     const matchesTitle = (title: string): boolean => findBestSearchMatch(title, q) !== null
-    const titles: TitleResult[] = (isChatMode
-      ? conversations
-        .filter((c) => matchesTitle(c.title))
-        .map((c) => ({ id: c.id, title: c.title, type: 'chat' as const, archived: c.archived, updatedAt: c.updatedAt }))
-      : isAgentMode
-        ? agentSessions
-          .filter((s) => matchesTitle(s.title))
-          .map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt }))
-        : [])
+    // Chat 已退役：主搜索只覆盖 Agent 会话；历史 Chat 在「设置 → 历史 Chat」中检索。
+    const titles: TitleResult[] = agentSessions
+      .filter((s) => matchesTitle(s.title))
+      .map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt }))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 20)
 
     setTitleResults(titles)
 
     try {
-      const [chatResults, agentResults] = await Promise.all([
-        isChatMode ? window.electronAPI.searchConversationMessages(q) : Promise.resolve([]),
-        isAgentMode ? window.electronAPI.searchAgentSessionMessages(q) : Promise.resolve([]),
-      ])
+      const agentResults = await window.electronAPI.searchAgentSessionMessages(q)
       if (token !== searchTokenRef.current) return
 
       const titleIds = new Set(titles.map((t) => t.id))
-      const chatContent: ContentResult[] = (chatResults as MessageSearchResult[])
-        .filter((r) => !titleIds.has(r.conversationId))
-        .map((r) => ({
-          id: r.conversationId,
-          title: r.conversationTitle,
-          type: 'chat' as const,
-          messageId: r.messageId,
-          snippet: r.snippet,
-          matchStart: r.matchStart,
-          matchLength: r.matchLength,
-          archived: r.archived,
-        }))
       const agentContent: ContentResult[] = (agentResults as AgentMessageSearchResult[])
         .filter((r) => !titleIds.has(r.sessionId))
         .map((r) => ({
@@ -339,14 +317,14 @@ export function SearchDialog(): React.ReactElement {
           archived: r.archived,
         }))
 
-      setContentResults([...chatContent, ...agentContent])
+      setContentResults(agentContent)
     } catch (error) {
       console.error('[搜索] 内容搜索失败:', error)
       if (token === searchTokenRef.current) setContentResults([])
     } finally {
       if (token === searchTokenRef.current) setLoading(false)
     }
-  }, [query, conversations, agentSessions, appMode])
+  }, [query, agentSessions])
 
   const handleAgentSearch = React.useCallback(async () => {
     const q = query.trim()
@@ -390,16 +368,10 @@ export function SearchDialog(): React.ReactElement {
     setOpen(false)
     setActiveView('conversations')
 
-    if (result.type === 'chat') {
-      const conv = conversations.find((c) => c.id === result.id)
-      const title = conv?.title ?? result.title
-      openSession('chat', result.id, title)
-    } else {
-      const session = agentSessions.find((s) => s.id === result.id)
-      const title = session?.title ?? result.title
-      openSession('agent', result.id, title)
-    }
-  }, [setOpen, setActiveView, openSession, conversations, agentSessions])
+    // Chat 已退役：结果只可能是 Agent 会话。
+    const session = agentSessions.find((s) => s.id === result.id)
+    openSession('agent', result.id, session?.title ?? result.title)
+  }, [setOpen, setActiveView, openSession, agentSessions])
 
   /**
    * Enter 键语义：

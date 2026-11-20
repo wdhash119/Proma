@@ -11,7 +11,8 @@ import { MAX_ATTACHMENT_SIZE } from '@proma/shared'
 import { toast } from 'sonner'
 
 /** 任务模式 */
-type TaskMode = 'chat' | 'agent'
+// Chat 模式已退役：快速任务只创建 Agent 会话。
+type TaskMode = 'agent'
 
 /** 待上传附件（仅在快速任务窗口内使用） */
 interface QuickAttachment {
@@ -49,7 +50,7 @@ export function QuickTaskApp(): React.ReactElement {
   // 加载默认模型信息
   useEffect(() => {
     loadModelInfo()
-  }, [mode])
+  }, [])
 
   async function loadModelInfo(): Promise<void> {
     try {
@@ -133,7 +134,6 @@ export function QuickTaskApp(): React.ReactElement {
 
       if (mod && e.key === '1') {
         e.preventDefault()
-        setMode('chat')
         return
       }
       if (mod && e.key === '2') {
@@ -198,7 +198,7 @@ export function QuickTaskApp(): React.ReactElement {
     }
     if (rejectedLargeFiles.length > 0) {
       toast.error(`以下文件超过 100MB，已跳过：${formatFileNames(rejectedLargeFiles)}`, {
-        description: mode === 'chat' ? 'Chat 附件暂不支持大文件。' : '无法取得本地路径，不能作为附加文件引用。',
+        description: '无法取得本地路径，不能作为附加文件引用。',
       })
     }
     if (newAttachments.length > 0) {
@@ -253,12 +253,6 @@ export function QuickTaskApp(): React.ReactElement {
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim()
     if ((!trimmed && attachments.length === 0) || isSubmitting) return
-    const pathOnlyAttachments = attachments.filter((att) => att.sourcePath && !att.base64)
-    if (mode === 'chat' && pathOnlyAttachments.length > 0) {
-      toast.error(`Chat 暂不支持大文件附加，已保留在快速任务窗口：${formatFileNames(pathOnlyAttachments.map((att) => att.filename))}`)
-      return
-    }
-
     setIsSubmitting(true)
     try {
       await window.electronAPI.submitQuickTask({
@@ -275,7 +269,7 @@ export function QuickTaskApp(): React.ReactElement {
     } finally {
       setIsSubmitting(false)
     }
-  }, [text, mode, attachments, isSubmitting])
+  }, [text, attachments, isSubmitting])
 
   // Enter 提交，Shift+Enter 换行
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -298,30 +292,11 @@ export function QuickTaskApp(): React.ReactElement {
         {/* 顶栏：模式切换 + 模型信息 */}
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <div className="flex items-center gap-2">
-            {/* 模式切换器 */}
+            {/* 模式标识（Chat 已退役） */}
             <div className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5">
-              <button
-                type="button"
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                  mode === 'chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setMode('chat')}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                  mode === 'agent'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setMode('agent')}
-              >
+              <span className="rounded-md bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm">
                 Agent
-              </button>
+              </span>
             </div>
 
             {/* 模型信息 */}
@@ -334,8 +309,6 @@ export function QuickTaskApp(): React.ReactElement {
 
           {/* 快捷键提示 */}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground/40">
-            <span>⌘1 Chat</span>
-            <span>⌘2 Agent</span>
             <span>Esc 关闭</span>
           </div>
         </div>

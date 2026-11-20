@@ -251,12 +251,6 @@ export type MarkdownFontSize = 'small' | 'medium' | 'large'
 /** 默认 Markdown 字号档位 */
 export const DEFAULT_MARKDOWN_FONT_SIZE: MarkdownFontSize = 'medium'
 
-/** macOS 原生 Agent 灵动岛偏好。 */
-export interface AgentIslandSettings {
-  /** 是否启用 Agent / 近期 Todo 日程的灵动岛提醒，默认 true。 */
-  enabled?: boolean
-}
-
 /**
  * 给无视觉输入能力的 Agent 使用的独立视觉模型路由。
  * 仅保存用户已有渠道和模型的 ID，凭据继续由渠道加密存储管理。
@@ -373,8 +367,6 @@ export interface AppSettings {
    * 关闭后不注入任何 Proma 归因，并覆盖 Claude SDK 默认 Co-Authored-By。
    */
   gitAttributionEnabled?: boolean
-  /** macOS 原生 Agent 灵动岛偏好。 */
-  agentIsland?: AgentIslandSettings
   /** 主窗口状态（大小、位置、是否最大化） */
   mainWindowState?: MainWindowState
 }
@@ -558,20 +550,6 @@ export const TRAY_IPC_CHANNELS = {
   OPEN_AGENT_SESSION: 'tray:open-agent-session',
   /** 创建新会话 */
   CREATE_SESSION: 'tray:create-session',
-} as const
-
-/** Windows Agent Island IPC 通道（主进程 ↔ 渲染进程） */
-export const WINDOWS_AGENT_ISLAND_IPC_CHANNELS = {
-  /** 主进程 → 渲染进程：委托播放提示音 */
-  PLAY_SOUND: 'windows-agent-island:play-sound',
-  /** 渲染进程（悬停窗）→ 主进程：点击跳转到会话 */
-  OPEN_SESSION: 'windows-agent-island:open-session',
-  /** 主进程 → 渲染进程（悬停窗）：推送全量 snapshot */
-  PUSH_SNAPSHOT: 'windows-agent-island:push-snapshot',
-  /** 渲染进程（悬停窗）→ 主进程：鼠标进入气泡区域 */
-  MOUSE_ENTER: 'windows-agent-island:mouse-enter',
-  /** 渲染进程（悬停窗）→ 主进程：鼠标离开气泡区域 */
-  MOUSE_LEAVE: 'windows-agent-island:mouse-leave',
 } as const
 
 /** 存储管理 IPC 通道 */

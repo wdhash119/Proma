@@ -76,7 +76,7 @@ for (const key of Object.keys(process.env)) {
 
 import { createApplicationMenu } from './menu'
 import { registerIpcHandlers } from './ipc'
-import { createTray, destroyTray, getTray, setTrayFlash } from './tray'
+import { createTray, destroyTray, getTray } from './tray'
 import { initializeRuntime } from './lib/runtime-init'
 import { seedDefaultSkills } from './lib/config-paths'
 import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
@@ -119,11 +119,6 @@ import { getSlackConfig } from './lib/slack-config'
 import { wechatBridge } from './lib/wechat-bridge'
 import { getWeChatConfig } from './lib/wechat-config'
 import { createQuickTaskWindow, toggleQuickTaskWindow, destroyQuickTaskWindow } from './lib/quick-task-window'
-import { getAgentStatusHoverWindow, destroyAgentStatusHoverWindow } from './agent-status-hover-window'
-import { handleNativeAgentIslandEvent, initAgentIslandService, disposeAgentIslandService, publishAgentIslandNow } from './lib/agent-island-service'
-import { disposeMacAgentIslandNativeHost, startMacAgentIslandNativeHost, isMacAgentIslandNativeHostReady } from './lib/mac-agent-island-native-host'
-import { isAgentIslandServiceSupported, isMacAgentIslandSurfaceSupported } from './lib/macos-version'
-import { getWindowsAgentIslandSurface, processNotification, type SurfaceDeps } from './lib/windows-agent-island-surface'
 import {
   createVoiceDictationWindow,
   toggleVoiceDictationWindow,
@@ -133,29 +128,7 @@ import {
 import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/global-shortcut-service'
 import { setPromaVersion } from '@proma/core'
 import { canRecoverRenderer, RENDERER_RECOVERY_WINDOW_MS } from './lib/renderer-process-recovery'
-import { TRAY_IPC_CHANNELS, WINDOWS_AGENT_ISLAND_IPC_CHANNELS } from '../types'
-
-/** macOS 26+ 使用 Swift/AppKit NSPanel；其他平台不创建 Agent Island surface。 */
-function startAgentIslandSurface(): void {
-  if (!isMacAgentIslandSurfaceSupported()) {
-    console.info('[agent-island] 当前平台或 macOS 版本不支持，已禁用')
-    return
-  }
-
-  const startedNative = startMacAgentIslandNativeHost({
-    onReady: () => {
-      console.info('[agent-island] macOS 原生 NSPanel helper 已就绪')
-      publishAgentIslandNow()
-    },
-    onEvent: handleNativeAgentIslandEvent,
-    onUnavailable: (reason) => {
-      console.warn(`[agent-island] macOS 原生 helper 不可用，已禁用：${reason}`)
-    },
-  })
-  if (!startedNative) {
-    console.warn('[agent-island] macOS 原生 helper 启动失败，已禁用')
-  }
-}
+import { TRAY_IPC_CHANNELS } from '../types'
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
 
@@ -765,9 +738,6 @@ async function bootstrap(): Promise<void> {
   createWindow()
 
   // Create system tray icon
-  const hoverWin = process.platform === 'win32' ? getAgentStatusHoverWindow() : null
-  if (hoverWin) safeRun('ensureHoverWindow', () => hoverWin.ensureCreated())
-
   createTray({
     showMainWindow: showAndFocusMainWindow,
     openAgentSession: (sessionId, title) => {
@@ -776,29 +746,7 @@ async function bootstrap(): Promise<void> {
     createAgentSession: () => {
       sendToMainWindow(TRAY_IPC_CHANNELS.CREATE_SESSION, { mode: 'agent' })
     },
-    onTrayMouseEnter: hoverWin ? (bounds) => hoverWin.onTrayMouseEnter(bounds) : undefined,
-    onTrayMouseMove: hoverWin ? (bounds) => hoverWin.onTrayMouseMove(bounds) : undefined,
-    onTrayMouseLeave: hoverWin ? () => hoverWin.onTrayMouseLeave() : undefined,
   })
-
-  // Windows: 将 Agent Island surface 的 pill 状态接入托盘图标 + tooltip + 通知
-  if (process.platform === 'win32') {
-    const surface = getWindowsAgentIslandSurface()
-    surface.onTrayFlash = (flashing) => setTrayFlash(flashing)
-
-    const notificationDeps: SurfaceDeps = {
-      sendPlaySound: (type) => {
-        const win = getMainWindow()
-        if (win) win.webContents.send(WINDOWS_AGENT_ISLAND_IPC_CHANNELS.PLAY_SOUND, { type })
-      },
-      soundEnabled: () => getSettings().notificationSoundEnabled ?? true,
-    }
-    surface.onNotification = (transition) => processNotification(transition, notificationDeps)
-
-    if (hoverWin) {
-      surface.onHoverWindowUpdate = (snapshot) => hoverWin.updateSnapshot(snapshot)
-    }
-  }
 
   // 启动工作区文件监听（Agent MCP/Skills + 文件浏览器自动刷新）
   if (mainWindow) {
@@ -818,23 +766,6 @@ async function bootstrap(): Promise<void> {
   safeRun('createQuickTaskWindow', createQuickTaskWindow)
   if (getSettings().voiceDictation?.enabled === true) {
     safeRun('createVoiceDictationWindow', createVoiceDictationWindow)
-  }
-
-  // Agent Island 状态机在 macOS 和 Windows 都初始化；Swift surface 仅 macOS 26+。
-  if (isAgentIslandServiceSupported()) {
-    safeRun('initAgentIslandService', () => {
-      initAgentIslandService({
-        showAndFocusMainWindow,
-        openAgentSession: (sessionId, title) => {
-          sendToMainWindow(TRAY_IPC_CHANNELS.OPEN_AGENT_SESSION, { sessionId, title })
-        },
-        enabled: () => getSettings().agentIsland?.enabled !== false,
-      })
-    })
-  }
-
-  if (isMacAgentIslandSurfaceSupported()) {
-    safeRun('startAgentIslandSurface', startAgentIslandSurface)
   }
 
   // 飞书实时同步开启时，默认阻止系统自动休眠，保证远程群内继续可用。
@@ -964,10 +895,6 @@ app.on('before-quit', () => {
   // 销毁辅助窗口
   destroyQuickTaskWindow()
   destroyVoiceDictationWindow()
-  destroyAgentStatusHoverWindow()
-  // 销毁原生 macOS 灵动岛服务（其他平台从未创建 surface）
-  disposeMacAgentIslandNativeHost()
-  disposeAgentIslandService()
   // 关闭 Pi MCP 桥接连接（释放 stdio 子进程）
   disposePiMcpConnections().catch(() => {})
   // Clean up system tray before quitting

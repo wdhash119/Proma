@@ -1716,9 +1716,10 @@ export function useGlobalAgentListeners(): void {
           store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => (
             markSessionCompletionUnviewed(prev, data.sessionId)
           ))
-        } else if (!backgroundTasksPending) {
-          // 当前聚焦会话已在主应用可见；同步确认，避免灵动岛把这次完成继续当未读。
-          void window.electronAPI.agentIsland.markSessionViewed(data.sessionId).catch(console.error)
+          // 灵动岛退役后，后台完成提示音由渲染进程直接播放，保持“完成但未被查看”才有声音。
+          if (store.get(notificationsEnabledAtom) && store.get(notificationSoundEnabledAtom)) {
+            void playNotificationSoundForType('taskComplete', store.get(notificationSoundsAtom))
+          }
         }
 
         // 对齐本次会话的主动打断状态，无需借助全量列表刷新重建整个 Set。
@@ -1903,12 +1904,6 @@ export function useGlobalAgentListeners(): void {
       })
     })
 
-    // ===== 5. Windows Agent Island 提示音委托 =====
-    const cleanupPlaySound = window.electronAPI.onWindowsAgentIslandPlaySound(({ type }) => {
-      const sounds = store.get(notificationSoundsAtom)
-      void playNotificationSoundForType(type, sounds)
-    })
-
     // 定期清理 60s 前的「最近修改」标记，避免 atom 无限增长
     const pruneTimer = setInterval(() => {
       const cutoff = Date.now() - RECENTLY_MODIFIED_TTL_MS
@@ -2021,7 +2016,6 @@ export function useGlobalAgentListeners(): void {
       cleanupError()
       cleanupTitleUpdated()
       cleanupActiveWorktreeUpdated()
-      cleanupPlaySound()
       cleanupWatchedFileChanges()
       cleanupQueuedMessageStatus()
       clearInterval(pruneTimer)

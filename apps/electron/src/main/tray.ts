@@ -12,18 +12,6 @@ export interface TrayActions {
   showMainWindow: () => void
   openAgentSession: (sessionId: string, title: string) => void
   createAgentSession: () => void
-  onTrayMouseEnter?: (bounds: Electron.Rectangle) => void
-  onTrayMouseMove?: (bounds: Electron.Rectangle) => void
-  onTrayMouseLeave?: () => void
-}
-
-let flashTimer: ReturnType<typeof setInterval> | null = null
-
-function clearTrayFlashTimer(): void {
-  if (flashTimer) {
-    clearInterval(flashTimer)
-    flashTimer = null
-  }
 }
 
 /**
@@ -170,20 +158,6 @@ export function createTray(actionsInput?: Partial<TrayActions>): Tray | null {
       updateTrayMenu(actions)
     })
 
-    if (process.platform === 'win32') {
-      tray.on('mouse-enter', () => {
-        if (!tray) return
-        actions.onTrayMouseEnter?.(tray.getBounds())
-      })
-      tray.on('mouse-move', () => {
-        if (!tray) return
-        actions.onTrayMouseMove?.(tray.getBounds())
-      })
-      tray.on('mouse-leave', () => {
-        actions.onTrayMouseLeave?.()
-      })
-    }
-
     console.log('System tray created')
     return tray
   } catch (error) {
@@ -196,7 +170,6 @@ export function createTray(actionsInput?: Partial<TrayActions>): Tray | null {
  * 销毁系统托盘
  */
 export function destroyTray(): void {
-  clearTrayFlashTimer()
   if (tray) {
     tray.destroy()
     tray = null
@@ -210,21 +183,3 @@ export function getTray(): Tray | null {
   return tray
 }
 
-/**
- * 切换托盘图标闪烁（仅 Windows）
- */
-export function setTrayFlash(on: boolean): void {
-  if (process.platform !== 'win32') return
-  clearTrayFlashTimer()
-  const baseIcon = nativeImage.createFromPath(getTrayIconPath())
-  if (!on) {
-    tray?.setImage(baseIcon)
-    return
-  }
-  if (!tray) return
-  let showIdle = true
-  flashTimer = setInterval(() => {
-    showIdle = !showIdle
-    tray?.setImage(showIdle ? baseIcon : nativeImage.createEmpty())
-  }, 500)
-}

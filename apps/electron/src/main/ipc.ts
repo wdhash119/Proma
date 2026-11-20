@@ -10,8 +10,8 @@ import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statS
 import { realpath, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS } from '@proma/shared'
-import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, WINDOWS_AGENT_ISLAND_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS } from '@proma/shared'
+import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
   VoiceDictationAudioChunkInput,
@@ -222,8 +222,6 @@ import {
 import { extractTextFromAttachment } from './lib/document-parser'
 import { getUserProfile, updateUserProfile } from './lib/user-profile-service'
 import { getSettings, updateSettings } from './lib/settings-service'
-import { refreshAgentIslandConfiguration, markAgentIslandSessionViewed } from './lib/agent-island-service'
-import { getAgentStatusHoverWindow } from './agent-status-hover-window'
 import { setDockBadgeCount } from './lib/dock-badge-service'
 
 import { checkEnvironment } from './lib/environment-checker'
@@ -2214,9 +2212,6 @@ export function registerIpcHandlers(): void {
       if (updates.feishuSessionMirror !== undefined) {
         syncFeishuSyncSleepBlocker(result)
       }
-      if (updates.agentIsland !== undefined) {
-        refreshAgentIslandConfiguration()
-      }
 
       // 主题相关设置变化时，广播给所有窗口（跨窗口同步，如 Quick Task 面板）
       if (updates.themeMode !== undefined || updates.themeStyle !== undefined) {
@@ -2244,9 +2239,6 @@ export function registerIpcHandlers(): void {
         const result = updateSettings(updates)
         if (updates.feishuSessionMirror !== undefined) {
           syncFeishuSyncSleepBlocker(result)
-        }
-        if (updates.agentIsland !== undefined) {
-          refreshAgentIslandConfiguration()
         }
         event.returnValue = true
       } catch {
@@ -6104,18 +6096,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ===== Agent Island =====
-
-  // Renderer 在主窗口创建后即可上报“已查看”，而 Island 状态机稍后才初始化，
-  // 且在不支持的平台也不会初始化。handler 必须在 IPC 注册阶段无条件存在，避免启动竞态。
-  ipcMain.handle(
-    AGENT_ISLAND_IPC_CHANNELS.MARK_SESSION_VIEWED,
-    async (_, sessionId: unknown): Promise<void> => {
-      if (!isNonEmptyString(sessionId)) return
-      markAgentIslandSessionViewed(sessionId)
-    }
-  )
-
   // ===== 用户授权的 Markdown Vault =====
 
   ipcMain.handle(VAULT_IPC_CHANNELS.GET_CONFIG, async () => getVaultSummary())
@@ -6246,30 +6226,4 @@ export function registerIpcHandlers(): void {
     })
   })
 
-  // ===== Windows Agent Island =====
-
-  ipcMain.handle(
-    WINDOWS_AGENT_ISLAND_IPC_CHANNELS.OPEN_SESSION,
-    async (_, sessionId: unknown, title: unknown): Promise<void> => {
-      if (!isNonEmptyString(sessionId)) return
-      markAgentIslandSessionViewed(sessionId)
-      const { getMainWindow } = await import('./index')
-      const mainWindow = getMainWindow()
-      if (!mainWindow) return
-      mainWindow.webContents.send(TRAY_IPC_CHANNELS.OPEN_AGENT_SESSION, {
-        sessionId,
-        title: typeof title === 'string' ? title : '',
-      })
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.show()
-      mainWindow.focus()
-    }
-  )
-
-  ipcMain.on(WINDOWS_AGENT_ISLAND_IPC_CHANNELS.MOUSE_ENTER, () => {
-    getAgentStatusHoverWindow().onHoverMouseEnter()
-  })
-  ipcMain.on(WINDOWS_AGENT_ISLAND_IPC_CHANNELS.MOUSE_LEAVE, () => {
-    getAgentStatusHoverWindow().onHoverMouseLeave()
-  })
 }

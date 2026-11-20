@@ -94,8 +94,7 @@ const isQuickTaskWindow = new URLSearchParams(window.location.search).get('windo
 const isVoiceDictationIndicatorWindow = new URLSearchParams(window.location.search).get('window') === 'voice-dictation-indicator'
 const isDetachedPreviewWindow = new URLSearchParams(window.location.search).get('window') === 'detached-preview'
 const isWorkspaceMemoryWindow = new URLSearchParams(window.location.search).get('window') === 'workspace-memory'
-const isAgentStatusHoverWindow = new URLSearchParams(window.location.search).get('window') === 'agent-status-hover'
-const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !isDetachedPreviewWindow && !isWorkspaceMemoryWindow && !isAgentStatusHoverWindow
+const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !isDetachedPreviewWindow && !isWorkspaceMemoryWindow
 
 initializePerformanceMonitor()
 
@@ -621,7 +620,6 @@ function DockBadgeInitializer(): null {
       if (!document.hasFocus() || !activeAgentSessionId) return
       // 以实际激活的 Agent/预览 Tab 为准。旧版 Scratch Pad 状态不参与恢复，
       // 不能仅据此把后台会话误判为已查看。
-      void window.electronAPI.agentIsland.markSessionViewed(activeAgentSessionId).catch(console.error)
       setUnviewedCompleted((prev) => {
         if (!prev.has(activeAgentSessionId)) return prev
         const next = new Set(prev)
@@ -1062,15 +1060,6 @@ if (isQuickTaskWindow) {
         <ThemeInitializer />
         <WorkspaceMemoryWindowApp />
         <Toaster position="top-right" offset={{ top: 58, right: 12 }} />
-      </React.StrictMode>
-    )
-  })
-} else if (isAgentStatusHoverWindow) {
-  import('./components/agent-status-hover/HoverPanel').then(({ HoverPanel }) => {
-    ReactDOM.createRoot(document.getElementById('root')!).render(
-      <React.StrictMode>
-        <ThemeInitializer />
-        <HoverPanel />
       </React.StrictMode>
     )
   })

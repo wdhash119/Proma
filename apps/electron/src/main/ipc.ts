@@ -231,6 +231,7 @@ import {
   searchMemory,
 } from './lib/memory-service'
 import { getSkillUsage } from './lib/skill-usage-service'
+import { listSessionArtifacts, removeSessionArtifact } from './lib/session-artifact-service'
 import { setDockBadgeCount } from './lib/dock-badge-service'
 
 import { checkEnvironment } from './lib/environment-checker'
@@ -3292,6 +3293,31 @@ export function registerIpcHandlers(): void {
     async (_, workspaceSlug: unknown) => {
       if (!isNonEmptyString(workspaceSlug)) return {}
       return getSkillUsage(workspaceSlug)
+    }
+  )
+
+  // 读取会话交付物（Present 登记的文件）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.LIST_SESSION_ARTIFACTS,
+    async (_, sessionId: unknown) => {
+      if (!isNonEmptyString(sessionId)) return []
+      const session = getAgentSessionMeta(sessionId)
+      if (!session?.workspaceId) return []
+      const workspace = getAgentWorkspace(session.workspaceId)
+      if (!workspace?.slug) return []
+      return listSessionArtifacts(workspace.slug, sessionId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.REMOVE_SESSION_ARTIFACT,
+    async (_, sessionId: unknown, path: unknown) => {
+      if (!isNonEmptyString(sessionId) || !isNonEmptyString(path)) return []
+      const session = getAgentSessionMeta(sessionId)
+      if (!session?.workspaceId) return []
+      const workspace = getAgentWorkspace(session.workspaceId)
+      if (!workspace?.slug) return []
+      return removeSessionArtifact(workspace.slug, sessionId, path)
     }
   )
 

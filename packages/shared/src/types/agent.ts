@@ -1923,6 +1923,10 @@ export const AGENT_IPC_CHANNELS = {
   GET_SKILLS: 'agent:get-skills',
   /** 获取工作区 Skill 使用记录（最后使用时间与次数） */
   GET_SKILL_USAGE: 'agent:get-skill-usage',
+  /** 读取会话交付物（Present 登记的文件） */
+  LIST_SESSION_ARTIFACTS: 'agent:list-session-artifacts',
+  /** 移除一条会话交付物 */
+  REMOVE_SESSION_ARTIFACT: 'agent:remove-session-artifact',
   /** 获取工作区 Skills 目录绝对路径 */
   GET_SKILLS_DIR: 'agent:get-skills-dir',
   /** 使用系统文件管理器打开指定工作区 Skill 的实际目录 */
@@ -2130,4 +2134,12 @@ export interface PendingRequestsSnapshot {
   askUsers: AskUserRequest[]
   /** 待处理的 ExitPlanMode 请求 */
   exitPlans: ExitPlanModeRequest[]
+}
+
+/** Agent 通过 Present 工具登记到会话顶部的最终交付物。 */
+export interface SessionArtifact {
+  /** 绝对路径；只建立指针，不复制文件。 */
+  path: string
+  description?: string
+  presentedAt: number
 }

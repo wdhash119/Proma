@@ -44,6 +44,7 @@ import { buildLiveGroupSet } from './live-group-set'
 import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkProvider'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { CompactionNotice, type ContextCompactionProgress } from './CompactionNotice'
+import { AgentArtifactsBar } from './AgentArtifactsBar'
 import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
 import type { AgentEventUsage, RetryAttempt, SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKTextBlock, SDKThinkingBlock } from '@proma/shared'
 import { getSDKCompactStatus } from '@proma/shared'
@@ -1177,6 +1178,7 @@ export const AgentMessages = React.memo(function AgentMessages({
         }
       `}</style>
           <Conversation resize="instant" className={ready ? 'opacity-100' : 'opacity-0'}>
+        <AgentArtifactsBar sessionId={sessionId} streaming={streaming} basePaths={messageBasePaths} />
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
           {!hasContent && !streaming ? (

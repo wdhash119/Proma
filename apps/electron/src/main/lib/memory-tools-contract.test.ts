@@ -16,7 +16,7 @@ describe('记忆工具契约', () => {
       expect(adapter).toContain(`name: '${toolName}'`)
     }
     // 记忆工具需要工作区上下文才能定位项目记忆。
-    expect(adapter).toContain('buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug)')
+    expect(adapter).toContain('buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug, input.sessionId)')
   })
 
   test('Given 系统提示词 When 检查 Then 要求走 MemoryUpdate 而不是直接覆盖记忆文件', () => {

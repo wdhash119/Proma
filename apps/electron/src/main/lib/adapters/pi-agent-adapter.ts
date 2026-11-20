@@ -67,6 +67,7 @@ import {
   updateMemory,
   type MemoryEntryOperation,
 } from '../memory-service'
+import { presentArtifacts } from '../session-artifact-service'
 import { ProjectInstructionScopeController } from './pi-project-instruction-scope'
 import type { ProjectInstructionSource } from '../project-instruction-resolver'
 import { createCodexFastModeExtension, withCodexFastModeServiceTier } from './pi-codex-request-settings'
@@ -895,6 +896,7 @@ function buildPromaProductToolDefinitions(
   sdk: PiSdk,
   canUseTool: PiAgentQueryOptions['canUseTool'],
   workspaceSlug: string | undefined,
+  sessionId: string,
 ): ToolDefinition[] {
   const definitions = [
     sdk.defineTool({
@@ -995,6 +997,34 @@ function buildPromaProductToolDefinitions(
         const input = params as Record<string, unknown>
         const limit = typeof input.limit === 'number' ? input.limit : 10
         return createJsonToolResult({ revisions: listMemoryHistory(String(input.target ?? ''), workspaceSlug, limit) })
+      },
+    }),
+    sdk.defineTool({
+      name: 'Present',
+      label: '交付文件',
+      description: '把真正交付给用户的成品文件登记到会话顶部。只登记最终交付物（文档、表格、幻灯片、报告、图片、打包产物），不要登记源码、配置或临时脚本。',
+      promptSnippet: '登记最终交付物，供用户在会话顶部直接打开。',
+      parameters: Type.Object({
+        files: Type.Array(Type.Object({
+          path: Type.String({ description: '交付物的绝对路径。' }),
+          description: Type.Optional(Type.String({ description: '一句话说明这个文件是什么。' })),
+        })),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const files = Array.isArray(input.files)
+          ? input.files
+              .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+              .map((item) => ({
+                path: String(item.path ?? ''),
+                ...(typeof item.description === 'string' ? { description: item.description } : {}),
+              }))
+          : []
+        if (!workspaceSlug) {
+          throw new Error('当前会话没有工作区，无法登记交付物')
+        }
+        const artifacts = presentArtifacts(workspaceSlug, sessionId, files)
+        return createJsonToolResult({ artifacts })
       },
     }),
   ] as unknown as ToolDefinition[]
@@ -1380,7 +1410,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           input.canUseTool,
           input.runtimeEnv,
         ),
-        ...buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug),
+        ...buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug, input.sessionId),
         ...wrapCustomToolDefinitions(input.customTools, input.canUseTool),
       ]
 

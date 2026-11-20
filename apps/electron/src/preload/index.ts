@@ -200,6 +200,7 @@ import type {
 } from '../types'
 import { QUICK_TASK_IPC_CHANNELS, TRAY_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS } from '../types'
 import type {
+  SessionArtifact,
   MemoryTargetSummary,
   MemoryDocumentPayload,
   MemoryRevisionItem,
@@ -741,6 +742,9 @@ export interface ElectronAPI {
   getWorkspaceSkills: (workspaceSlug: string) => Promise<SkillMeta[]>
   /** 工作区 Skill 使用记录：slug → 最后使用时间与次数 */
   getSkillUsage: (workspaceSlug: string) => Promise<Record<string, { lastUsedAt: number; useCount: number }>>
+  /** 会话交付物（Present 登记的最终产物） */
+  listSessionArtifacts: (sessionId: string) => Promise<SessionArtifact[]>
+  removeSessionArtifact: (sessionId: string, path: string) => Promise<SessionArtifact[]>
 
   /** 获取工作区 Skills 目录绝对路径 */
   getWorkspaceSkillsDir: (workspaceSlug: string) => Promise<string>
@@ -2098,6 +2102,12 @@ const electronAPI: ElectronAPI = {
 
   getSkillUsage: (workspaceSlug: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SKILL_USAGE, workspaceSlug)
+  },
+  listSessionArtifacts: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_SESSION_ARTIFACTS, sessionId)
+  },
+  removeSessionArtifact: (sessionId: string, path: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REMOVE_SESSION_ARTIFACT, sessionId, path)
   },
   getWorkspaceSkills: (workspaceSlug: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SKILLS, workspaceSlug)

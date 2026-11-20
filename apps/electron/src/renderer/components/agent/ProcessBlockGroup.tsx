@@ -17,6 +17,10 @@ interface ProcessBlockGroupProps {
   // 该过程组是否为整条消息的末尾项：是则流式中保留最后一段为正常显示，
   // 否则（最终答案已作为后续兄弟块外置）整组统一弱化。
   isMessageTail?: boolean
+  /** 中断或失败轮次的状态标注；存在时过程保持展开，便于用户回看发生了什么。 */
+  statusLabel?: string
+  /** 该轮在本次渲染时已结束（用于区分流式与历史态的状态标注）。 */
+  isTurnTerminal?: boolean
 }
 
 const MAX_PROCESS_GROUP_ICONS = 4
@@ -78,20 +82,21 @@ export function buildAssistantTurnRenderItems(
     return buildProcessGroupItems(blocks)
   }
 
-  const items: AssistantTurnRenderItem[] = []
-  if (trailingTextStartIndex > 0) {
-    items.push(...buildProcessGroupItems(
-      blocks.slice(0, trailingTextStartIndex),
-    ))
-  }
-
+  const finalBlocks: AssistantTurnRenderItem[] = []
   for (let index = trailingTextStartIndex; index < blocks.length; index++) {
     const block = blocks[index]
     if (!block) continue
-    items.push({ type: 'block', item: { block, index } })
+    finalBlocks.push({ type: 'block', item: { block, index } })
   }
 
-  return items
+  if (trailingTextStartIndex === 0) return finalBlocks
+
+  const processItems = buildProcessGroupItems(blocks.slice(0, trailingTextStartIndex))
+
+  // 终态：最终回复独立在前，一行过程摘要收尾；流式中仍保留「过程在上、实时回答在下」的阅读顺序。
+  if (!options.isStreaming) return [...finalBlocks, ...processItems]
+
+  return [...processItems, ...finalBlocks]
 }
 
 function buildProcessGroupItems(blocks: SDKContentBlock[]): AssistantTurnRenderItem[] {
@@ -192,10 +197,12 @@ const StableProcessChild = React.memo(
   (previous, next) => previous.child === next.child,
 )
 
-export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessageTail = false }: ProcessBlockGroupProps): React.ReactElement {
-  const initialDisplayMode: ProcessGroupDisplayMode = !isStreaming
-    ? 'collapsed'
-    : 'expanded'
+export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessageTail = false, statusLabel, isTurnTerminal = false }: ProcessBlockGroupProps): React.ReactElement {
+  // 中断或失败的轮次保持展开：用户需要看到停下之前做了什么。
+  const keepExpanded = !!statusLabel && isTurnTerminal && !isStreaming
+  const initialDisplayMode: ProcessGroupDisplayMode = keepExpanded || isStreaming
+    ? 'expanded'
+    : 'collapsed'
   const [displayMode, setDisplayMode] = React.useState<ProcessGroupDisplayMode>(initialDisplayMode)
   const [shouldRenderContent, setShouldRenderContent] = React.useState(initialDisplayMode !== 'collapsed')
   const [keepProgressViewport, setKeepProgressViewport] = React.useState(!!isStreaming)
@@ -226,6 +233,14 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
 
   React.useEffect(() => {
     clearAutoCollapseTimers()
+
+    if (keepExpanded) {
+      setCollapseCountdown(null)
+      setKeepProgressViewport(false)
+      setDisplayMode('expanded')
+      wasStreamingRef.current = false
+      return
+    }
 
     if (isStreaming) {
       setCollapseCountdown(null)
@@ -273,7 +288,7 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
     autoCollapseTimersRef.current.push(soundDelayTimer)
 
     return clearAutoCollapseTimers
-  }, [clearAutoCollapseTimers, isStreaming])
+  }, [clearAutoCollapseTimers, isStreaming, keepExpanded])
 
   const scrollToLatest = React.useCallback(() => {
     if (!followLatestRef.current) return
@@ -449,6 +464,11 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
           )}
         />
         <span className="min-w-0 truncate text-[14px] text-muted-foreground">{summary}</span>
+        {statusLabel && (
+          <span className="shrink-0 rounded-full border border-muted-foreground/30 px-1.5 py-0.5 text-[11px] text-muted-foreground/80">
+            {statusLabel}
+          </span>
+        )}
         {collapseCountdown !== null && (
           <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground/50">
             （{collapseCountdown}）

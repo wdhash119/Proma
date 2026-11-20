@@ -340,6 +340,9 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
   // aborted_streaming / aborted_tools 是流式追加消息时的软中断，语义是继续补充信息。
   const showStoppedBadge = !!stoppedByUser
 
+  // 中断与失败的轮次保持过程展开，并在过程摘要上标注状态，便于回看停下前发生了什么。
+  const turnStatusLabel = showStoppedBadge ? '已停止' : hasError ? '运行失败' : undefined
+
   // 构建 Agent/Task tool_use → 子代理内容块映射
   const agentToolIds = new Set<string>()
   for (const eb of enrichedBlocks) {
@@ -453,6 +456,8 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
                   </React.Fragment>
                 ))}
                 isMessageTail={itemIndex === renderItems.length - 1}
+                statusLabel={turnStatusLabel}
+                isTurnTerminal={!isStreaming}
               />
             )
           })}
@@ -515,9 +520,9 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
                 <Undo2 className="size-3.5" />
               </MessageAction>
             )}
-            {showStoppedBadge && (
+            {turnStatusLabel && (
               <Badge variant="outline" className="text-xs text-muted-foreground/70 border-muted-foreground/30 shrink-0">
-                已被用户中断
+                {turnStatusLabel}
               </Badge>
             )}
           </MessageActions>

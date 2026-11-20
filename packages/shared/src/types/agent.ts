@@ -1921,6 +1921,8 @@ export const AGENT_IPC_CHANNELS = {
   TEST_MCP_SERVER: 'agent:test-mcp-server',
   /** 获取工作区 Skill 列表 */
   GET_SKILLS: 'agent:get-skills',
+  /** 获取工作区 Skill 使用记录（最后使用时间与次数） */
+  GET_SKILL_USAGE: 'agent:get-skill-usage',
   /** 获取工作区 Skills 目录绝对路径 */
   GET_SKILLS_DIR: 'agent:get-skills-dir',
   /** 使用系统文件管理器打开指定工作区 Skill 的实际目录 */

@@ -50,6 +50,8 @@ export interface AgentSkillsData {
   /** 当前 skills 快照实际读取自的工作区；切换期间用于避免使用旧数据渲染详情。 */
   loadedWorkspaceSlug: string
   skills: SkillMeta[]
+  /** slug → 最后使用时间与次数；用于「30 天未使用」视图。 */
+  skillUsage: Record<string, { lastUsedAt: number; useCount: number }>
   defaultSkillSlugs: Set<string>
   skillsDir: string
   mcpConfig: WorkspaceMcpConfig
@@ -86,6 +88,8 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
   const [loading, setLoading] = React.useState(true)
   const [loadedWorkspaceSlug, setLoadedWorkspaceSlug] = React.useState('')
   const [skills, setSkills] = React.useState<SkillMeta[]>([])
+  /** slug → 最后使用时间与次数；用于「30 天未使用」视图。 */
+  const [skillUsage, setSkillUsage] = React.useState<Record<string, { lastUsedAt: number; useCount: number }>>({})
   const [defaultSkillSlugs, setDefaultSkillSlugs] = React.useState<Set<string>>(new Set())
   const [skillsDir, setSkillsDir] = React.useState('')
   const [mcpConfig, setMcpConfig] = React.useState<WorkspaceMcpConfig>({ servers: {} })
@@ -108,6 +112,7 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
     const mcpConfigMutationRevision = mcpConfigMutationRevisionRef.current
     if (!workspaceSlug) {
       setSkills([])
+      setSkillUsage({})
       setMcpConfig({ servers: {} })
       setCapabilities(null)
       setBuiltinMcpServers([])
@@ -127,6 +132,14 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
         window.electronAPI.getDefaultSkillSlugs(),
         window.electronAPI.getWorkspaceCapabilities(workspaceSlug),
       ])
+      // 使用记录只影响「30 天未使用」标记，失败时按空记录继续，不能阻塞能力页。
+      void window.electronAPI.getSkillUsage(workspaceSlug)
+        .then((usage) => {
+          if (loadRequestRef.current === requestId) setSkillUsage(usage)
+        })
+        .catch((error) => {
+          console.warn('[Agent 技能] 读取 Skill 使用记录失败:', error)
+        })
       if (loadRequestRef.current !== requestId) return
       setMcpConfig((current) => {
         // 启用时主进程会短暂地把 mcp.json 写成 disabled，等待握手成功后再回写；
@@ -353,6 +366,7 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
     loading,
     loadedWorkspaceSlug,
     skills,
+    skillUsage,
     defaultSkillSlugs,
     skillsDir,
     mcpConfig,

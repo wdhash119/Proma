@@ -230,6 +230,7 @@ import {
   restoreMemoryRevision,
   searchMemory,
 } from './lib/memory-service'
+import { getSkillUsage } from './lib/skill-usage-service'
 import { setDockBadgeCount } from './lib/dock-badge-service'
 
 import { checkEnvironment } from './lib/environment-checker'
@@ -3282,6 +3283,15 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.GET_SKILLS,
     async (_, workspaceSlug: string): Promise<SkillMeta[]> => {
       return getAllWorkspaceSkills(workspaceSlug)
+    }
+  )
+
+  // 获取工作区 Skill 使用记录（最后使用时间与次数）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_SKILL_USAGE,
+    async (_, workspaceSlug: unknown) => {
+      if (!isNonEmptyString(workspaceSlug)) return {}
+      return getSkillUsage(workspaceSlug)
     }
   )
 

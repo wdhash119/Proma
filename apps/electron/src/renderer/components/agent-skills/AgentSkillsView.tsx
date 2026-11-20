@@ -12,7 +12,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, ChevronDown, ChevronRight, Search, Plus, Store, FolderOpen, Check, Sparkles, Loader2 } from 'lucide-react'
+import { Blocks, ChevronDown, ChevronRight, Clock, Search, Plus, Store, FolderOpen, Check, Sparkles, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -161,6 +161,8 @@ export function AgentSkillsView({
   // 右侧组件锁定能力域，避免其内部的总览 Tab 与右侧工作区标签产生两套导航。
   const tab = embedded && componentTab ? componentTab : storedTab
   const [search, setSearch] = React.useState('')
+  /** 只看 30 天未使用的 Skills。 */
+  const [unusedOnly, setUnusedOnly] = React.useState(false)
   const [selectedSkillSlug, setSelectedSkillSlug] = React.useState<string | null>(null)
   const [selectedSkillWorkspaceSlug, setSelectedSkillWorkspaceSlug] = React.useState<string | null>(null)
   const [showCreateMcp, setShowCreateMcp] = React.useState(false)
@@ -188,15 +190,28 @@ export function AgentSkillsView({
 
   const q = search.trim().toLowerCase()
 
+  const unusedSlugs = React.useMemo(() => {
+    const threshold = Date.now() - 30 * 24 * 60 * 60 * 1000
+    return new Set(
+      data.skills
+        .filter((skill) => {
+          const lastUsedAt = data.skillUsage[skill.slug]?.lastUsedAt
+          return lastUsedAt === undefined || lastUsedAt < threshold
+        })
+        .map((skill) => skill.slug),
+    )
+  }, [data.skills, data.skillUsage])
+
   const filteredSkills = React.useMemo(() => {
     return data.skills.filter((s) => {
+      if (unusedOnly && !unusedSlugs.has(s.slug)) return false
       if (!q) return true
       return s.name.toLowerCase().includes(q) ||
         s.slug.toLowerCase().includes(q) ||
         (s.description ?? '').toLowerCase().includes(q) ||
         (s.group ?? '').toLowerCase().includes(q)
     })
-  }, [data.skills, q])
+  }, [data.skills, q, unusedOnly, unusedSlugs])
 
   const customSkills = filteredSkills.filter((s) => !data.defaultSkillSlugs.has(s.slug))
   const builtinSkills = filteredSkills.filter((s) => data.defaultSkillSlugs.has(s.slug))
@@ -678,6 +693,32 @@ export function AgentSkillsView({
             className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
           />
         </div>
+
+        {/* 30 天未使用筛选 */}
+        {tab === 'skills' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setUnusedOnly((value) => !value)}
+                aria-pressed={unusedOnly}
+                className={cn(
+                  'flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors',
+                  unusedOnly
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border/60 bg-content-area text-foreground/80 hover:bg-foreground/[0.04]',
+                )}
+              >
+                <Clock size={14} />
+                <span>30 天未使用</span>
+                <span className="text-[11px] tabular-nums text-muted-foreground">{unusedSlugs.size}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              从未使用过的 Skill 也会列在这里；筛选后可按需停用或删除
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* 社区市场（占位） */}
         {tab === 'skills' && (

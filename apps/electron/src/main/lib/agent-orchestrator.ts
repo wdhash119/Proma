@@ -49,6 +49,7 @@ import { getAdapter, fetchTitle } from '@proma/core'
 import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { recordSkillUsage } from './skill-usage-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout, isAgentSessionDeleting } from './agent-session-manager'
 import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceAgentsMdPath, readWorkspaceAgentsMd, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getLocalProjectRootStatus } from './project-root-health'
@@ -598,6 +599,7 @@ export class AgentOrchestrator {
     userMessageUuid: string,
     activations: SkillActivation[],
   ): void {
+    this.recordSkillUsageForWorkspace(sessionId, activations)
     try {
       if (updateSDKUserMessageSkillActivations(sessionId, userMessageUuid, activations)) return
     } catch (error) {
@@ -610,6 +612,23 @@ export class AgentOrchestrator {
       mergeSkillActivations(byMessage.get(userMessageUuid) ?? [], activations),
     )
     this.pendingUserSkillActivations.set(sessionId, byMessage)
+  }
+
+  /**
+   * 记录 Skill 的最后使用时间，供能力页的「30 天未使用」视图使用。
+   * 会话没有工作区时跳过：未使用视图本身只在工作区上下文中展示。
+   */
+  private recordSkillUsageForWorkspace(sessionId: string, activations: SkillActivation[]): void {
+    if (activations.length === 0) return
+    try {
+      const session = getAgentSessionMeta(sessionId)
+      if (!session?.workspaceId) return
+      const workspace = getAgentWorkspace(session.workspaceId)
+      if (!workspace?.slug) return
+      recordSkillUsage(workspace.slug, activations.map((activation) => activation.slug))
+    } catch (error) {
+      console.warn('[Agent 编排] 记录 Skill 使用时间失败:', error)
+    }
   }
 
   private flushPendingUserSkillActivations(sessionId: string, userMessageUuid: string): void {

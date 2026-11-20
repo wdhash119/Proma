@@ -739,6 +739,8 @@ export interface ElectronAPI {
 
   /** 获取工作区 Skill 列表（含活跃和不活跃） */
   getWorkspaceSkills: (workspaceSlug: string) => Promise<SkillMeta[]>
+  /** 工作区 Skill 使用记录：slug → 最后使用时间与次数 */
+  getSkillUsage: (workspaceSlug: string) => Promise<Record<string, { lastUsedAt: number; useCount: number }>>
 
   /** 获取工作区 Skills 目录绝对路径 */
   getWorkspaceSkillsDir: (workspaceSlug: string) => Promise<string>
@@ -2094,6 +2096,9 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_MCP_SERVER, workspaceSlug, name, entry) as Promise<{ success: boolean; message: string }>
   },
 
+  getSkillUsage: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SKILL_USAGE, workspaceSlug)
+  },
   getWorkspaceSkills: (workspaceSlug: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SKILLS, workspaceSlug)
   },

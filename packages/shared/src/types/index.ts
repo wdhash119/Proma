@@ -64,5 +64,8 @@ export * from './automation'
 export * from './planning'
 
 
+// 记忆维护（全局画像 + 项目记忆）相关类型
+export * from './memory'
+
 // 用户授权的 Markdown Vault 相关类型
 export * from './vault'

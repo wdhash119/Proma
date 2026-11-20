@@ -59,6 +59,14 @@ import {
   createPromaProjectInstructionFilesOverride,
   type PromaProjectInstructionFile,
 } from './pi-resource-loader-overrides'
+import {
+  listMemoryHistory,
+  listMemoryTargets,
+  readMemoryDocument,
+  searchMemory,
+  updateMemory,
+  type MemoryEntryOperation,
+} from '../memory-service'
 import { ProjectInstructionScopeController } from './pi-project-instruction-scope'
 import type { ProjectInstructionSource } from '../project-instruction-resolver'
 import { createCodexFastModeExtension, withCodexFastModeServiceTier } from './pi-codex-request-settings'
@@ -883,7 +891,11 @@ function createCompactionContinuationLimitResult(sessionId: string): SDKMessage 
   } as unknown as SDKMessage
 }
 
-function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOptions['canUseTool']): ToolDefinition[] {
+function buildPromaProductToolDefinitions(
+  sdk: PiSdk,
+  canUseTool: PiAgentQueryOptions['canUseTool'],
+  workspaceSlug: string | undefined,
+): ToolDefinition[] {
   const definitions = [
     sdk.defineTool({
       name: 'AskUserQuestion',
@@ -906,6 +918,83 @@ function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOp
       async execute(_toolCallId, params) {
         const input = params as Record<string, unknown>
         return createJsonToolResult({ answers: input.answers ?? {} })
+      },
+    }),
+    sdk.defineTool({
+      name: 'MemorySearch',
+      label: '检索记忆',
+      description: '按关键词跨全局画像与项目记忆逐行检索，返回来源、行号与命中片段。用于写入前确认已有事实，避免重复记账。',
+      promptSnippet: '跨全局画像与项目记忆检索已有事实。',
+      parameters: Type.Object({
+        query: Type.String({ description: '关键词；多个词用空格分隔，按子串匹配。' }),
+        limit: Type.Optional(Type.Number({ description: '最多返回条数，默认 20。' })),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const query = typeof input.query === 'string' ? input.query : ''
+        const limit = typeof input.limit === 'number' ? input.limit : undefined
+        return createJsonToolResult({ hits: searchMemory(query, workspaceSlug, limit) })
+      },
+    }),
+    sdk.defineTool({
+      name: 'MemoryInspect',
+      label: '读取记忆',
+      description: '读取全局画像或某个项目记忆文件的正文与 revision。写入前必须先读取，写入时把 revision 原样带回。',
+      promptSnippet: '读取记忆目标正文与 revision。',
+      parameters: Type.Object({
+        target: Type.Optional(Type.String({ description: 'global-profile、MEMORY.md 或 memory/ 下的主题文件名；省略时列出全部目标。' })),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const target = typeof input.target === 'string' ? input.target.trim() : ''
+        if (!target) return createJsonToolResult({ targets: listMemoryTargets(workspaceSlug) })
+        return createJsonToolResult(readMemoryDocument(target, workspaceSlug))
+      },
+    }),
+    sdk.defineTool({
+      name: 'MemoryUpdate',
+      label: '更新记忆',
+      description: '带 revision 校验写入记忆。优先用 operations 增删改单条 "- " 事实，只有整篇重排时才传 content。',
+      promptSnippet: '带版本校验地单条增删改记忆。',
+      parameters: Type.Object({
+        target: Type.String({ description: 'global-profile、MEMORY.md 或 memory/ 下的主题文件名。' }),
+        revision: Type.String({ description: '最近一次 MemoryInspect 返回的 revision。' }),
+        summary: Type.String({ description: '一句话说明这次改写做了什么，写入历史快照。' }),
+        content: Type.Optional(Type.String({ description: '整篇新正文；仅在不适合单条操作时使用。' })),
+        operations: Type.Optional(Type.Array(Type.Object({
+          op: Type.Union([Type.Literal('add'), Type.Literal('update'), Type.Literal('remove')]),
+          entry: Type.Optional(Type.String({ description: 'add / update 的新条目，必须以 "- " 开头且为单行。' })),
+          match: Type.Optional(Type.String({ description: 'update / remove 的匹配文本，按整行匹配且必须唯一。' })),
+          after: Type.Optional(Type.String({ description: 'add 时插入到该条目之后。' })),
+        }))),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const operations = Array.isArray(input.operations)
+          ? input.operations as MemoryEntryOperation[]
+          : undefined
+        return createJsonToolResult(updateMemory({
+          target: String(input.target ?? ''),
+          revision: String(input.revision ?? ''),
+          summary: String(input.summary ?? ''),
+          ...(typeof input.content === 'string' ? { content: input.content } : {}),
+          ...(operations ? { operations } : {}),
+        }, workspaceSlug))
+      },
+    }),
+    sdk.defineTool({
+      name: 'MemoryHistory',
+      label: '记忆历史',
+      description: '列出某个记忆目标的历史版本，最新在前；用于说明改动影响或找回被覆盖的内容。',
+      promptSnippet: '列出记忆历史版本。',
+      parameters: Type.Object({
+        target: Type.String({ description: '记忆目标名。' }),
+        limit: Type.Optional(Type.Number({ description: '最多返回条数，默认 10。' })),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const limit = typeof input.limit === 'number' ? input.limit : 10
+        return createJsonToolResult({ revisions: listMemoryHistory(String(input.target ?? ''), workspaceSlug, limit) })
       },
     }),
   ] as unknown as ToolDefinition[]
@@ -1291,7 +1380,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           input.canUseTool,
           input.runtimeEnv,
         ),
-        ...buildPromaProductToolDefinitions(sdk, input.canUseTool),
+        ...buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug),
         ...wrapCustomToolDefinitions(input.customTools, input.canUseTool),
       ]
 

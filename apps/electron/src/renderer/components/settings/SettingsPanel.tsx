@@ -26,6 +26,7 @@ import {
   HardDriveDownload,
   HardDrive,
   Archive,
+  Sparkles,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ShortcutKeycaps } from "@/components/shortcuts/ShortcutKeycaps";
@@ -66,6 +67,7 @@ import { MigrationSettings } from "./MigrationSettings";
 import { StorageSettings } from "./StorageSettings";
 import { OnboardingSettings } from "./OnboardingSettings";
 import { ChatHistorySettings } from "./ChatHistorySettings";
+import { AboutYouSettings } from "./AboutYouSettings";
 import { useOpenSession } from '@/hooks/useOpenSession'
 
 /** 设置 Tab 定义 */
@@ -82,6 +84,7 @@ const BASE_TABS: TabItem[] = [
   { id: "vision-relay", label: "视觉助手", icon: <Eye size={16} /> },
   { id: "prompts", label: "提示词管理", icon: <BookOpen size={16} /> },
   { id: "chat-history", label: "历史 Chat", icon: <Archive size={16} /> },
+  { id: "about-you", label: "关于你", icon: <Sparkles size={16} /> },
   { id: "proxy", label: "代理设置", icon: <Globe size={16} /> },
 ];
 
@@ -125,6 +128,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <VisionRelaySettings />;
     case "prompts":
       return <PromptSettings />;
+    case "about-you":
+      return <AboutYouSettings />
     case "chat-history":
       return <ChatHistorySettings />;
     case "proxy":

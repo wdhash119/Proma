@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -199,6 +199,12 @@ import type {
   TrayOpenAgentSessionData,
 } from '../types'
 import { QUICK_TASK_IPC_CHANNELS, TRAY_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS } from '../types'
+import type {
+  MemoryTargetSummary,
+  MemoryDocumentPayload,
+  MemoryRevisionItem,
+  MemorySearchResultItem,
+} from '@proma/shared'
 
 /**
  * 暴露给渲染进程的 API 接口定义
@@ -1349,6 +1355,15 @@ export interface ElectronAPI {
   resolvePlanningNativeSyncConflict: (input: ResolvePlanningNativeSyncConflictInput) => Promise<boolean>
   listPlanningSyncProfiles: () => Promise<PlanningSyncProfile[]>
   savePlanningSyncProfile: (input: SavePlanningSyncProfileInput) => Promise<PlanningSyncProfile>
+
+  // ===== 记忆维护（全局画像 + 项目记忆） =====
+
+  listMemoryTargets: (workspaceSlug?: string) => Promise<MemoryTargetSummary[]>
+  readMemoryTarget: (target: string, workspaceSlug?: string) => Promise<MemoryDocumentPayload>
+  searchMemory: (query: string, workspaceSlug?: string, limit?: number) => Promise<MemorySearchResultItem[]>
+  listMemoryHistory: (target: string, workspaceSlug?: string, limit?: number) => Promise<MemoryRevisionItem[]>
+  readMemoryRevision: (target: string, id: string, workspaceSlug?: string) => Promise<{ id: string; content: string; summary: string; createdAt: number } | null>
+  restoreMemoryRevision: (target: string, id: string, workspaceSlug?: string) => Promise<{ target: string; revision: string; chars: number; snapshotId?: string }>
 }
 
 /**
@@ -3059,6 +3074,20 @@ const electronAPI: ElectronAPI = {
   resolvePlanningNativeSyncConflict: (input: ResolvePlanningNativeSyncConflictInput) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.RESOLVE_NATIVE_SYNC_CONFLICT, input),
   listPlanningSyncProfiles: () => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.LIST_SYNC_PROFILES),
   savePlanningSyncProfile: (input: SavePlanningSyncProfileInput) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.SAVE_SYNC_PROFILE, input),
+
+  // ===== 记忆维护（全局画像 + 项目记忆） =====
+  listMemoryTargets: (workspaceSlug?: string) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.LIST_TARGETS, workspaceSlug),
+  readMemoryTarget: (target: string, workspaceSlug?: string) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.READ_TARGET, target, workspaceSlug),
+  searchMemory: (query: string, workspaceSlug?: string, limit?: number) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.SEARCH, query, workspaceSlug, limit),
+  listMemoryHistory: (target: string, workspaceSlug?: string, limit?: number) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.LIST_HISTORY, target, workspaceSlug, limit),
+  readMemoryRevision: (target: string, id: string, workspaceSlug?: string) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.READ_REVISION, target, id, workspaceSlug),
+  restoreMemoryRevision: (target: string, id: string, workspaceSlug?: string) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.RESTORE_REVISION, target, id, workspaceSlug),
 }
 
 // 将 API 暴露到渲染进程的 window 对象上

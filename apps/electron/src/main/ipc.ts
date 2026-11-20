@@ -10,7 +10,7 @@ import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statS
 import { realpath, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -222,6 +222,14 @@ import {
 import { extractTextFromAttachment } from './lib/document-parser'
 import { getUserProfile, updateUserProfile } from './lib/user-profile-service'
 import { getSettings, updateSettings } from './lib/settings-service'
+import {
+  listMemoryHistory,
+  listMemoryTargets,
+  readMemoryDocument,
+  readMemoryRevision,
+  restoreMemoryRevision,
+  searchMemory,
+} from './lib/memory-service'
 import { setDockBadgeCount } from './lib/dock-badge-service'
 
 import { checkEnvironment } from './lib/environment-checker'
@@ -6095,6 +6103,41 @@ export function registerIpcHandlers(): void {
       await runAutomationNow(id)
     }
   )
+
+  // ===== 记忆维护（全局画像 + 项目记忆） =====
+
+  const readOptionalSlug = (value: unknown): string | undefined => (
+    typeof value === 'string' && value.trim() ? value.trim() : undefined
+  )
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.LIST_TARGETS, async (_, workspaceSlug: unknown) => (
+    listMemoryTargets(readOptionalSlug(workspaceSlug))
+  ))
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.READ_TARGET, async (_, target: unknown, workspaceSlug: unknown) => {
+    if (!isNonEmptyString(target)) throw new Error('target 必填')
+    return readMemoryDocument(target, readOptionalSlug(workspaceSlug))
+  })
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.SEARCH, async (_, query: unknown, workspaceSlug: unknown, limit: unknown) => {
+    if (!isNonEmptyString(query)) return []
+    return searchMemory(query, readOptionalSlug(workspaceSlug), typeof limit === 'number' ? limit : undefined)
+  })
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.LIST_HISTORY, async (_, target: unknown, workspaceSlug: unknown, limit: unknown) => {
+    if (!isNonEmptyString(target)) return []
+    return listMemoryHistory(target, readOptionalSlug(workspaceSlug), typeof limit === 'number' ? limit : undefined)
+  })
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.READ_REVISION, async (_, target: unknown, id: unknown, workspaceSlug: unknown) => {
+    if (!isNonEmptyString(target) || !isNonEmptyString(id)) return null
+    return readMemoryRevision(target, id, readOptionalSlug(workspaceSlug))
+  })
+
+  ipcMain.handle(MEMORY_IPC_CHANNELS.RESTORE_REVISION, async (_, target: unknown, id: unknown, workspaceSlug: unknown) => {
+    if (!isNonEmptyString(target) || !isNonEmptyString(id)) throw new Error('target 与 id 必填')
+    return restoreMemoryRevision(target, id, readOptionalSlug(workspaceSlug))
+  })
 
   // ===== 用户授权的 Markdown Vault =====
 

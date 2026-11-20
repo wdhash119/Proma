@@ -1,23 +1,23 @@
 diff --git a/dist/utils/retry.js b/dist/utils/retry.js
+index dae863c..3a86924 100644
 --- a/dist/utils/retry.js
 +++ b/dist/utils/retry.js
-@@ -63,9 +63,19 @@
+@@ -83,9 +83,18 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
      // "stream ended without ..." and "Anthropic stream ended before message_stop"
      // (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
      "ended without",
-+    // Pi's exact stream-consumption failure code: retry in the same transcript.
-+    "\\bstream_read_error\\b",
-+    // Some OpenAI-compatible gateways omit "response" in this terminal-event error.
++    // Proma patch: Pi 的精确断流错误码；部分 OpenAI 兼容网关会省略 "response"。
++    "stream_read_error",
 +    "stream ended before (?:a )?terminal(?: response)? event",
      "stream ended before message_stop",
      "stream ended before a terminal response event",
      "http2 request did not get a response",
-+    // HTTP chunked/SSE proxies can close before the complete response body arrives.
++    // Proma patch: HTTP chunked/SSE 代理在响应体完整到达前断开。
 +    "unexpected non-whitespace character after JSON",
 +    "peer closed connection",
 +    "incomplete chunked read",
-+    // Browser/undici wording: `TypeError: Failed to fetch`.
++    // Proma patch: 浏览器/undici 措辞 `TypeError: Failed to fetch`。
 +    "failed to fetch",
-     // Provider-requested retry delay cap failures should flow through the outer
-     // retry policy so callers can surface/abort the backoff (#1123).
-     "retry delay",
+     // Codex CLI mid-stream disconnect, relayed by proxies that wrap the Codex CLI,
+     // e.g. "stream disconnected before completion: stream closed before response.completed" (#11057).
+     "stream disconnected before completion",

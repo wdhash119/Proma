@@ -1153,6 +1153,30 @@ export function buildWslBashArgs(
   ]
 }
 
+/** Bash 未显式指定 timeout 时的默认上限（秒）。避免模型漏传参数导致调用永久挂死。 */
+export const PROMA_DEFAULT_BASH_TIMEOUT_SECONDS = 300
+
+/**
+ * 为 Bash 工具的执行层补上默认超时。
+ *
+ * Pi 的 Bash schema 中 timeout 是可选参数且没有默认值；模型经常不传，
+ * 进程异常时调用会永久挂起。这里只在调用方缺省或传了非正数时填入默认值，
+ * 显式传入的超时（包括极大的值）保持原样。
+ */
+export function withDefaultBashTimeout(
+  operations: BashOperations,
+  defaultTimeoutSeconds: number = PROMA_DEFAULT_BASH_TIMEOUT_SECONDS,
+): BashOperations {
+  return {
+    exec(command, cwd, options) {
+      const timeout = options.timeout !== undefined && options.timeout > 0
+        ? options.timeout
+        : defaultTimeoutSeconds
+      return operations.exec(command, cwd, { ...options, timeout })
+    },
+  }
+}
+
 function createWslBashOperations(runtimeEnv: AgentRuntimeEnv): BashOperations {
   return {
     exec(command, cwd, options) {
@@ -1218,24 +1242,20 @@ function createWslBashOperations(runtimeEnv: AgentRuntimeEnv): BashOperations {
   }
 }
 
-function createPromaBashToolOptions(runtimeEnv: AgentRuntimeEnv | undefined): BashToolOptions | undefined {
-  if (!runtimeEnv) return undefined
-
+function createPromaBashToolOptions(sdk: PiSdk, runtimeEnv: AgentRuntimeEnv | undefined): BashToolOptions {
   const spawnHook: NonNullable<BashToolOptions['spawnHook']> = ({ command, cwd, env }) => ({
     command,
     cwd,
-    env: mergeRuntimeEnv(env, runtimeEnv.env),
+    env: mergeRuntimeEnv(env, runtimeEnv?.env),
   })
 
-  if (runtimeEnv.shellKind === 'wsl') {
-    return {
-      operations: createWslBashOperations(runtimeEnv),
-      spawnHook,
-    }
-  }
+  // 模型常常不传 timeout；默认 300 秒兜底，避免进程异常挂死后调用永久卡住。
+  const baseOperations = runtimeEnv?.shellKind === 'wsl'
+    ? createWslBashOperations(runtimeEnv)
+    : sdk.createLocalBashOperations({ ...(runtimeEnv?.shellPath && { shellPath: runtimeEnv.shellPath }) })
 
   return {
-    ...(runtimeEnv.shellPath && { shellPath: runtimeEnv.shellPath }),
+    operations: withDefaultBashTimeout(baseOperations),
     spawnHook,
   }
 }
@@ -1286,7 +1306,7 @@ function buildBuiltinToolDefinitions(
   const definitions = [
     sdk.createReadToolDefinition(cwd),
     ...(shellTool === 'bash'
-      ? [sdk.createBashToolDefinition(cwd, createPromaBashToolOptions(runtimeEnv))]
+      ? [sdk.createBashToolDefinition(cwd, createPromaBashToolOptions(sdk, runtimeEnv))]
       : []),
     ...(shellTool === 'powershell'
       ? [sdk.createPowerShellToolDefinition(cwd, createPromaPowerShellToolOptions(runtimeEnv))]

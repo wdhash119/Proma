@@ -466,6 +466,7 @@ export function createAutomation(input: CreateAutomationInput): Automation {
     permissionMode: input.permissionMode ?? AUTOMATION_DEFAULT_PERMISSION_MODE,
     sessionMode: input.sessionMode,
     notificationTargets: input.notificationTargets,
+    notifyPolicy: input.notifyPolicy,
     sourceSessionId: input.sourceSessionId,
     createdAt: now,
     updatedAt: now,
@@ -504,6 +505,10 @@ export function updateAutomation(input: UpdateAutomationInput): Automation | und
   if (input.permissionMode !== undefined) target.permissionMode = input.permissionMode
   if (input.sessionMode !== undefined) target.sessionMode = input.sessionMode
   if (input.notificationTargets !== undefined) target.notificationTargets = input.notificationTargets
+  if (input.notifyPolicy !== undefined) {
+    // null 表示恢复默认 always，避免旧任务在 UI 里显示成显式 always。
+    target.notifyPolicy = input.notifyPolicy ?? undefined
+  }
   const nextMaxRuns = input.maxRuns !== undefined ? input.maxRuns : target.maxRuns
   if (input.maxRuns !== undefined) applyMaxRunsUpdate(target, nextMaxRuns)
 

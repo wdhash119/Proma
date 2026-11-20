@@ -74,6 +74,14 @@ export interface AutomationFeishuNotificationTarget {
 /** 定时任务通知目标（钉钉/微信后续扩展） */
 export type AutomationNotificationTarget = AutomationFeishuNotificationTarget
 
+/**
+ * 单次运行结束后的结果提醒策略。
+ * - always：每次都提醒（默认，兼容旧任务）
+ * - failures-only：仅失败时提醒，成功结果不打扰
+ * - never：完全安静，只在任务列表里留运行记录
+ */
+export type AutomationResultNotifyPolicy = 'always' | 'failures-only' | 'never'
+
 /** 定时任务定义 */
 export interface Automation extends AutomationActiveWindow {
   id: string
@@ -119,6 +127,8 @@ export interface Automation extends AutomationActiveWindow {
   sessionMode?: AutomationSessionMode
   /** 运行完成后的外部通知目标 */
   notificationTargets?: AutomationNotificationTarget[]
+  /** 运行结束后的结果提醒策略，缺省按 always 处理 */
+  notifyPolicy?: AutomationResultNotifyPolicy
   /** 创建来源会话 ID（作为模板，运行时不复用而是新建子会话） */
   sourceSessionId?: string
   /** 创建时间 */
@@ -170,6 +180,7 @@ export interface CreateAutomationInput extends AutomationActiveWindow {
   permissionMode?: AutomationPermissionMode
   sessionMode?: AutomationSessionMode
   notificationTargets?: AutomationNotificationTarget[]
+  notifyPolicy?: AutomationResultNotifyPolicy
   sourceSessionId?: string
   /** 创建后是否立即启用（默认 true） */
   active?: boolean
@@ -195,6 +206,8 @@ export interface UpdateAutomationInput {
   scheduledAt?: number
   /** 最大运行次数上限；传 null 表示清除上限、不限次 */
   maxRuns?: number | null
+  /** 结果提醒策略；null 表示恢复默认 always */
+  notifyPolicy?: AutomationResultNotifyPolicy | null
   channelId?: string
   modelId?: string
   /** 工作区（用户可在创建后调整子会话归属的工作区） */

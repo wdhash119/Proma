@@ -12,6 +12,7 @@ import type {
   AutomationScheduleType,
   AutomationPermissionMode,
   AutomationSessionMode,
+  AutomationResultNotifyPolicy,
 } from '@proma/shared'
 import { AUTOMATION_DEFAULT_PERMISSION_MODE, AUTOMATION_DEFAULT_SESSION_MODE } from '@proma/shared'
 
@@ -47,6 +48,8 @@ export interface AutomationDraft {
   permissionMode: AutomationPermissionMode
   sessionMode: AutomationSessionMode
   notificationTargets?: AutomationNotificationTarget[]
+  /** 结果提醒策略；undefined 等同 always */
+  notifyPolicy?: AutomationResultNotifyPolicy
   sourceSessionId?: string
   active: boolean
 }

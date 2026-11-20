@@ -52,4 +52,8 @@ export const automationCreateToolParameters = Type.Object({
   ])),
   active: Type.Optional(Type.Boolean({ description: '创建后是否启用，默认 true' })),
   sessionMode: Type.Optional(Type.Union([Type.Literal('daily'), Type.Literal('reuse')], { description: '会话模式' })),
+  notifyPolicy: Type.Optional(Type.Union(
+    [Type.Literal('always'), Type.Literal('failures-only'), Type.Literal('never')],
+    { description: '结果提醒策略：always 成功失败都提醒（默认）、failures-only 仅失败提醒、never 完全安静' },
+  )),
 })

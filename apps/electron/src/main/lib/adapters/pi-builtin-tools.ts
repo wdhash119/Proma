@@ -408,6 +408,7 @@ function buildAutomationTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDefin
           modelId: ctx.modelId,
           workspaceId: targetWorkspace?.id,
           sessionMode: args.sessionMode as 'daily' | 'reuse' | undefined,
+          notifyPolicy: args.notifyPolicy as 'always' | 'failures-only' | 'never' | undefined,
           sourceSessionId: ctx.sessionId,
           active: (args.active as boolean) ?? true,
         }
@@ -474,6 +475,10 @@ function buildAutomationTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDefin
         ])),
         active: Type.Optional(Type.Boolean({ description: '启用或暂停任务' })),
         sessionMode: Type.Optional(Type.Union([Type.Literal('daily'), Type.Literal('reuse')])),
+        notifyPolicy: Type.Optional(Type.Union(
+          [Type.Literal('always'), Type.Literal('failures-only'), Type.Literal('never')],
+          { description: '结果提醒策略；always 表示恢复默认' },
+        )),
       }),
       async execute(_toolCallId: string, params: unknown) {
         const args = params as Record<string, unknown>
@@ -495,6 +500,7 @@ function buildAutomationTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDefin
           maxRuns: args.maxRuns as number | null | undefined,
           active: args.active as boolean | undefined,
           sessionMode: args.sessionMode as 'daily' | 'reuse' | undefined,
+          notifyPolicy: args.notifyPolicy as 'always' | 'failures-only' | 'never' | undefined,
         }
         if (input.name !== undefined) assertNonBlank(input.name, 'name')
         if (input.prompt !== undefined) assertNonBlank(input.prompt, 'prompt')

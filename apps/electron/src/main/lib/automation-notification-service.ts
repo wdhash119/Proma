@@ -14,6 +14,7 @@ import {
   buildAutomationFeishuCard,
   extractAssistantText,
   shouldNotifyAutomationTarget,
+  shouldNotifyByPolicy,
 } from './automation-notification-format'
 
 interface AutomationNotificationPayload {
@@ -24,6 +25,7 @@ interface AutomationNotificationPayload {
 export async function notifyAutomationRunFinished(payload: AutomationNotificationPayload): Promise<void> {
   const targets = payload.automation.notificationTargets ?? []
   if (targets.length === 0) return
+  if (!shouldNotifyByPolicy(payload.automation.notifyPolicy, payload.run.status)) return
 
   for (const target of targets) {
     if (!shouldNotifyAutomationTarget(target, payload.run.status)) continue

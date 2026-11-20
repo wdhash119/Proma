@@ -46,6 +46,7 @@ import type {
   CreateAutomationInput,
   FeishuChatBinding,
   UpdateAutomationInput,
+  AutomationResultNotifyPolicy,
 } from '@proma/shared'
 
 const NO_FEISHU_BINDING = '__none__'
@@ -132,6 +133,7 @@ function getDraftSignature(draft: AutomationDraft): string {
     permissionMode: draft.permissionMode,
     sessionMode: draft.sessionMode,
     notificationTargets: draft.notificationTargets ?? [],
+    notifyPolicy: draft.notifyPolicy,
     active: draft.active,
   })
 }
@@ -156,6 +158,7 @@ function draftToCreateInput(draft: AutomationDraft): CreateAutomationInput {
     permissionMode: draft.permissionMode,
     sessionMode: draft.sessionMode,
     notificationTargets: draft.notificationTargets,
+    notifyPolicy: draft.notifyPolicy,
     sourceSessionId: draft.sourceSessionId,
     active: draft.active,
   }
@@ -182,6 +185,7 @@ function draftToUpdateInput(draft: AutomationDraft): UpdateAutomationInput {
     permissionMode: draft.permissionMode,
     sessionMode: draft.sessionMode,
     notificationTargets: draft.notificationTargets ?? [],
+    notifyPolicy: draft.notifyPolicy ?? null,
     active: draft.active,
   }
 }
@@ -1168,6 +1172,37 @@ export function AutomationFormView({ embedded = false }: { embedded?: boolean } 
                 </Select>
               </div>
             )}
+          </div>
+
+          {/* 结果提醒策略 */}
+          <div className="flex flex-col gap-2 rounded-lg bg-foreground/[0.03] p-3">
+            <div className="flex items-start gap-2">
+              <Bell className="size-4 shrink-0 mt-0.5 text-primary" />
+              <div className="flex flex-col gap-0.5">
+                <Label>结果提醒</Label>
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  控制任务结束时是否提醒你：成功结果默认会提醒，可改为只在失败时提醒或完全安静
+                </span>
+              </div>
+            </div>
+            <Select
+              value={form.notifyPolicy ?? 'always'}
+              onValueChange={(value) => {
+                setForm((prev) => prev
+                  ? { ...prev, notifyPolicy: value === 'always' ? undefined : value as AutomationResultNotifyPolicy }
+                  : prev)
+              }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="always">成功或失败都提醒</SelectItem>
+                <SelectItem value="failures-only">仅失败时提醒</SelectItem>
+                <SelectItem value="never">完全安静</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-[11px] text-muted-foreground/70">
+              无论选哪一种，运行记录都会保留在任务历史里
+            </span>
           </div>
 
           {/* 会话模式选择已隐藏：默认采用 daily（同日复用、跨日新建）。

@@ -193,6 +193,15 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
 
   // 全局快捷键（由主进程 globalShortcut 注册，应用外也生效）
   {
+    id: 'quick-capture',
+    name: '清单快速捕获',
+    description: '随时唤起清单的快速新建，直接记下一条待办',
+    defaultMac: 'Cmd+Shift+T',
+    defaultWin: 'Ctrl+Shift+T',
+    category: 'global',
+    global: true,
+  },
+  {
     id: 'quick-task',
     name: '快速任务',
     description: '唤起浮动快速任务输入窗口',

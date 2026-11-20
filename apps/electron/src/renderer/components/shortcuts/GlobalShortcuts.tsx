@@ -44,6 +44,7 @@ import {
 import {
 } from '@/atoms/chat-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
+import { planningTabAtom, planningTodoCreateRequestAtom } from '@/atoms/planning-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { useShortcut } from '@/hooks/useShortcut'
 import { useCloseTab } from '@/hooks/useCloseTab'
@@ -77,6 +78,9 @@ export function GlobalShortcuts(): null {
   const setShortcutOverrides = useSetAtom(shortcutOverridesAtom)
   const shortcutOverrides = useAtomValue(shortcutOverridesAtom)
   const setSendWithCmdEnter = useSetAtom(sendWithCmdEnterAtom)
+  const setActiveView = useSetAtom(activeViewAtom)
+  const setPlanningTab = useSetAtom(planningTabAtom)
+  const setTodoCreateRequest = useSetAtom(planningTodoCreateRequestAtom)
   const { createAgent } = useCreateSession()
 
   // Tab 管理（用于关闭标签页）
@@ -180,6 +184,16 @@ export function GlobalShortcuts(): null {
     useCallback(() => {
       createAgent({ draft: true })
     }, [createAgent]),
+  )
+
+  // Cmd+Shift+T → 清单快速捕获（全局快捷键同时注册，这里保留应用内回退）
+  useShortcut(
+    'quick-capture',
+    useCallback(() => {
+      setActiveView('planning')
+      setPlanningTab('todos')
+      setTodoCreateRequest((value) => value + 1)
+    }, [setActiveView, setPlanningTab, setTodoCreateRequest]),
   )
 
   // Cmd+B → 切换侧边栏
@@ -416,6 +430,17 @@ export function GlobalShortcuts(): null {
       cleanup()
     }
   }, [store])
+
+  // ===== 全局快捷键 → 清单快速捕获 =====
+
+  useEffect(() => {
+    const cleanup = window.electronAPI.onOpenPlanningQuickCapture(() => {
+      setActiveView('planning')
+      setPlanningTab('todos')
+      setTodoCreateRequest((value) => value + 1)
+    })
+    return cleanup
+  }, [setActiveView, setPlanningTab, setTodoCreateRequest])
 
   // ===== 菜单栏 → 打开 / 创建会话 =====
 

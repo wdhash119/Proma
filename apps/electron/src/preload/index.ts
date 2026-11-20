@@ -742,6 +742,8 @@ export interface ElectronAPI {
   getWorkspaceSkills: (workspaceSlug: string) => Promise<SkillMeta[]>
   /** 工作区 Skill 使用记录：slug → 最后使用时间与次数 */
   getSkillUsage: (workspaceSlug: string) => Promise<Record<string, { lastUsedAt: number; useCount: number }>>
+  /** 全局快捷键要求打开清单快速捕获 */
+  onOpenPlanningQuickCapture: (callback: () => void) => () => void
   /** 会话交付物（Present 登记的最终产物） */
   listSessionArtifacts: (sessionId: string) => Promise<SessionArtifact[]>
   removeSessionArtifact: (sessionId: string, path: string) => Promise<SessionArtifact[]>
@@ -2102,6 +2104,11 @@ const electronAPI: ElectronAPI = {
 
   getSkillUsage: (workspaceSlug: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SKILL_USAGE, workspaceSlug)
+  },
+  onOpenPlanningQuickCapture: (callback: () => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(PLANNING_IPC_CHANNELS.OPEN_QUICK_CAPTURE, listener)
+    return () => { ipcRenderer.removeListener(PLANNING_IPC_CHANNELS.OPEN_QUICK_CAPTURE, listener) }
   },
   listSessionArtifacts: (sessionId: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_SESSION_ARTIFACTS, sessionId)

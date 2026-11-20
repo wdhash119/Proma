@@ -61,7 +61,7 @@ const SHORTCUT_DISPLAY_ORDER: Record<ShortcutCategory, readonly string[]> = {
     'editor-bold',
     'editor-strikethrough',
   ],
-  global: ['quick-task', 'show-main-window', 'voice-dictation'],
+  global: ['quick-capture', 'quick-task', 'show-main-window', 'voice-dictation'],
 }
 
 const CATEGORY_ICONS: Record<ShortcutCategory, React.ComponentType<{ className?: string }>> = {

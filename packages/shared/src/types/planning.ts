@@ -332,6 +332,8 @@ export interface PlanningAgentOperation {
 
 export const PLANNING_IPC_CHANNELS = {
   LIST_TODOS: 'planning:list-todos',
+  /** 全局快捷键触发：主进程要求渲染进程打开清单快速捕获 */
+  OPEN_QUICK_CAPTURE: 'planning:open-quick-capture',
   CREATE_TODO: 'planning:create-todo',
   /** 原子地确认 Todo 项目归属并创建对应 Agent 会话。 */
   START_TODO_AGENT: 'planning:start-todo-agent',

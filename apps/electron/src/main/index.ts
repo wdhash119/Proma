@@ -129,6 +129,7 @@ import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/glob
 import { setPromaVersion } from '@proma/core'
 import { canRecoverRenderer, RENDERER_RECOVERY_WINDOW_MS } from './lib/renderer-process-recovery'
 import { TRAY_IPC_CHANNELS } from '../types'
+import { PLANNING_IPC_CHANNELS } from '@proma/shared'
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
 
@@ -777,6 +778,13 @@ async function bootstrap(): Promise<void> {
   )
   safeRun('registerGlobalShortcut:show-main-window', () =>
     registerGlobalShortcut('show-main-window', showAndFocusMainWindow),
+  )
+  // 清单快速捕获：先把主窗口带到前台，再让渲染进程打开新建入口。
+  safeRun('registerGlobalShortcut:quick-capture', () =>
+    registerGlobalShortcut('quick-capture', () => {
+      showAndFocusMainWindow()
+      sendToMainWindow(PLANNING_IPC_CHANNELS.OPEN_QUICK_CAPTURE)
+    }),
   )
   safeRun('registerGlobalShortcut:voice-dictation', () =>
     registerGlobalShortcut('voice-dictation', () => {

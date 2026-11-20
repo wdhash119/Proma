@@ -23,8 +23,6 @@ import { getToolIcon, extractFilePath } from './tool-utils'
 import { getToolPhrase, getToolResultSummary, shouldShowToolKindLabel } from './tool-phrase'
 import { ToolResultRenderer } from './tool-result-renderers'
 import { PreviewOpenButton } from './tool-result-renderers/preview-open-button'
-import { getTaskGetStatusLabel, parseTaskGetResult, type ParsedTaskGetResult } from './tool-result-renderers/task-get-result'
-import { parseTaskListResult, type ParsedTaskListItem } from './tool-result-renderers/task-list-result'
 import { formatDuration } from './AgentMessages'
 import { useSmoothStream } from '@proma/ui'
 import type {
@@ -260,65 +258,6 @@ function PromptRow({ prompt, dimmed = false }: { prompt: string; dimmed?: boolea
 
 // ===== 工具短语 diff 着色 =====
 
-function TaskGetCollapsedSummary({ task }: { task: ParsedTaskGetResult }): React.ReactElement {
-  const blockPreview = task.blocks.length > 0
-    ? `${task.blocks[0]}${task.blocks.length > 1 ? ` +${task.blocks.length - 1}` : ''}`
-    : undefined
-
-  return (
-    <>
-      {task.subject && (
-        <>
-          <span className="shrink-0 text-muted-foreground/35">·</span>
-          <span className="min-w-0 truncate text-[14px] font-medium text-foreground/75">
-            {task.subject}
-          </span>
-        </>
-      )}
-      {task.description && (
-        <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground/60 sm:inline">
-          {task.description}
-        </span>
-      )}
-      {task.status && (
-        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-          {getTaskGetStatusLabel(task.status)}
-        </span>
-      )}
-      {blockPreview && (
-        <span className="shrink-0 rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
-          关联 {blockPreview}
-        </span>
-      )}
-    </>
-  )
-}
-
-function TaskListCollapsedSummary({ tasks }: { tasks: ParsedTaskListItem[] }): React.ReactElement {
-  const completedCount = tasks.filter((task) => task.status === 'completed').length
-  const activeCount = tasks.filter((task) => task.status === 'in_progress').length
-  const pendingCount = tasks.filter((task) => task.status === 'pending').length
-
-  return (
-    <>
-      <span className="shrink-0 text-muted-foreground/35">·</span>
-      <span className="shrink-0 rounded-full bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground/75">
-        {completedCount}/{tasks.length} 已完成
-      </span>
-      {activeCount > 0 && (
-        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-          {activeCount} 进行中
-        </span>
-      )}
-      {pendingCount > 0 && (
-        <span className="hidden shrink-0 rounded-full bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground/65 sm:inline">
-          {pendingCount} 待处理
-        </span>
-      )}
-    </>
-  )
-}
-
 // ===== 工具调用块 =====
 
 interface ToolUseBlockProps {
@@ -339,14 +278,6 @@ function ToolUseBlock({ block, allMessages, animate = false, index = 0, dimmed =
   const resultText = toolResult?.result
   const isError = toolResult?.isError === true
   const shouldShowResult = !!resultText
-  const taskGetSummary = React.useMemo(() => {
-    if (block.name !== 'TaskGet' || !resultText || isError) return null
-    return parseTaskGetResult(resultText)
-  }, [block.name, resultText, isError])
-  const taskListSummary = React.useMemo(() => {
-    if (block.name !== 'TaskList' || !resultText || isError) return null
-    return parseTaskListResult(resultText)
-  }, [block.name, resultText, isError])
   const isAgentTool = block.name === 'Agent' || block.name === 'Task'
   const hasChildren = isAgentTool && childBlocks && childBlocks.length > 0
   const subAgentMeta = useSubAgentMeta(block.id, allMessages)
@@ -519,18 +450,6 @@ function ToolUseBlock({ block, allMessages, animate = false, index = 0, dimmed =
               {phrase.diffStats.deletions > 0 && (
                 <span className="text-red-600 dark:text-red-400">-{phrase.diffStats.deletions}</span>
               )}
-            </span>
-          )}
-
-          {taskGetSummary && (
-            <span className="flex min-w-0 max-w-[40%] overflow-hidden items-center gap-1.5">
-              <TaskGetCollapsedSummary task={taskGetSummary} />
-            </span>
-          )}
-
-          {taskListSummary && (
-            <span className="flex min-w-0 max-w-[40%] overflow-hidden items-center gap-1.5">
-              <TaskListCollapsedSummary tasks={taskListSummary} />
             </span>
           )}
 

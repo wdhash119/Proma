@@ -248,55 +248,6 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       return phrase('Agent')
     }
 
-    case 'TaskCreate': {
-      const subject = input.subject
-      if (typeof subject === 'string') {
-        return phrase(`创建任务 ${truncate(subject, 80)}`)
-      }
-      return phrase('创建任务')
-    }
-
-    case 'TaskUpdate': {
-      // TaskUpdate 是自描述工具，label 即完整语义
-      const statusMap: Record<string, string> = {
-        pending: '待处理',
-        in_progress: '进行中',
-        completed: '已完成',
-        cancelled: '已取消',
-        blocked: '已阻塞',
-        error: '出错',
-        deleted: '已删除',
-      }
-      const parts: string[] = []
-      if (typeof input.taskId === 'string') parts.push(`任务 #${input.taskId}`)
-      if (typeof input.status === 'string') parts.push(statusMap[input.status] ?? input.status)
-      if (typeof input.subject === 'string') parts.push(truncate(input.subject, 60))
-      if (parts.length > 0) return phrase(parts.join(' '))
-      return phrase('更新任务')
-    }
-
-    case 'TaskGet': {
-      const taskId = input.taskId
-      if (typeof taskId === 'string') return phrase(`查看任务 #${taskId}`)
-      return phrase('查看任务')
-    }
-
-    case 'TaskList': {
-      return phrase('查看任务列表')
-    }
-
-    case 'TodoWrite': {
-      const todos = input.todos
-      if (Array.isArray(todos)) {
-        return phrase(`更新待办 ${todos.length} 项`)
-      }
-      return phrase('更新待办')
-    }
-
-    case 'TodoRead': {
-      return phrase('读取待办')
-    }
-
     case 'EnterPlanMode': {
       return phrase('进入计划模式')
     }

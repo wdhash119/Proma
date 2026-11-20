@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SDKMessage } from '@proma/shared'
 import { getContextCompactionProgress, hasRenderableAssistantTurnContent, isCompactionControlHistoryGroup, shouldRenderLiveAssistantTurn } from './AgentMessages'
-import { shouldClearRetainedCompactionForResumedStream, shouldRestoreCompactionProgress } from './TaskProgressOverlay'
+import { buildCompactionNoticeText, COMPACTION_NOTICE_RETENTION_MS } from './CompactionNotice'
 
 function systemMessage(fields: Record<string, unknown>): SDKMessage {
   return { type: 'system', ...fields } as unknown as SDKMessage
@@ -11,7 +11,7 @@ function assistantMessage(): SDKMessage {
   return { type: 'assistant', message: { content: [] } } as unknown as SDKMessage
 }
 
-describe('context compaction progress overlay state', () => {
+describe('context compaction progress state', () => {
   test('keeps the optimistic timer shell until a live assistant turn has visible content', () => {
     const assistantTurn = (content: unknown[], error?: { message: string }) => ({
       type: 'assistant-turn',
@@ -74,19 +74,28 @@ describe('context compaction progress overlay state', () => {
     })
   })
 
-  test('does not restore an already dismissed success or no-op feedback state', () => {
-    expect(shouldRestoreCompactionProgress('success:上下文已压缩::', 'success:上下文已压缩::')).toBe(false)
-    expect(shouldRestoreCompactionProgress('noop:当前上下文无需压缩::', 'noop:当前上下文无需压缩::')).toBe(false)
-    expect(shouldRestoreCompactionProgress('running:正在整理上下文::', 'noop:当前上下文无需压缩::')).toBe(true)
-  })
+  test('renders compaction progress as a single line of body-size text', () => {
+    const running = getContextCompactionProgress([], true, undefined)
+    expect(running && buildCompactionNoticeText(running)).toBe('正在整理上下文：正在生成会话摘要，完成后可继续当前任务。')
 
-  test('clears retained compaction feedback when the same stream resumes normal work', () => {
-    const completed = { status: 'success' as const, label: '上下文已压缩' }
+    const success = getContextCompactionProgress([
+      systemMessage({ subtype: 'compact_boundary', summary: '已完成的工作已整理。' }),
+    ], false, undefined)
+    expect(success && buildCompactionNoticeText(success)).toBe('上下文已压缩：会话已整理，可以继续当前任务。')
 
-    expect(shouldClearRetainedCompactionForResumedStream(true, undefined, completed)).toBe(true)
-    expect(shouldClearRetainedCompactionForResumedStream(false, undefined, completed)).toBe(false)
-    expect(shouldClearRetainedCompactionForResumedStream(true, completed, completed)).toBe(false)
-    expect(shouldClearRetainedCompactionForResumedStream(true, undefined, undefined)).toBe(false)
+    const noop = getContextCompactionProgress([
+      systemMessage({ subtype: 'status', compact_result: 'noop', message: '当前上下文较小，暂时无需压缩。' }),
+    ], false, undefined)
+    expect(noop && buildCompactionNoticeText(noop)).toBe('当前上下文无需压缩：当前上下文较小，暂时无需压缩。')
+
+    const failed = getContextCompactionProgress([
+      systemMessage({ subtype: 'status', compact_result: 'failed', compact_error: 'provider unavailable' }),
+    ], false, undefined)
+    expect(failed && buildCompactionNoticeText(failed)).toBe('上下文压缩失败：provider unavailable')
+
+    // 终态提示保留数秒后自动消失，不长期占用对话流。
+    expect(COMPACTION_NOTICE_RETENTION_MS).toBeGreaterThan(0)
+    expect(COMPACTION_NOTICE_RETENTION_MS).toBeLessThanOrEqual(10_000)
   })
 
   test('maps successful compaction to a terminal state', () => {

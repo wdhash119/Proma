@@ -39,11 +39,11 @@ import {
 import { toTranscript } from '@proma/session-core'
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { groupIntoTurns, AssistantLogo, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, buildTaskProgressDataForTurn, type MessageGroup } from './SDKMessageRenderer'
+import { groupIntoTurns, AssistantLogo, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, type MessageGroup } from './SDKMessageRenderer'
 import { buildLiveGroupSet } from './live-group-set'
 import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkProvider'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
-import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
+import { CompactionNotice, type ContextCompactionProgress } from './CompactionNotice'
 import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
 import type { AgentEventUsage, RetryAttempt, SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKTextBlock, SDKThinkingBlock } from '@proma/shared'
 import { getSDKCompactStatus } from '@proma/shared'
@@ -1034,24 +1034,6 @@ export const AgentMessages = React.memo(function AgentMessages({
       .join('\u0000')
   ), [allSDKMessages])
 
-  // 在当前 run 的全部 live turn 中汇总任务。压缩边界或后台唤醒会拆开 turn，
-  // 不能只取最后一段，否则此前已创建但未再次更新的任务会从进度卡消失。
-  const liveTaskActivities = React.useMemo(() => {
-    const currentRunMessages = (liveMessages ?? []).filter((message) => {
-      const record = message as Record<string, unknown>
-      const messageRunGeneration = record._promaLiveRunGeneration
-      const messageRunStartedAt = record._promaLiveRunStartedAt
-      if (streamState?.runGeneration != null && typeof messageRunGeneration === 'number') {
-        return messageRunGeneration === streamState.runGeneration
-      }
-      return startedAt == null || messageRunStartedAt == null || messageRunStartedAt === startedAt
-    })
-    return groupIntoTurns(currentRunMessages, sessionModelId)
-      .flatMap((group) => group.type === 'assistant-turn'
-        ? buildTaskProgressDataForTurn(group).taskActivities
-        : [])
-  }, [liveMessages, sessionModelId, startedAt, streamState?.runGeneration])
-
   const contextCompaction = React.useMemo(
     () => getContextCompactionProgress(liveMessages ?? [], streamState?.isCompacting, streamState?.contextCompaction),
     [liveMessages, streamState?.isCompacting, streamState?.contextCompaction],
@@ -1224,6 +1206,9 @@ export const AgentMessages = React.memo(function AgentMessages({
                 onCompact={onCompact}
               />
 
+              {/* 上下文压缩进度：以对话内单行纯文本呈现，不再占用输入框上方的浮层。 */}
+              {contextCompaction && <CompactionNotice progress={contextCompaction} />}
+
               {/* 有实时助手内容时：显示运行指示器或占位（防止 streaming 结束到 Actions Bar 出现之间的高度跳动） */}
               {/* 不使用 mt：ConversationContent 的 gap-1(4px) 已提供间距，
                   匹配内部 MessageActions 的 gap-0.5(2px)+mt-0.5(2px)=4px 间距 */}
@@ -1253,12 +1238,6 @@ export const AgentMessages = React.memo(function AgentMessages({
           )}
         </ConversationContent>
         <ScrollMinimap items={minimapItems} searchMessages={searchMessages} />
-        <TaskProgressOverlay
-          key={sessionId}
-          activities={liveTaskActivities}
-          streaming={streaming}
-          contextCompaction={contextCompaction}
-        />
           </Conversation>
           <AgentHistorySelectionLayer
             sessionId={sessionId}

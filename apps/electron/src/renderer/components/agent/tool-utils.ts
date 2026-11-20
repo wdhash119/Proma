@@ -1,6 +1,6 @@
 /**
  * 工具展示的可复用函数和常量。
- * 供 SDK 内容块、任务进度卡片等组件复用。
+ * 供 SDK 内容块与工具行渲染复用。
  */
 
 import type { LucideIcon } from 'lucide-react'
@@ -14,8 +14,6 @@ import {
   Database,
   Download,
   FilePenLine,
-  SquareCheck,
-  FileSearch,
   FileText,
   FolderSearch,
   GitBranch,
@@ -59,10 +57,6 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   Skill: Zap,
   TodoWrite: ListChecks,
   TodoRead: ClipboardList,
-  TaskCreate: SquareCheck,
-  TaskUpdate: ListChecks,
-  TaskGet: FileSearch,
-  TaskList: List,
   Agent: Bot,
   EnterPlanMode: Map,
   ExitPlanMode: MapPinOff,
@@ -135,10 +129,6 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   Skill: '使用技能',
   TodoWrite: '更新待办',
   TodoRead: '阅读待办',
-  TaskCreate: '创建任务',
-  TaskUpdate: '更新任务',
-  TaskGet: '查看任务',
-  TaskList: '任务列表',
   Agent: 'Agent',
   EnterPlanMode: '正在生成计划',
   ExitPlanMode: '正在退出计划',
@@ -300,52 +290,6 @@ export function getInputSummary(
         return description.length > 80
           ? description.slice(0, 80) + '…'
           : description
-      }
-      return null
-    }
-
-    case 'TaskCreate': {
-      const subject = input.subject
-      if (typeof subject === 'string') {
-        return subject
-      }
-      return null
-    }
-
-    case 'TaskUpdate': {
-      const statusMap: Record<string, string> = {
-        pending: '待处理',
-        in_progress: '正在进行中',
-        completed: '已结束',
-        cancelled: '已取消',
-        blocked: '已阻塞',
-        error: '出错',
-      }
-      const parts: string[] = []
-      if (typeof input.taskId === 'string') {
-        parts.push(`任务 #${input.taskId}`)
-      }
-      if (typeof input.status === 'string') {
-        parts.push(statusMap[input.status] ?? input.status)
-      }
-      if (typeof input.subject === 'string') {
-        parts.push(input.subject)
-      }
-      return parts.length > 0 ? parts.join(' ') : null
-    }
-
-    case 'TaskGet': {
-      const taskId = input.taskId
-      if (typeof taskId === 'string') {
-        return `#${taskId}`
-      }
-      return null
-    }
-
-    case 'TaskList': {
-      const reason = input.reason
-      if (typeof reason === 'string') {
-        return reason
       }
       return null
     }

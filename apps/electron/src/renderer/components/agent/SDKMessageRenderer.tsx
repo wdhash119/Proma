@@ -20,7 +20,6 @@ import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
 import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
 import { ProcessBlockGroup, buildAssistantTurnRenderItems } from './ProcessBlockGroup'
-import { extractToolResultText, TASK_TOOL_NAMES } from './task-progress'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @proma/session-core 作为唯一真源。
 // 这里 import 供本文件内部使用，并 re-export 以保持既有 `from './SDKMessageRenderer'` 导入方零改动。
@@ -246,21 +245,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function extractStructuredToolResultText(message: SDKUserMessage): string | undefined {
-  const raw = message as unknown as Record<string, unknown>
-  const result = raw.toolUseResult ?? raw.tool_use_result
-  if (!isRecord(result)) return undefined
-  try {
-    return JSON.stringify(result)
-  } catch {
-    return undefined
-  }
-}
-
-function extractToolResultForTask(message: SDKUserMessage, resultBlock: SDKToolResultBlock): string | undefined {
-  return extractStructuredToolResultText(message) ?? extractToolResultText(resultBlock.content)
-}
-
 // isUserInputMessage 已迁移至 @proma/session-core
 
 // ===== 助手头像 =====
@@ -286,84 +270,6 @@ export function AssistantLogo({ model }: { model?: string }): React.ReactElement
 // AssistantTurn / MessageGroup 类型已迁移至 @proma/session-core
 
 // groupIntoTurns / mergeAdjacentSameModelTurns 已迁移至 @proma/session-core
-
-export function buildTaskProgressData(
-  topLevelBlocks: SDKContentBlock[],
-  turnMessages: SDKMessage[],
-): {
-  taskActivities: ToolActivity[]
-  firstTaskIndex: number
-} {
-  const taskBlocks: SDKToolUseBlock[] = []
-  let firstTaskIndex = -1
-
-  for (let i = 0; i < topLevelBlocks.length; i++) {
-    const block = topLevelBlocks[i]!
-    if (block.type === 'tool_use' && TASK_TOOL_NAMES.has((block as SDKToolUseBlock).name)) {
-      if (firstTaskIndex === -1) firstTaskIndex = i
-      taskBlocks.push(block as SDKToolUseBlock)
-    }
-  }
-
-  const toolResultMap = new Map<string, string>()
-  for (const msg of turnMessages) {
-    if (msg.type !== 'user') continue
-    const userMsg = msg as SDKUserMessage
-    const blocks = userMsg.message?.content
-    if (!Array.isArray(blocks)) continue
-    for (const b of blocks) {
-      if (b.type === 'tool_result') {
-        const rb = b as SDKToolResultBlock
-        const text = extractToolResultForTask(userMsg, rb)
-        if (text) toolResultMap.set(rb.tool_use_id, text)
-      }
-    }
-  }
-
-  const taskActivities: ToolActivity[] = taskBlocks.map((tb) => ({
-    toolUseId: tb.id,
-    toolName: tb.name,
-    input: tb.input as Record<string, unknown>,
-    result: toolResultMap.get(tb.id),
-    done: true,
-  }))
-
-  return { taskActivities, firstTaskIndex }
-}
-
-/**
- * 提取一个 turn 中直接属于当前 Agent 的任务工具活动。
- *
- * Task/Agent 容器内的子 Agent 工具不会进入父会话的浮动进度，避免跨执行单元串扰。
- */
-export function buildTaskProgressDataForTurn(turn: AssistantTurn): { taskActivities: ToolActivity[] } {
-  const enrichedBlocks: Array<{ block: SDKContentBlock; parentToolUseId?: string | null }> = []
-
-  for (const message of turn.assistantMessages) {
-    const blocks = message.message?.content
-    if (!Array.isArray(blocks)) continue
-    for (const block of blocks) {
-      for (const normalizedBlock of normalizeThinkTagsInContentBlocks([block])) {
-        enrichedBlocks.push({ block: normalizedBlock, parentToolUseId: message.parent_tool_use_id })
-      }
-    }
-  }
-
-  const agentToolIds = new Set<string>()
-  for (const { block } of enrichedBlocks) {
-    if (block.type !== 'tool_use') continue
-    const tool = block as { name: string; id: string }
-    if (tool.name === 'Agent' || tool.name === 'Task') agentToolIds.add(tool.id)
-  }
-
-  const topLevelBlocks = enrichedBlocks
-    .filter(({ parentToolUseId }) => !parentToolUseId || !agentToolIds.has(parentToolUseId))
-    .map(({ block }) => block)
-
-  const { taskActivities } = buildTaskProgressData(topLevelBlocks, turn.turnMessages)
-  return { taskActivities }
-}
-
 
 export interface AssistantTurnRendererProps {
   turn: AssistantTurn
@@ -493,11 +399,6 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
   if (enrichedBlocks.length === 0 && !hasError) return null
 
   const renderTopLevelBlock = (block: SDKContentBlock, i: number): React.ReactNode => {
-    // 任务进度由底部浮层统一呈现，输出记录不再重复显示任务卡。
-    if (block.type === 'tool_use' && TASK_TOOL_NAMES.has((block as SDKToolUseBlock).name)) {
-      return null
-    }
-
     const isAgentTool = block.type === 'tool_use'
       && ((block as { name: string }).name === 'Agent' || (block as { name: string }).name === 'Task')
     const childBlocks = isAgentTool

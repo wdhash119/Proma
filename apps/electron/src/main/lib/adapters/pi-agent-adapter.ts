@@ -212,15 +212,6 @@ interface PendingInterruptPrompt {
   rejectAccepted: (error: unknown) => void
 }
 
-interface PromaTaskItem {
-  id: string
-  subject: string
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled' | 'error' | 'deleted'
-  description?: string
-  activeForm?: string
-  blocks?: string[]
-}
-
 interface AssistantMessageState {
   uuid?: string
 }
@@ -892,47 +883,7 @@ function createCompactionContinuationLimitResult(sessionId: string): SDKMessage 
   } as unknown as SDKMessage
 }
 
-function stringFromInput(input: Record<string, unknown>, keys: string[], fallback = ''): string {
-  for (const key of keys) {
-    const value = input[key]
-    if (typeof value === 'string' && value.trim()) return value.trim()
-    if (typeof value === 'number') return String(value)
-  }
-  return fallback
-}
-
-/**
- * 使用 Pi 的 toolCallId 作为默认任务 ID，让 tool_use 和 TaskCreate 结果从流开始就稳定关联。
- * 显式 ID 仅为旧调用格式保留兼容，不应覆盖正常的 opaque toolCallId。
- */
-export function resolvePromaTaskId(input: Record<string, unknown>, toolCallId: string): string {
-  return stringFromInput(input, ['id', 'taskId', 'task_id'], toolCallId)
-}
-
-function normalizeTaskStatus(value: unknown, fallback: PromaTaskItem['status']): PromaTaskItem['status'] {
-  if (
-    value === 'pending' ||
-    value === 'in_progress' ||
-    value === 'completed' ||
-    value === 'blocked' ||
-    value === 'cancelled' ||
-    value === 'error' ||
-    value === 'deleted'
-  ) {
-    return value
-  }
-  return fallback
-}
-
-function normalizeStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const items = value.map((item) => String(item).trim()).filter(Boolean)
-  return items.length > 0 ? items : undefined
-}
-
 function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOptions['canUseTool']): ToolDefinition[] {
-  const tasks = new Map<string, PromaTaskItem>()
-
   const definitions = [
     sdk.defineTool({
       name: 'AskUserQuestion',
@@ -957,110 +908,6 @@ function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOp
         return createJsonToolResult({ answers: input.answers ?? {} })
       },
     }),
-    sdk.defineTool({
-      name: 'TaskCreate',
-      label: '创建任务',
-      description: '创建一个可见进度任务，用于多步骤或长耗时工作。',
-      promptSnippet: '创建一个可见进度任务。',
-      parameters: Type.Object({
-        subject: Type.String({ description: '任务标题。' }),
-        description: Type.Optional(Type.String({ description: '任务说明。' })),
-        activeForm: Type.Optional(Type.String({ description: '当前活动形态或阶段。' })),
-        blocks: Type.Optional(Type.Array(Type.String({ description: '关联区块 ID。' }))),
-      }),
-      async execute(toolCallId, params) {
-        const input = params as Record<string, unknown>
-        const id = resolvePromaTaskId(input, toolCallId)
-        const task: PromaTaskItem = {
-          id,
-          subject: stringFromInput(input, ['subject', 'title', 'name'], `任务 #${id}`),
-          status: 'pending',
-          description: typeof input.description === 'string' ? input.description : undefined,
-          activeForm: typeof input.activeForm === 'string' ? input.activeForm : undefined,
-          blocks: normalizeStringArray(input.blocks),
-        }
-        tasks.set(id, task)
-        return createJsonToolResult({ task })
-      },
-    }),
-    sdk.defineTool({
-      name: 'TaskUpdate',
-      label: '更新任务',
-      description: '更新已有可见进度任务的状态、标题或说明。',
-      promptSnippet: '更新可见进度任务。',
-      parameters: Type.Object({
-        taskId: Type.String({ description: '任务 ID。' }),
-        status: Type.Optional(Type.Union([
-          Type.Literal('pending'),
-          Type.Literal('in_progress'),
-          Type.Literal('completed'),
-          Type.Literal('blocked'),
-          Type.Literal('cancelled'),
-          Type.Literal('error'),
-          Type.Literal('deleted'),
-        ])),
-        subject: Type.Optional(Type.String({ description: '新的任务标题。' })),
-        description: Type.Optional(Type.String({ description: '新的任务说明。' })),
-        activeForm: Type.Optional(Type.String({ description: '当前活动形态或阶段。' })),
-        blocks: Type.Optional(Type.Array(Type.String({ description: '关联区块 ID。' }))),
-      }),
-      async execute(_toolCallId, params) {
-        const input = params as Record<string, unknown>
-        const id = stringFromInput(input, ['taskId', 'task_id', 'id'])
-        if (!id) throw new Error('taskId 必填')
-        const existing = tasks.get(id)
-        const task: PromaTaskItem = {
-          id,
-          subject: stringFromInput(input, ['subject', 'title', 'name'], existing?.subject ?? `任务 #${id}`),
-          status: normalizeTaskStatus(input.status, existing?.status ?? 'pending'),
-          description: typeof input.description === 'string' ? input.description : existing?.description,
-          activeForm: typeof input.activeForm === 'string' ? input.activeForm : existing?.activeForm,
-          blocks: normalizeStringArray(input.blocks) ?? existing?.blocks,
-        }
-        tasks.set(id, task)
-        return createJsonToolResult({ task })
-      },
-    }),
-    sdk.defineTool({
-      name: 'TaskGet',
-      label: '查看任务',
-      description: '读取某个可见进度任务的当前状态。',
-      promptSnippet: '查看可见进度任务。',
-      parameters: Type.Object({
-        taskId: Type.String({ description: '任务 ID。' }),
-      }),
-      async execute(_toolCallId, params) {
-        const input = params as Record<string, unknown>
-        const id = stringFromInput(input, ['taskId', 'task_id', 'id'])
-        if (!id) throw new Error('taskId 必填')
-        const task = tasks.get(id)
-        if (!task) throw new Error(`任务不存在: ${id}`)
-        return createJsonToolResult({ task })
-      },
-    }),
-    sdk.defineTool({
-      name: 'TaskList',
-      label: '任务列表',
-      description: '列出当前 turn 中已创建的可见进度任务。',
-      promptSnippet: '列出可见进度任务。',
-      parameters: Type.Object({
-        reason: Type.Optional(Type.String({ description: '读取任务列表的原因。' })),
-      }),
-      async execute() {
-        return createJsonToolResult({ tasks: [...tasks.values()].filter((task) => task.status !== 'deleted') })
-      },
-    }),
-    sdk.defineTool({
-      name: 'TodoRead',
-      label: '读取待办',
-      description: '读取当前 turn 的任务列表。兼容 Claude SDK 的 TodoRead。',
-      promptSnippet: '读取当前待办列表。',
-      parameters: Type.Object({}),
-      async execute() {
-        return createJsonToolResult({ todos: [...tasks.values()].filter((task) => task.status !== 'deleted') })
-      },
-    }),
-
   ] as unknown as ToolDefinition[]
 
   return definitions.map((tool) =>

@@ -1,0 +1,100 @@
+import { describe, expect, test } from 'bun:test'
+import { parseChatMarkdownBlocks, reconcileChatMarkdownBlocks } from './chat-markdown-blocks'
+
+describe('聊天 Markdown 顶层分块', () => {
+  test('Given 空内容 When 解析 Then 不产生任何块', () => {
+    expect(parseChatMarkdownBlocks('')).toEqual([])
+    expect(parseChatMarkdownBlocks('   \n\n  ')).toEqual([])
+  })
+
+  test('Given 两段文本 When 解析 Then 按空行拆成两个段落块', () => {
+    const blocks = parseChatMarkdownBlocks('第一段\n\n第二段')
+    expect(blocks.map((block) => block.type)).toEqual(['paragraph', 'paragraph'])
+    expect(blocks.map((block) => block.source)).toEqual(['第一段', '第二段'])
+  })
+
+  test('Given 代码围栏 When 解析 Then 保留完整源码且不被拆分', () => {
+    const source = '说明文字\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\n结尾'
+    const blocks = parseChatMarkdownBlocks(source)
+    expect(blocks.map((block) => block.type)).toEqual(['paragraph', 'code', 'paragraph'])
+    expect(blocks[1]?.source).toContain('const a = 1')
+    expect(blocks[1]?.source.startsWith('```ts')).toBe(true)
+  })
+
+  test('Given Mermaid 围栏 When 解析 Then 仍是代码块并保留语言标记', () => {
+    const blocks = parseChatMarkdownBlocks('```mermaid\ngraph TD\nA-->B\n```')
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]?.type).toBe('code')
+    expect(blocks[0]?.source).toContain('graph TD')
+  })
+
+  test('Given 块级数学 When 解析 Then 生成独立的 math 块', () => {
+    const blocks = parseChatMarkdownBlocks('前文\n\n$$\nE = mc^2\n$$\n\n后文')
+    expect(blocks.map((block) => block.type)).toEqual(['paragraph', 'math', 'paragraph'])
+    expect(blocks[1]?.source).toContain('E = mc^2')
+  })
+
+  test('Given GFM 表格 When 解析 Then 表格自成一块', () => {
+    const source = '| a | b |\n| --- | --- |\n| 1 | 2 |'
+    const blocks = parseChatMarkdownBlocks(source)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]?.type).toBe('table')
+  })
+
+  test('Given 列表 When 解析 Then 整个列表是一个块', () => {
+    const blocks = parseChatMarkdownBlocks('- 一\n- 二\n- 三')
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]?.type).toBe('list')
+  })
+
+  test('Given 未闭合的代码围栏 When 解析 Then 与 react-markdown 一致，按代码块处理', () => {
+    // CommonMark 允许围栏在文档结尾自行结束；这与整篇 react-markdown 的解析结果一致，
+    // 因此流式过程中不会出现「先当段落、关闭后突变」的语义偏差。
+    const blocks = parseChatMarkdownBlocks('正在写代码\n\n```ts\nconst a = 1')
+    expect(blocks.map((block) => block.type)).toEqual(['paragraph', 'code'])
+  })
+})
+
+describe('聊天 Markdown 块 key 复用', () => {
+  test('Given 追加新段落 When 流式复用 Then 前缀块保持原 key，仅尾块使用 tail key', () => {
+    const previous = reconcileChatMarkdownBlocks([], parseChatMarkdownBlocks('第一段'), true)
+    const next = reconcileChatMarkdownBlocks(previous, parseChatMarkdownBlocks('第一段\n\n第二段'), true)
+
+    expect(next[0]?.id).toBe(previous[0]?.id)
+    expect(next[1]?.id).toBe('tail:1:paragraph')
+  })
+
+  test('Given 尾块内容增长 When 流式复用 Then tail key 保持不变', () => {
+    const first = reconcileChatMarkdownBlocks([], parseChatMarkdownBlocks('第一段'), true)
+    const second = reconcileChatMarkdownBlocks(first, parseChatMarkdownBlocks('第一段继续'), true)
+
+    expect(first[0]?.id).toBe('tail:0:paragraph')
+    expect(second[0]?.id).toBe('tail:0:paragraph')
+  })
+
+  test('Given 流式结束 When 复用 Then 内容相同的块保持原 key 且 key 唯一', () => {
+    const streaming = reconcileChatMarkdownBlocks([], parseChatMarkdownBlocks('第一段\n\n第二段'), true)
+    const settled = reconcileChatMarkdownBlocks(streaming, parseChatMarkdownBlocks('第一段\n\n第二段'), false)
+
+    expect(settled[0]?.id).toBe(streaming[0]?.id)
+    expect(settled[1]?.id).toBe(streaming[1]?.id)
+    const ids = settled.map((block) => block.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  test('Given 流式结束后新增段落 When 复用 Then 不会出现重复 key', () => {
+    const streaming = reconcileChatMarkdownBlocks([], parseChatMarkdownBlocks('第一段\n\n第二段'), true)
+    const appended = reconcileChatMarkdownBlocks(streaming, parseChatMarkdownBlocks('第一段\n\n第二段\n\n第三段'), true)
+
+    const ids = appended.map((block) => block.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids[2]).toBe('tail:2:paragraph')
+  })
+
+  test('Given 内容变化 When 非流式复用 Then 生成新 key 触发重渲染', () => {
+    const previous = reconcileChatMarkdownBlocks([], parseChatMarkdownBlocks('第一段'), false)
+    const next = reconcileChatMarkdownBlocks(previous, parseChatMarkdownBlocks('改写后的段落'), false)
+
+    expect(next[0]?.id).not.toBe(previous[0]?.id)
+  })
+})

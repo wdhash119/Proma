@@ -625,7 +625,7 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
             shouldCollapse && !isExpanded && 'max-h-[5.6em]',
           )}
         >
-          <MessageResponse className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal">
+          <MessageResponse className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal" isStreaming={isStreaming}>
             {displayedContent}
           </MessageResponse>
         </div>
@@ -672,7 +672,7 @@ function StreamingTextBlock({
     isStreaming: isStreaming ?? false,
   })
 
-  return <MessageResponse basePath={basePath} basePaths={basePaths}>{displayedContent}</MessageResponse>
+  return <MessageResponse basePath={basePath} basePaths={basePaths} isStreaming={isStreaming}>{displayedContent}</MessageResponse>
 }
 
 // ===== ContentBlock 主组件 =====

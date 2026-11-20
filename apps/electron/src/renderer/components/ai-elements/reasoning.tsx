@@ -12,7 +12,6 @@
  */
 
 import * as React from 'react'
-import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -24,6 +23,7 @@ import {
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { normalizeLatexDelimiters } from '@/lib/normalize-latex'
+import { ChatMarkdown } from '@/components/chat/ChatMarkdown'
 import type { ComponentProps, ReactNode } from 'react'
 
 // ===== 上下文 =====
@@ -201,8 +201,32 @@ interface ReasoningContentProps extends ComponentProps<typeof CollapsibleContent
   children: string
 }
 
+/** 稳定引用的插件与组件映射，避免 ChatMarkdown 每个 chunk 重建渲染管线。 */
+const REASONING_REMARK_PLUGINS = [remarkGfm, remarkMath]
+const REASONING_REHYPE_PLUGINS = [rehypeKatex]
+const REASONING_COMPONENTS = {
+  a: ({ href, children: linkChildren, ...linkProps }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a
+      {...linkProps}
+      href={href}
+      onClick={(e) => {
+        e.preventDefault()
+        if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+          window.electronAPI.openExternal(href)
+        }
+      }}
+      title={href}
+    >
+      {linkChildren}
+    </a>
+  ),
+}
+
 export const ReasoningContent = React.memo(
   function ReasoningContent({ className, children, ...props }: ReasoningContentProps): React.ReactElement {
+    // 允许单独使用：缺少 Reasoning 上下文时按非流式处理，不阻断渲染。
+    const isStreaming = React.useContext(ReasoningContext)?.isStreaming ?? false
+
     return (
       <CollapsibleContent
         className={cn(
@@ -216,29 +240,13 @@ export const ReasoningContent = React.memo(
         {...props}
       >
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-          <Markdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
-            components={{
-              a: ({ href, children: linkChildren, ...linkProps }) => (
-                <a
-                  {...linkProps}
-                  href={href}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
-                      window.electronAPI.openExternal(href)
-                    }
-                  }}
-                  title={href}
-                >
-                  {linkChildren}
-                </a>
-              ),
-            }}
-          >
-            {normalizeLatexDelimiters(children)}
-          </Markdown>
+          <ChatMarkdown
+            source={normalizeLatexDelimiters(children)}
+            remarkPlugins={REASONING_REMARK_PLUGINS}
+            rehypePlugins={REASONING_REHYPE_PLUGINS}
+            components={REASONING_COMPONENTS}
+            isStreaming={isStreaming}
+          />
         </div>
       </CollapsibleContent>
     )

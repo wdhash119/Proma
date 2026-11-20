@@ -40,6 +40,7 @@ import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { CodeBlock, MermaidBlock } from '@proma/ui'
 import { detectLanguage } from '@proma/core'
 import { FilePathChip, ResolvableFilePathChip, isAbsoluteFilePath, isImageFilePath, isLocalFileReference, isRelativeFilePath } from './file-path-chip'
+import { ChatMarkdown } from '@/components/chat/ChatMarkdown'
 import { buildAgentHistoryQuoteLabel, parseAgentHistoryQuoteMention } from '@/lib/quoted-selection'
 import { createMentionPattern } from '@/lib/mention-patterns'
 import { resolveSkillMentionName } from '@/lib/skill-mention-name'
@@ -527,6 +528,8 @@ interface MessageResponseProps {
   basePaths?: string[]
   /** 额外的 remark 插件（追加到内置 remarkGfm + remarkMath 之后） */
   remarkPlugins?: RemarkPluginFn[]
+  /** 是否仍在流式输出；为 true 时按块增量渲染，尾块保持稳定 key */
+  isStreaming?: boolean
 }
 
 /** 稳定引用的插件数组，避免 react-markdown 每帧重建插件管线 */
@@ -785,7 +788,7 @@ const MarkdownInlineCode = React.memo(function MarkdownInlineCode({
 
 /** 使用 react-markdown 渲染 assistant 消息内容，代码块使用 Shiki 语法高亮 */
 export const MessageResponse = React.memo(
-  function MessageResponse({ children, className, basePath, basePaths, remarkPlugins }: MessageResponseProps): React.ReactElement {
+  function MessageResponse({ children, className, basePath, basePaths, remarkPlugins, isStreaming }: MessageResponseProps): React.ReactElement {
     // 合并内置 + 外部 remark 插件（保持引用稳定）
     const mergedRemarkPlugins = React.useMemo(
       () => remarkPlugins ? [...REMARK_PLUGINS, ...remarkPlugins] : REMARK_PLUGINS,
@@ -817,14 +820,14 @@ export const MessageResponse = React.memo(
           className
         )}
       >
-        <Markdown
+        <ChatMarkdown
+          source={normalizeLatexDelimiters(normalizeMalformedStrongDelimiters(renderedMarkdown))}
           remarkPlugins={mergedRemarkPlugins}
           rehypePlugins={REHYPE_PLUGINS}
           urlTransform={mentionUrlTransform}
           components={components}
-        >
-          {normalizeLatexDelimiters(normalizeMalformedStrongDelimiters(renderedMarkdown))}
-        </Markdown>
+          isStreaming={isStreaming}
+        />
       </div>
     )
   },
@@ -832,7 +835,8 @@ export const MessageResponse = React.memo(
     prevProps.children === nextProps.children &&
     prevProps.basePath === nextProps.basePath &&
     prevProps.basePaths === nextProps.basePaths &&
-    prevProps.remarkPlugins === nextProps.remarkPlugins
+    prevProps.remarkPlugins === nextProps.remarkPlugins &&
+    prevProps.isStreaming === nextProps.isStreaming
 )
 
 // ===== UserMessageContent 可折叠用户消息 =====

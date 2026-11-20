@@ -30,7 +30,8 @@ describe('项目根 AGENTS 指令状态', () => {
     expect(hasRootProjectAgentsInstruction(manifest)).toBe(true)
   })
 
-  test('Given 项目内 AGENTS.md 符号链接 When 解析项目指令 Then 标记项目地图已建立', () => {
+  // Windows 创建文件符号链接需要开发者模式或管理员权限，普通 CI 会直接 EPERM。
+  test.skipIf(process.platform === 'win32')('Given 项目内 AGENTS.md 符号链接 When 解析项目指令 Then 标记项目地图已建立', () => {
     const projectRoot = createProject()
     const instructionsDirectory = join(projectRoot, 'instructions')
     mkdirSync(instructionsDirectory)

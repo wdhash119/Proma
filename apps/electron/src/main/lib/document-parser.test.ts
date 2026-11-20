@@ -95,12 +95,13 @@ describe('document-parser / 扩展名识别', () => {
 
 describe('document-parser / 真实提取', () => {
   // mammoth 优先路径：DOCX 宏/模板（.docm/.dotx）应被 mammoth 直接解析
+  // Office 解析首次加载需要预热，默认 5 秒在 Windows 冷启动时容易超时。
   test('提取 DOCX 宏启用文档（.docm，mammoth 路径）', async () => {
     const path = join(dir, 'macro.docm')
     writeFileSync(path, await buildDocx('Hello macro document'))
     const text = await extractTextFromFile(path)
     expect(text).toContain('Hello macro document')
-  })
+  }, 30_000)
 
   // officeparser buffer 路径：扩展名 .xlsm 不在 officeparser 白名单内，
   // 必须靠“传 Buffer → 按内容嗅探”才能正确路由解析。这是本次修复的核心。
@@ -109,7 +110,7 @@ describe('document-parser / 真实提取', () => {
     writeFileSync(path, await buildXlsx('SpreadsheetCellValue'))
     const text = await extractTextFromFile(path)
     expect(text).toContain('SpreadsheetCellValue')
-  })
+  }, 30_000)
 
   // PPT 模板变体同理走 buffer 内容嗅探（内容造的是 xlsx，仅验证扩展名不再卡白名单）
   test('提取 PowerPoint 放映文档（.ppsx，officeparser 内容嗅探路径）', async () => {

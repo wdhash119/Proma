@@ -78,7 +78,8 @@ describe('更新安装包缓存清理', () => {
     expect(existsSync(outsideFile)).toBe(true)
   })
 
-  test('Given 下载路径经过软链接目录 When 记录 Then 拒绝为其建立删除状态', () => {
+  // Windows 创建符号链接需要开发者模式或管理员权限，普通 CI 会直接 EPERM。
+  test.skipIf(process.platform === 'win32')('Given 下载路径经过软链接目录 When 记录 Then 拒绝为其建立删除状态', () => {
     const fixture = createFixture()
     const outsideCacheDirectory = join(dirname(fixture.baseCacheDirectory), 'outside-cache')
     const linkedCacheDirectory = join(fixture.baseCacheDirectory, 'linked-cache')
@@ -97,7 +98,10 @@ describe('更新安装包缓存清理', () => {
 
   test('Given 缓存状态无法持久化 When 下载完成 Then 不抛错且保留可安装文件', () => {
     const fixture = createFixture()
-    const cleanup = createUpdateCacheCleanup({ ...fixture, stateFilePath: join('/dev/null', 'updater-cache-state.json') })
+    // 用一个真实文件的路径作为父目录：任何平台写入都会 ENOTDIR，避免依赖 Unix 专有的 /dev/null。
+    const blockingFile = join(fixture.pendingDirectory, 'not-a-directory')
+    writeFileSync(blockingFile, 'blocker')
+    const cleanup = createUpdateCacheCleanup({ ...fixture, stateFilePath: join(blockingFile, 'updater-cache-state.json') })
 
     expect(cleanup.recordDownloadedUpdate('0.20.0', fixture.downloadedFile)).toBe(false)
     expect(existsSync(fixture.downloadedFile)).toBe(true)
@@ -118,7 +122,8 @@ describe('更新安装包缓存清理', () => {
     expect(readFileSync(join(unexpectedDirectory, 'keep'), 'utf8')).toBe('keep')
   })
 
-  test('Given 删除被文件系统拒绝 When 清理 Then 保留状态供下次启动重试', () => {
+  // Windows 的 chmod 只影响只读位，不能阻止删除；该用例只在 POSIX 文件权限语义下成立。
+  test.skipIf(process.platform === 'win32')('Given 删除被文件系统拒绝 When 清理 Then 保留状态供下次启动重试', () => {
     const fixture = createFixture()
     const cleanup = createUpdateCacheCleanup(fixture)
     cleanup.recordDownloadedUpdate('0.20.0', fixture.downloadedFile)

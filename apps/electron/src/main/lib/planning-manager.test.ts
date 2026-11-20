@@ -1,13 +1,24 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const managerModulePath = join(import.meta.dir, 'planning-manager.ts')
 const repoRoot = dirname(dirname(dirname(dirname(dirname(import.meta.dir)))))
-const electronBinary = createRequire(import.meta.url)('electron') as string
+
+/**
+ * 不依赖 `require('electron')` 的返回值形态：Bun 在部分加载顺序下会返回模块对象而非路径。
+ * 直接读 electron 包内的 path.txt，并用 dist/ 拼接出可执行文件，跨平台且确定性稳定。
+ */
+function resolveElectronBinary(): string {
+  const electronPackageDirectory = dirname(createRequire(import.meta.url).resolve('electron/package.json'))
+  const platformPath = readFileSync(join(electronPackageDirectory, 'path.txt'), 'utf8').trim()
+  return join(electronPackageDirectory, 'dist', platformPath)
+}
+
+const electronBinary = resolveElectronBinary()
 
 /**
  * planning-manager 的数据库连接是模块级单例，而 node:sqlite 仅由 Electron 的 Node 22 提供。
@@ -113,7 +124,9 @@ test('Given a fresh planning database When planning data changes Then isolation,
 
     const result = spawnSync(electronBinary, [outputPath], {
       cwd: repoRoot,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', HOME: home, PROMA_DEV: '1' },
+      // Windows 的 os.homedir() 读取 USERPROFILE 而不是 HOME；两者都指向临时目录，
+      // 否则测试会污染真实的 ~/.proma-dev 并在重复运行时撞上分组名唯一约束。
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', HOME: home, USERPROFILE: home, PROMA_DEV: '1' },
       encoding: 'utf8',
     })
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)

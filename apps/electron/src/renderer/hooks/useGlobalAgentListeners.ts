@@ -17,9 +17,7 @@ import {
   agentSessionMessageQueueAtom,
   agentSessionsAtom,
   agentMessageRefreshAtom,
-  allPendingPermissionRequestsAtom,
   allPendingAskUserRequestsAtom,
-  allPendingExitPlanRequestsAtom,
   agentPromptSuggestionsAtom,
   recentlyModifiedPathsAtom,
   RECENTLY_MODIFIED_TTL_MS,
@@ -32,10 +30,7 @@ import {
   agentSessionChannelMapAtom,
   agentModelIdAtom,
   agentChannelIdAtom,
-  agentPermissionModeMapAtom,
-  agentDefaultPermissionModeAtom,
   stoppedByUserSessionsAtom,
-  agentPlanModeSessionsAtom,
   currentAgentSessionIdAtom,
   currentAgentWorkspaceIdAtom,
   agentWorkspacesAtom,
@@ -96,7 +91,6 @@ import {
   markSessionCompletionViewed,
   notifyAgentCompletion,
 } from '@/lib/agent-completion-presence'
-import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
 import { arePathsEqual, getInactiveSessionFileChangePaths, getSessionFileChangeKind, getOwnedSessionWatcherPaths, removeSessionFileChange, upsertSessionFileChange, type SessionFileChange } from '@/lib/session-file-changes'
 import { rememberStopGenerationTarget } from '@/lib/stop-generation-target'
@@ -362,14 +356,6 @@ function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
           const tb = block as SDKContentBlock & { id: string; name: string; input: Record<string, unknown> }
           const intent = (tb.input._intent as string | undefined)
             ?? (tb.name === 'Bash' ? (tb.input.description as string | undefined) : undefined)
-          const planModeChange = getPlanModeChangeFromToolName(tb.name)
-          if (planModeChange) {
-            events.push({
-              type: 'plan_mode_changed',
-              active: planModeChange.active,
-              source: planModeChange.source,
-            })
-          }
           events.push({
             type: 'tool_start',
             toolName: tb.name,
@@ -934,63 +920,6 @@ export function useGlobalAgentListeners(): void {
       })
     }
 
-    const openPlanDocumentPreview = (sessionId: string, planDocument: NonNullable<import('@proma/shared').ExitPlanModeRequest['planDocument']>): void => {
-      const planPreview: PreviewFile = {
-        filePath: planDocument.filePath,
-        previewOnly: true,
-        readOnly: true,
-      }
-      openPreviewInStore(store, sessionId, planPreview)
-      // 同一路径在反馈后重新提交时必须绕过旧内容缓存，确保审批页重读本次哈希对应的文件版本。
-      bumpPreviewContentRefresh(sessionId, planPreview)
-    }
-
-    // pending 快照与实时事件可以乱序抵达。保留有限的已解决 ID，避免迟到快照复活已处理横幅。
-    const resolvedExitPlanRequestIds = new Set<string>()
-    const markExitPlanRequestResolved = (requestId: string): void => {
-      resolvedExitPlanRequestIds.add(requestId)
-      if (resolvedExitPlanRequestIds.size > 256) {
-        const oldest = resolvedExitPlanRequestIds.values().next().value
-        if (oldest) resolvedExitPlanRequestIds.delete(oldest)
-      }
-      store.set(allPendingExitPlanRequestsAtom, (prev) => {
-        let changed = false
-        const next = new Map(prev)
-        for (const [sessionId, requests] of prev) {
-          const remaining = requests.filter((request) => request.requestId !== requestId)
-          if (remaining.length === requests.length) continue
-          changed = true
-          if (remaining.length > 0) next.set(sessionId, remaining)
-          else next.delete(sessionId)
-        }
-        return changed ? next : prev
-      })
-    }
-
-    const queueExitPlanRequest = (request: import('@proma/shared').ExitPlanModeRequest): boolean => {
-      if (resolvedExitPlanRequestIds.has(request.requestId)) return false
-      let inserted = false
-      store.set(allPendingExitPlanRequestsAtom, (prev) => {
-        const current = prev.get(request.sessionId) ?? []
-        if (current.some((item) => item.requestId === request.requestId)) return prev
-        inserted = true
-        const map = new Map(prev)
-        map.set(request.sessionId, [...current, request])
-        return map
-      })
-      return inserted
-    }
-
-    // renderer 重载后，主进程仍保留未决审批；恢复横幅时同步重建只读计划预览。
-    void window.electronAPI.getPendingRequests()
-      .then(({ exitPlans }) => {
-        for (const request of exitPlans) {
-          if (queueExitPlanRequest(request) && request.planDocument) {
-            openPlanDocumentPreview(request.sessionId, request.planDocument)
-          }
-        }
-      })
-      .catch((error) => console.warn('[GlobalAgentListeners] 恢复待处理审批请求失败', error))
 
     const refreshAffectedPreviews = (filePaths: readonly string[]): void => {
       if (filePaths.length === 0) return
@@ -1590,22 +1519,7 @@ export function useGlobalAgentListeners(): void {
               return map
             })
           } else if (event.type === 'permission_request') {
-            // 权限请求入队（统一通道，不区分当前/后台会话）
-            store.set(allPendingPermissionRequestsAtom, (prev) => {
-              const map = new Map(prev)
-              const current = map.get(sessionId) ?? []
-              map.set(sessionId, [...current, event.request])
-              return map
-            })
-            // 桌面通知（带提示音 + 会话导航）
-            sendBlockingNotification(
-              sessionId,
-              '需要权限确认',
-              event.request.toolName
-                ? `Agent 请求使用工具: ${event.request.toolName}`
-                : 'Agent 需要你的权限确认',
-              'permissionRequest'
-            )
+            // 权限模式已下线：编排层不再发起逐次确认，这里仅保留兼容分支，不打断用户。
           } else if (event.type === 'ask_user_request') {
             // AskUser 请求入队（统一通道，不区分当前/后台会话）
             store.set(allPendingAskUserRequestsAtom, (prev) => {
@@ -1640,49 +1554,8 @@ export function useGlobalAgentListeners(): void {
               map.delete(event.requestId)
               return map
             })
-          } else if (event.type === 'exit_plan_mode_request') {
-            // 计划文件已由主进程限定在当前会话 plan/ 目录。审批到达时自动以只读 Markdown 打开；
-            // 不切换主会话，因此后台会话不会抢走用户的当前工作。
-            if (queueExitPlanRequest(event.request) && event.request.planDocument) {
-              openPlanDocumentPreview(sessionId, event.request.planDocument)
-            }
-            // 退出 Plan 模式指示状态
-            store.set(agentPlanModeSessionsAtom, (prev: Set<string>) => {
-              if (!prev.has(sessionId)) return prev
-              const next = new Set(prev)
-              next.delete(sessionId)
-              return next
-            })
-            // 桌面通知（带提示音 + 会话导航）
-            sendBlockingNotification(
-              sessionId,
-              'Agent 计划待审批',
-              'Agent 已完成计划，等待你的审批',
-              'exitPlanMode'
-            )
-          } else if (event.type === 'exit_plan_mode_resolved') {
-            markExitPlanRequestResolved(event.requestId)
-          } else if (event.type === 'enter_plan_mode') {
-            // 进入 Plan 模式
-            store.set(agentPlanModeSessionsAtom, (prev: Set<string>) =>
-              updatePlanModeSessionSet(prev, sessionId, true)
-            )
-          } else if (event.type === 'plan_mode_changed') {
-            // 计划阶段变化只影响输入框/横幅状态，不改用户选择的权限模式
-            store.set(agentPlanModeSessionsAtom, (prev: Set<string>) =>
-              updatePlanModeSessionSet(prev, sessionId, event.active)
-            )
-          } else if (event.type === 'permission_mode_changed') {
-            // 权限模式变更（如 Plan 模式退出后切换到完全自动）
-            console.log(`[GlobalAgentListeners] 权限模式变更: ${event.mode}`)
-            store.set(agentPermissionModeMapAtom, (prev: Map<string, import('@proma/shared').PromaPermissionMode>) => {
-              const next = new Map(prev)
-              next.set(sessionId, event.mode)
-              return next
-            })
-            store.set(agentPlanModeSessionsAtom, (prev: Set<string>) =>
-              updatePlanModeSessionSet(prev, sessionId, event.mode === 'plan')
-            )
+          } else if (event.type === 'exit_plan_mode_request' || event.type === 'exit_plan_mode_resolved' || event.type === 'enter_plan_mode' || event.type === 'plan_mode_changed' || event.type === 'permission_mode_changed') {
+            // 计划模式与权限模式已下线：旧会话可能仍带有这些历史事件，忽略即可。
           } else if (event.type === 'run_resumed') {
             // 后台任务完成自动唤醒：从"空闲可输入"恢复到"运行中"。
             store.set(agentSessionStreamingStateAtomFamily(sessionId), (current) => {
@@ -1881,14 +1754,6 @@ export function useGlobalAgentListeners(): void {
             : fallback
           toast.warning(msg, { duration: 8000 })
         }
-
-        // 清除 Plan 模式状态（防止异常退出时残留）
-        store.set(agentPlanModeSessionsAtom, (prev: Set<string>) => {
-          if (!prev.has(data.sessionId)) return prev
-          const next = new Set(prev)
-          next.delete(data.sessionId)
-          return next
-        })
 
         /** 竞态保护：检查该会话是否已有新的流式请求正在运行 */
         const isNewStreamRunning = (): boolean => {

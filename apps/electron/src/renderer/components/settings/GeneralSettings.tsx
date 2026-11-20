@@ -324,7 +324,7 @@ export function GeneralSettings(): React.ReactElement {
           />
           <SettingsToggle
             label="通知提示音"
-            description="阻塞操作（权限确认、问题回答、计划审批）触发时播放提示音"
+            description="需要你处理的阻塞操作（如 Agent 提问）触发时播放提示音"
             checked={notificationSoundEnabled}
             disabled={!notificationsEnabled}
             onCheckedChange={(checked) => {
@@ -440,10 +440,10 @@ export function GeneralSettings(): React.ReactElement {
 
 // ===== SoundLibrary 内部组件 =====
 
+// 计划模式已下线，不再有「计划审批」场景；permissionRequest 现在只用于 Agent 提问等需要你处理的阻塞事件。
 const SOUND_SCENES: Array<{ type: NotificationSoundType; label: string; shortLabel: string }> = [
   { type: 'taskComplete', label: '任务完成', shortLabel: '完成' },
-  { type: 'permissionRequest', label: '权限审批', shortLabel: '权限' },
-  { type: 'exitPlanMode', label: '计划审批', shortLabel: '计划' },
+  { type: 'permissionRequest', label: '需要处理', shortLabel: '待处理' },
   { type: 'planningReminder', label: '日程提醒', shortLabel: '提醒' },
 ]
 

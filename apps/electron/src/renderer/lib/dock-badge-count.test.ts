@@ -5,30 +5,26 @@ describe('Dock 角标计数', () => {
   test('given no attention items when calculating badge count then returns zero', () => {
     const count = calculateDockBadgeCount({
       unviewedCompletedCount: 0,
-      pendingPermissionCount: 0,
       pendingAskUserCount: 0,
-      pendingExitPlanCount: 0,
     })
 
     expect(count).toBe(0)
   })
 
-  test('given completed sessions and pending requests when calculating badge count then returns their total', () => {
+  test('given completed sessions and pending questions when calculating badge count then returns their total', () => {
     const count = calculateDockBadgeCount({
       unviewedCompletedCount: 2,
-      pendingPermissionCount: 3,
-      pendingAskUserCount: 1,
-      pendingExitPlanCount: 1,
+      pendingAskUserCount: 3,
     })
 
-    expect(count).toBe(7)
+    expect(count).toBe(5)
   })
 
   test('given requests grouped by session when counting pending requests then sums all queues', () => {
     const requestsBySession = new Map<string, readonly string[]>([
-      ['session-a', ['permission-a', 'permission-b']],
+      ['session-a', ['question-a', 'question-b']],
       ['session-b', []],
-      ['session-c', ['permission-c']],
+      ['session-c', ['question-c']],
     ])
 
     expect(countPendingRequests(requestsBySession)).toBe(3)

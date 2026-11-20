@@ -23,11 +23,7 @@ import { AgentHeader } from './AgentHeader'
 import { AgentMessageQueue } from './AgentMessageQueue'
 import { SkillMentionNamesProvider } from './SkillMentionNamesProvider'
 import { ContextUsageBadge } from './ContextUsageBadge'
-import { PermissionBanner } from './PermissionBanner'
-import { PermissionModeSelector } from './PermissionModeSelector'
 import { AskUserBanner } from './AskUserBanner'
-import { ExitPlanModeBanner } from './ExitPlanModeBanner'
-import { PlanModeDashedBorder } from './PlanModeDashedBorder'
 import { ModelSelector } from '@/components/chat/ModelSelector'
 import { AttachmentPreviewItem } from '@/components/chat/AttachmentPreviewItem'
 import { QuotedSelectionChip } from '@/components/diff/QuotedSelectionChip'
@@ -104,14 +100,8 @@ import {
   agentThinkingAtom,
   agentEffortAtom,
   stoppedByUserSessionsAtom,
-  agentPlanModeSessionsAtom,
-  agentPermissionModeMapAtom,
-  agentDefaultPermissionModeAtom,
-  sessionPersistedPermissionModeAtom,
   agentSessionPathMapAtom,
   allPendingAskUserRequestsAtom,
-  allPendingPermissionRequestsAtom,
-  allPendingExitPlanRequestsAtom,
   agentDiffPanelTabAtom,
   agentSidePanelOpenAtomFamily,
   agentSideTemporaryAgentMapAtom,
@@ -567,13 +557,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const setAgentStreamErrors = useSetAtom(agentStreamErrorsAtom)
   const streamErrors = useAtomValue(agentStreamErrorsAtom)
   const agentError = streamErrors.get(sessionId) ?? null
-  const planModeSessions = useAtomValue(agentPlanModeSessionsAtom)
-  const isPlanMode = planModeSessions.has(sessionId)
-  const permissionModeMap = useAtomValue(agentPermissionModeMapAtom)
-  const defaultPermissionMode = useAtomValue(agentDefaultPermissionModeAtom)
-  const persistedPermissionMode = useAtomValue(sessionPersistedPermissionModeAtom(sessionId))
-  const permissionMode = permissionModeMap.get(sessionId) ?? persistedPermissionMode ?? defaultPermissionMode
-  const isPermissionPlanMode = permissionMode === 'plan'
   const currentQuotedSelection = useAtomValue(currentQuotedSelectionAtom)
   const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
   const openPreview = useOpenPreview()
@@ -1068,7 +1051,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       modelId: agentModelId || undefined,
       workspaceId: currentWorkspaceId || undefined,
       additionalDirectories: message.additionalDirectories,
-      permissionModeOverride: permissionMode,
       dispatch: 'now',
       interrupt: streaming,
       mentionedSkills: payload.mentions.mentionedSkills,
@@ -1099,7 +1081,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     clearStoppedByUser,
     currentWorkspaceId,
     hasAvailableModel,
-    permissionMode,
     sessionId,
     setAgentStreamErrors,
     setQueuedMessages,
@@ -2070,7 +2051,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         modelId: agentModelId || undefined,
         workspaceId: currentWorkspaceId || undefined,
         additionalDirectories: message.additionalDirectories,
-        permissionModeOverride: permissionMode,
         dispatch: 'after_current',
         mentionedSkills: payload.mentions.mentionedSkills,
         mentionedMcpServers: payload.mentions.mentionedMcpServers,
@@ -2257,7 +2237,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       modelId: agentModelId || undefined,
       workspaceId: currentWorkspaceId || undefined,
       startedAt: streamStartedAt,
-      permissionModeOverride: permissionMode,
       ...(additionalDirectoriesForRun.size > 0 && { additionalDirectories: Array.from(additionalDirectoriesForRun) }),
       ...(mentions.mentionedSkills.length > 0 && { mentionedSkills: mentions.mentionedSkills }),
       ...(mentions.mentionedMcpServers.length > 0 && { mentionedMcpServers: mentions.mentionedMcpServers }),
@@ -2283,7 +2262,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         return map
       })
     })
-  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, setDraftSessionIds, setAgentSessions, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
+  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, setDraftSessionIds, setAgentSessions, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
 
   /** 停止生成。异常流未发出终态时，允许再次下发幂等的 abort 请求。 */
   const handleStop = React.useCallback((): void => {
@@ -2359,7 +2338,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       modelId: agentModelId || undefined,
       workspaceId: currentWorkspaceId || undefined,
       startedAt: streamStartedAt,
-      permissionModeOverride: permissionMode,
     }).catch((error) => {
       console.error('[AgentView] /compact 发送失败:', error)
       // 回滚：移除合成用户消息 + 清除 isCompacting flag
@@ -2379,7 +2357,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         return map
       })
     })
-  }, [sessionId, agentChannelId, agentModelId, currentWorkspaceId, streaming, setStreamingStates, store, permissionMode])
+  }, [sessionId, agentChannelId, agentModelId, currentWorkspaceId, streaming, setStreamingStates, store])
 
   /** 复制错误信息到剪贴板 */
   const handleCopyError = React.useCallback(async (): Promise<void> => {
@@ -2479,10 +2457,9 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       modelId: agentModelId || undefined,
       workspaceId: currentWorkspaceId || undefined,
       startedAt: streamStartedAt,
-      permissionModeOverride: permissionMode,
       ...(retryOfErrorUuid && { retryOfErrorUuid }),
     }).catch(console.error)
-  }, [persistedSDKMessages, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setAgentStreamErrors, setStreamingStates, setMessagesCache, permissionMode])
+  }, [persistedSDKMessages, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setAgentStreamErrors, setStreamingStates, setMessagesCache])
 
   /** 在新对话继续：创建新会话 + 切换 tab + 使用 &session 引用旧会话 */
   const handleRetryInNewSession = React.useCallback(async (): Promise<void> => {
@@ -2520,12 +2497,11 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         workspaceId: currentWorkspaceId || undefined,
         mentionedSessionIds: [sessionId],
         startedAt: streamStartedAt,
-        permissionModeOverride: permissionMode,
       }).catch(console.error)
     } catch (error) {
       console.error('[AgentView] 在新会话中重试失败:', error)
     }
-  }, [sessionId, agentChannelId, agentModelId, currentWorkspaceId, openSession, setAgentSessions, setStreamingStates, permissionMode])
+  }, [sessionId, agentChannelId, agentModelId, currentWorkspaceId, openSession, setAgentSessions, setStreamingStates])
 
   /** 从回复节点创建 Pi `/tree` 探索分支，并在当前主线的右侧工作区继续。 */
   const handleFork = React.useCallback(async (upToMessageUuid: string): Promise<void> => {
@@ -2646,12 +2622,9 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   }, [])
 
   const allAskUserRequests = useAtomValue(allPendingAskUserRequestsAtom)
-  const allPermissionRequests = useAtomValue(allPendingPermissionRequestsAtom)
-  const allExitPlanRequests = useAtomValue(allPendingExitPlanRequestsAtom)
-  const hasBannerOverlay =
-    (allAskUserRequests.get(sessionId)?.length ?? 0) > 0 ||
-    (allExitPlanRequests.get(sessionId)?.length ?? 0) > 0
-  const hasBlockingRequests = hasBannerOverlay || (allPermissionRequests.get(sessionId)?.length ?? 0) > 0
+  // 权限模式与计划模式已下线：只剩 AskUserQuestion 需要横幅占据输入区。
+  const hasBannerOverlay = (allAskUserRequests.get(sessionId)?.length ?? 0) > 0
+  const hasBlockingRequests = hasBannerOverlay
   const canSendQueuedNow = messagesLoaded && (streaming || !messagesRefreshing) && !!agentChannelId && hasAvailableModel && !hasBlockingRequests && !isStopping
   const queuedSendInFlightRef = React.useRef(false)
   const sendingQueuedMessageIdsRef = React.useRef<Set<string>>(new Set())
@@ -2822,7 +2795,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         </Tooltip>
       ),
     }] : []),
-    { key: 'permission-mode', node: <PermissionModeSelector sessionId={sessionId} /> },
     {
       key: 'thinking',
       node: (
@@ -3008,15 +2980,8 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
           historyQuoteNavigation={historyQuoteNavigation}
         />
 
-        {/* 权限请求横幅 */}
-        <PermissionBanner sessionId={sessionId} />
-
         {/* AskUserQuestion 交互式问答横幅 */}
         <AskUserBanner sessionId={sessionId} />
-
-
-        {/* ExitPlanMode 计划审批横幅 */}
-        <ExitPlanModeBanner sessionId={sessionId} />
 
         {/* 输入区域 — 交互横幅显示时隐藏，由横幅替代 */}
         {!hasBannerOverlay && (
@@ -3024,14 +2989,12 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
           <div
             className={cn(
               'rounded-[17px] border-[0.5px] border-border bg-background/70 backdrop-blur-sm transition-all duration-200',
-              (isPlanMode || isPermissionPlanMode) && !isDragOver && 'plan-mode-border',
               isDragOver && 'border-[2px] border-dashed border-primary bg-primary/[0.03]'
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {(isPlanMode || isPermissionPlanMode) && !isDragOver && <PlanModeDashedBorder />}
             {isLegacyTranscript && (
               <div className="flex items-center justify-between gap-3 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
                 <span>这是已退役 Claude runtime 的只读历史会话；原对话可查看，但不能继续、分叉或回退。</span>

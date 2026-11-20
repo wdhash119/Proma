@@ -980,24 +980,7 @@ export const recentlyModifiedPathsAtom = atom<Map<string, Map<string, number>>>(
 export const RECENTLY_MODIFIED_TTL_MS = 60_000
 
 // ===== 权限系统 Atoms =====
-
-/** 新会话默认权限模式 */
-export const agentDefaultPermissionModeAtom = atom<PromaPermissionMode>(PROMA_DEFAULT_PERMISSION_MODE)
-
-/** Per-session 权限模式 Map — sessionId → PromaPermissionMode */
-export const agentPermissionModeMapAtom = atom<Map<string, PromaPermissionMode>>(new Map())
-
-/**
- * 按 sessionId 派生该 session 的持久化权限模式。
- * 返回 `undefined`（session 不存在或未设置）或具体的 PromaPermissionMode 字符串，
- * jotai 用 === 比较，只有值真正变化时才通知下游——避免流式中无关字段更新引发 re-render。
- */
-export const sessionPersistedPermissionModeAtom = atomFamily((sessionId: string) =>
-  atom((get) => {
-    const sessions = get(agentSessionsAtom)
-    return sessions.find((s) => s.id === sessionId)?.permissionMode
-  }),
-)
+// 权限模式与计划模式已下线；AskUserQuestion 仍走交互式问答。
 
 /** 按 sessionId 派生该 session 是否存在于列表中（冷启动判断用） */
 export const sessionExistsAtom = atomFamily((sessionId: string) =>
@@ -1018,32 +1001,6 @@ export const agentMaxBudgetUsdAtom = atom<number | undefined>(undefined)
 
 /** Agent 最大轮次 */
 export const agentMaxTurnsAtom = atom<number | undefined>(undefined)
-
-/** 待处理的权限请求 Map — 以 sessionId 为 key，切换会话时保留状态 */
-export const allPendingPermissionRequestsAtom = atom<Map<string, readonly PermissionRequest[]>>(new Map())
-
-type PermissionRequestsUpdate = readonly PermissionRequest[] | ((prev: readonly PermissionRequest[]) => readonly PermissionRequest[])
-
-/** 当前会话的权限请求队列（派生读写原子） */
-export const pendingPermissionRequestsAtom = atom(
-  (get): readonly PermissionRequest[] => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return []
-    return get(allPendingPermissionRequestsAtom).get(currentId) ?? []
-  },
-  (get, set, update: PermissionRequestsUpdate) => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return
-    set(allPendingPermissionRequestsAtom, (prev) => {
-      const map = new Map(prev)
-      const current = map.get(currentId) ?? []
-      const newValue = typeof update === 'function' ? update(current) : update
-      if (newValue.length === 0) map.delete(currentId)
-      else map.set(currentId, newValue)
-      return map
-    })
-  }
-)
 
 /** 待处理的 AskUser 请求 Map — 以 sessionId 为 key，切换会话时保留状态 */
 export const allPendingAskUserRequestsAtom = atom<Map<string, readonly AskUserRequest[]>>(new Map())
@@ -1087,12 +1044,6 @@ export const pendingAskUserRequestsAtom = atom(
     })
   }
 )
-
-/** 待处理的 ExitPlanMode 请求 Map — 以 sessionId 为 key */
-export const allPendingExitPlanRequestsAtom = atom<Map<string, readonly ExitPlanModeRequest[]>>(new Map())
-
-/** 当前处于 Plan 模式的会话 ID 集合 */
-export const agentPlanModeSessionsAtom = atom<Set<string>>(new Set<string>())
 
 export const currentAgentSessionAtom = atom<AgentSessionMeta | null>((get) => {
   const sessions = get(agentSessionsAtom)
@@ -1172,9 +1123,7 @@ function getStableIndicatorMap(entries: Array<[string, SessionIndicatorStatus]>)
 export const dockBadgeCountAtom = atom<number>((get) => {
   return calculateDockBadgeCount({
     unviewedCompletedCount: get(unviewedCompletedSessionIdsAtom).size,
-    pendingPermissionCount: countPendingRequests(get(allPendingPermissionRequestsAtom)),
     pendingAskUserCount: countPendingRequests(get(allPendingAskUserRequestsAtom)),
-    pendingExitPlanCount: countPendingRequests(get(allPendingExitPlanRequestsAtom)),
   })
 })
 
@@ -1185,9 +1134,7 @@ export const dockBadgeCountAtom = atom<number>((get) => {
 export const agentSessionIndicatorMapAtom = atom<Map<string, SessionIndicatorStatus>>((get) => {
   const streamStates = get(agentStreamingStatesAtom)
   const delegatedSessionIds = get(delegatedAgentSessionIdsAtom)
-  const pendingPerms = get(allPendingPermissionRequestsAtom)
   const pendingAskUser = get(allPendingAskUserRequestsAtom)
-  const pendingExitPlan = get(allPendingExitPlanRequestsAtom)
   const unviewedCompleted = get(unviewedCompletedSessionIdsAtom)
   const unviewedDelegatedCompleted = get(unviewedCompletedDelegatedSessionIdsAtom)
 
@@ -1195,9 +1142,7 @@ export const agentSessionIndicatorMapAtom = atom<Map<string, SessionIndicatorSta
 
   for (const [id, state] of streamStates) {
     if (!state.running) continue
-    const hasBlock = (pendingPerms.get(id)?.length ?? 0) > 0
-      || (pendingAskUser.get(id)?.length ?? 0) > 0
-      || (pendingExitPlan.get(id)?.length ?? 0) > 0
+    const hasBlock = (pendingAskUser.get(id)?.length ?? 0) > 0
     if (hasBlock) {
       map.set(id, 'blocked')
     } else if (

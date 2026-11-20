@@ -71,7 +71,6 @@ import {
   agentSessionDraftAtomFamily,
   agentSessionDraftHtmlAtomFamily,
   agentPendingFilesAtomFamily,
-  sessionPersistedPermissionModeAtom,
   sessionExistsAtom,
   automationGroupOrderAtom,
 } from '@/atoms/agent-atoms'
@@ -886,7 +885,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     agentSessionDraftHtmlAtomFamily.remove(id)
     agentPendingFilesAtomFamily.remove(id)
     agentSidePanelOpenAtomFamily.remove(id)
-    sessionPersistedPermissionModeAtom.remove(id)
     sessionExistsAtom.remove(id)
 
     clearPreviewCacheForSession(id)

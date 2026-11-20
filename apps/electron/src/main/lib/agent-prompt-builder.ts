@@ -176,11 +176,6 @@ ${agentsMaintenanceRequirement}
 完成当前用户请求后，使用 \`AskUserQuestion\` 简短询问用户：是否愿意授权你将上次协作记忆更新后的当前工作区会话作为补充证据。用户可选择“本周期跳过”；不要把它当作错误或继续追问。
 若获得会话整理授权，先按元信息选择少量近期、高信号会话并分批读取必要片段；不要全量扫描。基于明确证据的协作记忆可直接最小写入并说明结果；仅对删除/大段覆盖、冲突、不确定推断或敏感信息再次请求确认；绝不跨工作区扫描。`
       : undefined,
-    ctx.permissionMode === 'plan'
-      ? `## 计划模式
-只调研和规划。将完整计划写入 \`${sessionContextDir}/plan/\`（如 \`${sessionContextDir}/plan/my-plan.md\`）；调用 \`ExitPlanMode\` 时传入该文件的绝对 \`planFile\` 路径。先展示摘要并等待用户批准，再退出计划模式和执行。`
-      : `## 计划模式
-进入计划模式时，将完整计划写入 \`${sessionContextDir}/plan/\`（如 \`${sessionContextDir}/plan/my-plan.md\`），不要写到项目根；调用 \`ExitPlanMode\` 审批时传入该文件的绝对 \`planFile\` 路径，以便在右侧只读预览。`,
     buildGitAttributionPromptSection(isGitAttributionEnabled(getSettings().gitAttributionEnabled)),
     `## 回复
 - 一切呈现给用户的内容——对话回复、交付文档、代码与提交信息——必须语意连贯、易于阅读：句子完整，前后逻辑衔接，结构清晰可快速扫读。

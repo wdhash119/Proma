@@ -27,6 +27,7 @@ import {
   readMemoryFileAt,
   writeMemoryFileText,
 } from './memory-service'
+import type { MemoryFileSnapshot } from './memory-service'
 import { writeJsonFileAtomic } from './safe-file'
 
 /** 迁移日志目录名；与记忆目录同层，避免混进可枚举的主题文件。 */
@@ -107,7 +108,29 @@ export interface ProfileMigrationReconciliation {
   next: string
 }
 
-export type ProfileMigrationResult = ProfileMigrationSuccess | ProfileMigrationReconciliation
+/**
+ * 写入过程中遇到目标被外部修改时的结果。
+ *
+ * 此前的目标可能已经落盘，因此不能再返回 `saved:false`；这里如实报告已处于
+ * 目标状态的文件，并保留 pending 日志，调用方可以稍后 `resumeId` 续跑。
+ */
+export interface ProfileMigrationApplyPending {
+  status: 'apply_incomplete'
+  saved: true
+  migrationId: string
+  journalPath: string
+  /** 已处于迁移后内容的目标（含本次写入与此前已完成的）。 */
+  writtenTargets: string[]
+  /** 因外部修改尚未写入的目标。 */
+  pendingTargets: string[]
+  issues: string[]
+  next: string
+}
+
+export type ProfileMigrationResult =
+  | ProfileMigrationSuccess
+  | ProfileMigrationReconciliation
+  | ProfileMigrationApplyPending
 
 export interface ProfileMigrationReplan {
   status: 'needs-merge'
@@ -117,6 +140,20 @@ export interface ProfileMigrationReplan {
 
 const RECONCILIATION_NEXT =
   '迁移未执行。重新读取来源和画像，保留本次待合并事实及来源，整理至约 4000–4500 码元，再提交新的迁移提案。无法安全整理时保留原文并说明未完成。'
+
+const APPLY_PENDING_NEXT =
+  '迁移仅部分写入，记录保持 pending；请重新读取被外部修改的目标，处理冲突后用 resumeId 续跑，或用 replanId 退役旧计划。'
+
+/** 迁移写入使用的文件读写抽象；生产固定用 memory-service 的原子实现，测试可注入以模拟写入期间的外部修改。 */
+export interface ProfileMigrationIo {
+  read: (path: string) => MemoryFileSnapshot
+  write: (path: string, content: string) => void
+}
+
+const DEFAULT_MIGRATION_IO: ProfileMigrationIo = {
+  read: readMemoryFileAt,
+  write: writeMemoryFileText,
+}
 
 function assertProfileMigrationAllowed(ctx: ProfileMigrationContext): void {
   if (ctx.allowProfileMigration === false) {
@@ -369,15 +406,19 @@ function assertJournalTargets(ctx: ProfileMigrationContext, journal: ProfileMigr
   const root = resolveIdentity(getWorkspaceRootDirectory(ctx.workspaceSlug))
   const memoryDir = resolveIdentity(getWorkspaceMemoryDirectory(ctx.workspaceSlug))
   const globalPath = resolveIdentity(getGlobalMemoryFilePath())
-  for (const edit of journal.edits) {
-    const identity = resolveIdentity(edit.path)
-    if (identity === globalPath) continue
-    if (identity.startsWith(`${memoryDir}/`) || identity.startsWith(`${memoryDir}\\`)) continue
-    throw new Error(`迁移目标不在当前工作区记忆目录：${edit.path}`)
-  }
   const sourceIdentity = resolveIdentity(journal.sourcePath)
   if (!sourceIdentity.startsWith(`${root}/`) && !sourceIdentity.startsWith(`${root}\\`)) {
     throw new Error('迁移源不在当前工作区：' + journal.sourcePath)
+  }
+  // `.claude/memory` 旧布局下，来源索引与当前项目索引不是同一个文件，
+  // 只能放行「该来源精确对应的 legacyIndexPath」；不能放宽到整个 `.claude` 目录。
+  const legacyIndexIdentity = resolveIdentity(legacyIndexPath(journal.sourcePath))
+  for (const edit of journal.edits) {
+    const identity = resolveIdentity(edit.path)
+    if (identity === globalPath) continue
+    if (identity === legacyIndexIdentity) continue
+    if (identity.startsWith(`${memoryDir}/`) || identity.startsWith(`${memoryDir}\\`)) continue
+    throw new Error(`迁移目标不在当前工作区记忆目录：${edit.path}`)
   }
 }
 
@@ -386,15 +427,33 @@ function assertJournalTargets(ctx: ProfileMigrationContext, journal: ProfileMigr
  *
  * 先统一检查所有目标是否仍是「上次读到的样子」，再开始写；
  * 因此返回 `reconciliation_required` 时目标文件一定没被改动。
+ * 写入循环中若目标被外部修改，前序写入已经发生，此时改为返回
+ * `apply_incomplete`（saved:true）并保留 pending 日志，绝不谎报零写入。
  */
 function applyMigration(
   ctx: ProfileMigrationContext,
   journal: ProfileMigrationJournal,
+  io: ProfileMigrationIo = DEFAULT_MIGRATION_IO,
 ): ProfileMigrationResult {
   assertJournalTargets(ctx, journal)
 
-  const source = readMemoryFileAt(journal.sourcePath)
-  if (source.content !== '' && source.content !== journal.sourceContent) {
+  const archiveDir = archiveDirectory(ctx.workspaceSlug, journal.id)
+  const archivedSourceTo = join(archiveDir, basename(journal.sourcePath))
+
+  const source = io.read(journal.sourcePath)
+  let sourceAlreadyArchived = false
+  if (source.content === '') {
+    // 源缺失有两种可能：上一次已归档成功但日志尚未写 completed；或来源真的被删。
+    // 只有归档副本存在且内容与日志一致才允许继续，否则禁止假完成。
+    const archived = existsSync(archivedSourceTo) ? io.read(archivedSourceTo) : undefined
+    if (archived && archived.content === journal.sourceContent) {
+      sourceAlreadyArchived = true
+    } else {
+      return reconciliation([
+        `源画像与归档副本均不可用，无法确认迁移来源：${journal.sourcePath}；请使用 replanId 恢复来源后重新合并。`,
+      ])
+    }
+  } else if (source.content !== journal.sourceContent) {
     return reconciliation([
       `源画像已变化，保留待处理迁移和源文件：${journal.sourcePath}；请使用 replanId 保留新内容后重新合并。`,
     ])
@@ -410,49 +469,73 @@ function applyMigration(
         throw error
       }
     }
-    const current = readMemoryFileAt(edit.path)
+    const current = io.read(edit.path)
     if (current.content !== (edit.before ?? '') && current.content !== edit.after) {
       issues.push(`迁移目标存在新改动，未覆盖：${edit.path}；请使用 replanId 保留新改动并重新合并。`)
     }
   }
   if (issues.length > 0) return reconciliation(issues)
 
-  const archiveDir = archiveDirectory(ctx.workspaceSlug, journal.id)
   mkdirSync(archiveDir, { recursive: true })
 
-  for (const edit of journal.edits) {
-    const current = readMemoryFileAt(edit.path)
-    if (current.content === edit.after) continue
-    if (current.content !== (edit.before ?? '')) {
-      return reconciliation([`迁移期间出现并发修改，请重新检查：${edit.path}`])
+  const writtenTargets: string[] = []
+  for (let index = 0; index < journal.edits.length; index += 1) {
+    const edit = journal.edits[index]
+    if (!edit) continue
+    const current = io.read(edit.path)
+    if (current.content === edit.after) {
+      // 已处于迁移后内容（此前中断或本次前序已写），无需重复写入。
+      writtenTargets.push(edit.path)
+      continue
     }
-    writeMemoryFileText(edit.path, edit.after)
+    if (current.content !== (edit.before ?? '')) {
+      // 前序目标可能已落盘：不能返回 saved:false，如实报告进度并保持 pending。
+      const pendingTargets = journal.edits.slice(index).map((item) => item.path)
+      return {
+        status: 'apply_incomplete',
+        saved: true,
+        migrationId: journal.id,
+        journalPath: journalPath(ctx.workspaceSlug, journal.id),
+        writtenTargets,
+        pendingTargets,
+        issues: [`迁移期间目标被外部修改，已写入的内容不回滚：${edit.path}`],
+        next: APPLY_PENDING_NEXT,
+      }
+    }
+    io.write(edit.path, edit.after)
+    writtenTargets.push(edit.path)
   }
 
   for (const edit of journal.edits) {
-    if (readMemoryFileAt(edit.path).content !== edit.after) {
+    if (io.read(edit.path).content !== edit.after) {
       throw new Error(`迁移写后校验失败，保留源文件：${edit.path}`)
     }
   }
 
   // 旧画像移动到归档目录：默认 rename，同一磁盘上仍是原子动作；
   // 跨设备时退化为「复制 + 删除」，仍然不会丢正文。
-  const archivedSourceTo = join(archiveDir, basename(journal.sourcePath))
-  const latestSource = readMemoryFileAt(journal.sourcePath)
-  if (latestSource.content !== '') {
-    if (latestSource.content !== journal.sourceContent) {
+  if (!sourceAlreadyArchived) {
+    const latestSource = io.read(journal.sourcePath)
+    if (latestSource.content === '') {
+      // 写入期间源被外部删除：按日志原文恢复，避免来源缺失却报完成。
+      io.write(journal.sourcePath, journal.sourceContent)
+    } else if (latestSource.content !== journal.sourceContent) {
       throw new Error('归档前源画像已变化，保留源文件。')
     }
     try {
       renameSync(journal.sourcePath, archivedSourceTo)
     } catch {
-      writeMemoryFileText(archivedSourceTo, journal.sourceContent)
+      io.write(archivedSourceTo, journal.sourceContent)
       try {
         unlinkSync(journal.sourcePath)
       } catch {
         // 删除失败时源文件仍在，归档副本也已在，内容不会丢。
       }
     }
+  }
+
+  if (!existsSync(archivedSourceTo) || io.read(archivedSourceTo).content !== journal.sourceContent) {
+    throw new Error(`归档副本缺失或内容不一致，迁移记录保持 pending：${archivedSourceTo}`)
   }
 
   journal.status = 'completed'
@@ -467,6 +550,18 @@ function applyMigration(
     archivedSourceTo,
     writtenTargets: journal.edits.map((edit) => edit.path),
   }
+}
+
+/**
+ * 仅测试：注入迁移写入的读写实现，用于稳定复现「写入循环中途目标被外部修改」的时序。
+ * 生产路径始终使用 memory-service 的原子读写。
+ */
+export function applyProfileMigrationForTesting(
+  ctx: ProfileMigrationContext,
+  journal: ProfileMigrationJournal,
+  io: ProfileMigrationIo,
+): ProfileMigrationResult {
+  return applyMigration(ctx, journal, io)
 }
 
 function successFromCompleted(ctx: ProfileMigrationContext, journal: ProfileMigrationJournal): ProfileMigrationResult {

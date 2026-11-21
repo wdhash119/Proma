@@ -147,7 +147,7 @@ export function buildMemoryExtraTools(sdk: ToolSdk, ctx: MemoryExtraToolsContext
     tools.push(defineTool({
       name: 'MemoryMigrateProfile',
       label: '合并旧画像并更新原项目索引',
-      description: '先按 knowledge-maintenance 指南与 MemoryInspect(sourceId) 读取旧画像，再语义合并一份旧画像。全局画像只保留简洁核心事实（最多 100 条、5000 UTF-16 码元），保留来源与无关事实，项目专属事实留在来源项目；绝不按文件修改时间裁决冲突。任一 revision 不匹配或超预算时返回 reconciliation_required 且不写入任何内容，此时保留待合并事实、整理后重新提交。挂起迁移用 resumeId 续跑；出现新改动用 replanId 退役旧计划后重新读取并合并。migrationIssues、来源或挂起记录未清空时不得声称整合完成。',
+      description: '先按 knowledge-maintenance 指南与 MemoryInspect(sourceId) 读取旧画像，再语义合并一份旧画像。全局画像只保留简洁核心事实（最多 100 条、5000 UTF-16 码元），保留来源与无关事实，项目专属事实留在来源项目；绝不按文件修改时间裁决冲突。任一 revision 不匹配或超预算时返回 reconciliation_required 且不写入任何内容，此时保留待合并事实、整理后重新提交。挂起迁移用 resumeId 续跑；出现新改动用 replanId 退役旧计划后重新读取并合并。若写入中途目标被外部修改，返回 apply_incomplete（saved:true）并保留 pending 记录，可继续用 resumeId 续跑。migrationIssues、来源或挂起记录未清空时不得声称整合完成。',
       parameters: Type.Object({
         resumeId: Type.Optional(Type.String({ description: '要续跑的挂起迁移 ID。' })),
         replanId: Type.Optional(Type.String({ description: '要退役并重新规划的迁移 ID；退役后需重新 Inspect。' })),
@@ -187,7 +187,7 @@ export function buildMemoryExtraTools(sdk: ToolSdk, ctx: MemoryExtraToolsContext
                 return migrateProfile(migrationCtx, proposal)
               })(),
         )
-        if (result.status === 'migrated') {
+        if (result.status === 'migrated' || result.status === 'apply_incomplete') {
           return jsonToolResult({ ...result, pendingMigrations: listPendingProfileMigrations(migrationCtx) })
         }
         return jsonToolResult(result)

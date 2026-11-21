@@ -13,10 +13,12 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  applyProfileMigrationForTesting,
   listPendingProfileMigrations,
   migrateProfile,
   replanProfileMigration,
   resumeProfileMigration,
+  type ProfileMigrationIo,
   type ProfileMigrationJournal,
   type ProfileMigrationProposal,
 } from './agent-memory-migration'
@@ -26,6 +28,7 @@ import {
   readMemoryDocument,
   readMemoryFileAt,
   setMemoryRootsForTesting,
+  writeMemoryFileText,
 } from './memory-service'
 
 const workspaceSlug = 'demo'
@@ -33,6 +36,8 @@ const ORIGINAL_SOURCE = '# 用户画像\n\n- 用户是教师\n- 用户在校工�
 const ORIGINAL_INDEX = `# 项目记忆索引\n\n- [旧画像](user-profile.md) — 旧用户画像\n- [部署](deploy.md) — 发布流程\n`
 const MERGED_INDEX = '# 项目记忆索引\n\n- [部署](deploy.md) — 发布流程\n'
 const MERGED_GLOBAL = '# 全局用户画像\n\n- 用户偏好中文（source：测试；scope：全局）\n- 用户是教师（source：旧画像迁移；scope：全局）\n'
+const CLAUDE_SOURCE = '# 用户画像\n\n- 用户在旧版 Claude 目录工作\n'
+const CLAUDE_INDEX = '# 项目记忆索引\n\n- [旧画像](user_profile.md) — 旧入口\n- [部署](deploy.md) — 发布流程\n'
 
 let root: string
 
@@ -46,6 +51,14 @@ function memoryDir(): string {
 
 function globalProfilePath(): string {
   return join(root, 'global-memory', 'user_profile.md')
+}
+
+function claudeMemoryDir(): string {
+  return join(workspaceRoot(), '.claude', 'memory')
+}
+
+function archivePathFor(id: string, fileName: string): string {
+  return join(workspaceRoot(), '.profile-migrations', 'archive', id, fileName)
 }
 
 function migrationLogPath(id: string): string {
@@ -81,6 +94,36 @@ function proposalWith(overrides: Partial<ProfileMigrationProposal> = {}): Profil
     rationale: '逐项去重：教师身份进全局画像；部署路由保留在项目索引。',
     ...overrides,
   }
+}
+
+/** `.claude/memory` 布局：来源索引与当前项目索引是两个不同文件。 */
+function proposalWithClaude(overrides: Partial<ProfileMigrationProposal> = {}): ProfileMigrationProposal {
+  const source = readLegacyProfileLocations(workspaceSlug).find((item) => item.path.startsWith(claudeMemoryDir()))
+  if (!source) throw new Error('测试前置条件缺失：没有 .claude 旧画像来源')
+  const global = readMemoryFileAt(globalProfilePath())
+  const sourceIndex = readMemoryFileAt(join(claudeMemoryDir(), PROJECT_INDEX_TARGET))
+  const index = readMemoryFileAt(join(memoryDir(), PROJECT_INDEX_TARGET))
+  const preferences = readMemoryFileAt(join(memoryDir(), 'project-preferences.md'))
+  return {
+    sourceId: source.id,
+    sourceRevision: source.revision,
+    globalRevision: global.revision,
+    globalContent: MERGED_GLOBAL,
+    preferencesRevision: preferences.revision,
+    preferencesContent: null,
+    sourceIndexRevision: sourceIndex.revision,
+    sourceIndexContent: MERGED_INDEX,
+    indexRevision: index.revision,
+    indexContent: MERGED_INDEX,
+    rationale: '逐项去重：旧版 Claude 目录的画像并入全局，来源索引移除旧入口。',
+    ...overrides,
+  }
+}
+
+function seedClaudeLayout(): void {
+  mkdirSync(claudeMemoryDir(), { recursive: true })
+  writeFileSync(join(claudeMemoryDir(), 'user_profile.md'), CLAUDE_SOURCE, 'utf8')
+  writeFileSync(join(claudeMemoryDir(), PROJECT_INDEX_TARGET), CLAUDE_INDEX, 'utf8')
 }
 
 /** 把已完成的迁移还原成「已落盘、待续跑」的状态，用于验证 resumeId。 */
@@ -345,6 +388,149 @@ describe('挂起迁移的续跑与重新规划', () => {
     writeFileSync(migrationLogPath(id), '{ not json', 'utf8')
 
     expect(() => resumeProfileMigration(ctx(), id)).toThrow('无法解析')
+  })
+})
+
+describe('.claude/memory 旧画像布局', () => {
+  beforeEach(() => {
+    seedClaudeLayout()
+  })
+
+  test('Given .claude/memory 布局 When 迁移 Then 同时更新来源索引、项目索引并归档来源', () => {
+    const result = migrateProfile(ctx(), proposalWithClaude())
+
+    expect(result.status).toBe('migrated')
+    if (result.status !== 'migrated') return
+    expect(readFileSync(globalProfilePath(), 'utf8')).toBe(MERGED_GLOBAL)
+    expect(readFileSync(join(claudeMemoryDir(), PROJECT_INDEX_TARGET), 'utf8')).toBe(MERGED_INDEX)
+    expect(readFileSync(join(memoryDir(), PROJECT_INDEX_TARGET), 'utf8')).toBe(MERGED_INDEX)
+    expect(existsSync(join(claudeMemoryDir(), 'user_profile.md'))).toBe(false)
+    expect(readFileSync(result.archivedSourceTo, 'utf8')).toBe(CLAUDE_SOURCE)
+    expect(listPendingProfileMigrations(ctx())).toEqual([])
+  })
+
+  test('Given .claude/memory 布局迁移挂起 When resumeId 续跑 Then 完成且不因来源索引路径卡死', () => {
+    const first = migrateProfile(ctx(), proposalWithClaude())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+
+    const resumed = resumeProfileMigration(ctx(), first.migrationId)
+
+    expect(resumed.status).toBe('migrated')
+    expect(readFileSync(join(claudeMemoryDir(), PROJECT_INDEX_TARGET), 'utf8')).toBe(MERGED_INDEX)
+    expect(existsSync(join(claudeMemoryDir(), 'user_profile.md'))).toBe(false)
+  })
+
+  test('Given .claude/memory 布局迁移挂起 When replanId 退役 Then 恢复来源并标记 superseded', () => {
+    const first = migrateProfile(ctx(), proposalWithClaude())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+
+    const replan = replanProfileMigration(ctx(), first.migrationId)
+
+    expect(replan.status).toBe('needs-merge')
+    expect(readFileSync(join(claudeMemoryDir(), 'user_profile.md'), 'utf8')).toBe(CLAUDE_SOURCE)
+    const journal = JSON.parse(readFileSync(migrationLogPath(first.migrationId), 'utf8')) as ProfileMigrationJournal
+    expect(journal.status).toBe('superseded')
+  })
+
+  test('Given 来源对应的索引之外的 .claude 路径 When resumeId 续跑 Then 仍被拒绝', () => {
+    const first = migrateProfile(ctx(), proposalWithClaude())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+    const logPath = migrationLogPath(first.migrationId)
+    const journal = JSON.parse(readFileSync(logPath, 'utf8')) as ProfileMigrationJournal
+    const legacyEdit = journal.edits.find((edit) => edit.target === 'source-index')
+    if (!legacyEdit) throw new Error('测试前置条件缺失：没有 source-index 编辑')
+    // 白名单必须精确到 legacyIndexPath，不能放宽到整个 .claude/memory 目录。
+    legacyEdit.path = join(claudeMemoryDir(), 'MEMORY-alt.md')
+    writeFileSync(logPath, JSON.stringify(journal, null, 2), 'utf8')
+
+    expect(() => resumeProfileMigration(ctx(), first.migrationId)).toThrow('不在当前工作区记忆目录')
+  })
+})
+
+describe('挂起迁移的来源缺失与部分写入', () => {
+  test('Given pending 且源被删、归档也不存在 When resumeId 续跑 Then 返回 reconciliation 且不假完成', () => {
+    const first = migrateProfile(ctx(), proposalWith())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+    rmSync(join(memoryDir(), 'user-profile.md'))
+
+    const resumed = resumeProfileMigration(ctx(), first.migrationId)
+
+    expect(resumed.status).toBe('reconciliation_required')
+    if (resumed.status !== 'reconciliation_required') return
+    expect(resumed.saved).toBe(false)
+    expect(resumed.issues.join('\n')).toContain('归档副本')
+    expect(readFileSync(globalProfilePath(), 'utf8')).not.toBe(MERGED_GLOBAL)
+    expect(existsSync(join(memoryDir(), 'user-profile.md'))).toBe(false)
+    const journal = JSON.parse(readFileSync(migrationLogPath(first.migrationId), 'utf8')) as ProfileMigrationJournal
+    expect(journal.status).toBe('pending')
+  })
+
+  test('Given pending 且源已归档、日志未完成 When resumeId 续跑 Then 使用已有归档完成迁移', () => {
+    const first = migrateProfile(ctx(), proposalWith())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+    const archivedTo = archivePathFor(first.migrationId, 'user-profile.md')
+    mkdirSync(join(workspaceRoot(), '.profile-migrations', 'archive', first.migrationId), { recursive: true })
+    renameSync(join(memoryDir(), 'user-profile.md'), archivedTo)
+
+    const resumed = resumeProfileMigration(ctx(), first.migrationId)
+
+    expect(resumed.status).toBe('migrated')
+    if (resumed.status !== 'migrated') return
+    expect(resumed.archivedSourceTo).toBe(archivedTo)
+    expect(readFileSync(archivedTo, 'utf8')).toBe(ORIGINAL_SOURCE)
+    expect(existsSync(join(memoryDir(), 'user-profile.md'))).toBe(false)
+    expect(readFileSync(globalProfilePath(), 'utf8')).toBe(MERGED_GLOBAL)
+  })
+
+  test('Given 早序目标已写入后后置目标被外部修改 When 续跑 Then 返回 apply_incomplete 且可继续 resume', () => {
+    const first = migrateProfile(ctx(), proposalWith())
+    if (first.status !== 'migrated') throw new Error('前置迁移未成功')
+    resetMigrationToPending(first.migrationId)
+    const journal = JSON.parse(
+      readFileSync(migrationLogPath(first.migrationId), 'utf8'),
+    ) as ProfileMigrationJournal
+    const lastEdit = journal.edits[journal.edits.length - 1]
+    if (!lastEdit) throw new Error('测试前置条件缺失：没有编辑目标')
+    const firstEdit = journal.edits[0]
+    if (!firstEdit) throw new Error('测试前置条件缺失：没有首个编辑目标')
+    let writeCount = 0
+    const io: ProfileMigrationIo = {
+      read: readMemoryFileAt,
+      write: (path, content) => {
+        writeMemoryFileText(path, content)
+        writeCount += 1
+        if (writeCount === 1) {
+          // 模拟另一个进程在首个子文件落盘后修改后置目标。
+          writeFileSync(lastEdit.path, '# 外部并发修改\n', 'utf8')
+        }
+      },
+    }
+
+    const result = applyProfileMigrationForTesting(ctx(), journal, io)
+
+    expect(result.status).toBe('apply_incomplete')
+    if (result.status !== 'apply_incomplete') return
+    expect(result.saved).toBe(true)
+    expect(result.writtenTargets).toEqual([firstEdit.path])
+    expect(result.pendingTargets).toEqual([lastEdit.path])
+    expect(result.issues.join('\n')).toContain('外部修改')
+    expect(readFileSync(lastEdit.path, 'utf8')).toBe('# 外部并发修改\n')
+    expect(readFileSync(firstEdit.path, 'utf8')).toBe(firstEdit.after)
+    const pendingJournal = JSON.parse(
+      readFileSync(migrationLogPath(first.migrationId), 'utf8'),
+    ) as ProfileMigrationJournal
+    expect(pendingJournal.status).toBe('pending')
+
+    // 处理外部改动后仍可续跑：恢复后置目标的 before，resume 完成剩余写入。
+    writeMemoryFileText(lastEdit.path, lastEdit.before ?? '')
+    const resumed = resumeProfileMigration(ctx(), first.migrationId)
+    expect(resumed.status).toBe('migrated')
+    expect(readFileSync(lastEdit.path, 'utf8')).toBe(lastEdit.after)
   })
 })
 

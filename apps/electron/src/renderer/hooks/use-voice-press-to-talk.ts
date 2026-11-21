@@ -7,11 +7,15 @@
 
 import * as React from 'react'
 import { PressToTalkController } from '@/lib/voice-press-to-talk'
+import {
+  beginPressGesture,
+  consumePressGesture,
+  createPressToTalkGestureState,
+  endPressGesture,
+  shouldSuppressPressToTalkClick,
+} from '@/lib/voice-press-to-talk-gesture'
 import { VOICE_DICTATION_SETTINGS_CHANGED_EVENT } from '@/lib/voice-input-focus'
 import type { VoiceDictationSettings } from '../../types'
-
-/** 点击判定窗口：拖出按钮后松手不会触发 click，超时后自动失效。 */
-const CLICK_SUPPRESSION_WINDOW_MS = 800
 
 /** 可能需要被长按管理器消费的指针事件类型。 */
 type PressPointerEvent = React.PointerEvent<HTMLElement>
@@ -36,10 +40,8 @@ export interface UseVoicePressToTalkResult {
  */
 export function useVoicePressToTalk(sourceInputId?: string): UseVoicePressToTalkResult {
   const [available, setAvailable] = React.useState(false)
-  /** 当前手势是否已越过长按阈值（即已被长按消费）。 */
-  const gestureActivatedRef = React.useRef(false)
-  /** 抑制 click 的截止时间；0 表示无需抑制。 */
-  const suppressClickUntilRef = React.useRef(0)
+  /** 当前手势的消费与 click 抑制状态。 */
+  const gestureStateRef = React.useRef(createPressToTalkGestureState())
 
   const controller = React.useMemo(
     () => new PressToTalkController({
@@ -48,16 +50,17 @@ export function useVoicePressToTalk(sourceInputId?: string): UseVoicePressToTalk
         // 有选中文本时用户多半想替换选区：不启动录音，同时消费掉本次手势，
         // 避免松开后的 click 又按普通模式启动听写。
         if (selection && !selection.isCollapsed) {
-          gestureActivatedRef.current = true
+          consumePressGesture(gestureStateRef.current)
           return false
         }
-        const started = await window.electronAPI.toggleVoiceDictation({
+        // 越过阈值并实际发起 start 就消费手势：即使 start 尚未 resolve 用户已松手，
+        // pointerup 也能 arm 抑制，后续原生 click 一律跳过普通 toggle。
+        // 被状态守卫拒绝（resolve(false)）也不回退 toggle，用户已确认该产品取舍。
+        consumePressGesture(gestureStateRef.current)
+        return await window.electronAPI.toggleVoiceDictation({
           sourceInputId,
           pressToTalk: { action: 'start', token },
         })
-        // 只有真正开始了录音才消费手势；被状态守卫拒绝时让 click 走回原来的 toggle 语义。
-        if (started) gestureActivatedRef.current = true
-        return started
       },
       stop: async (token) => {
         await window.electronAPI.toggleVoiceDictation({
@@ -70,9 +73,7 @@ export function useVoicePressToTalk(sourceInputId?: string): UseVoicePressToTalk
   )
 
   const markGestureEnded = React.useCallback((): void => {
-    if (gestureActivatedRef.current) {
-      suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESSION_WINDOW_MS
-    }
+    endPressGesture(gestureStateRef.current, Date.now())
   }, [])
 
   // 设置可用性：首次读取 + 设置页保存后的事件同步。
@@ -176,8 +177,7 @@ export function useVoicePressToTalk(sourceInputId?: string): UseVoicePressToTalk
   const down = React.useCallback((event: PressPointerEvent): void => {
     // 只响应左键（触摸的 button 也是 0），并跳过 Shift/Ctrl 等改键组合。
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
-    gestureActivatedRef.current = false
-    suppressClickUntilRef.current = 0
+    beginPressGesture(gestureStateRef.current)
     controller.down(event.pointerId, event.clientX, event.clientY)
   }, [controller])
 
@@ -196,9 +196,7 @@ export function useVoicePressToTalk(sourceInputId?: string): UseVoicePressToTalk
   }, [controller, markGestureEnded])
 
   const shouldSuppressClick = React.useCallback((): boolean => {
-    if (Date.now() >= suppressClickUntilRef.current) return false
-    suppressClickUntilRef.current = 0
-    return true
+    return shouldSuppressPressToTalkClick(gestureStateRef.current, Date.now())
   }, [])
 
   return { available, down, move, up, cancel, shouldSuppressClick }

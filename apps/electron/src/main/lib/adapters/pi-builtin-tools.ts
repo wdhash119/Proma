@@ -38,6 +38,8 @@ import { appendCheckoutEntry, checkoutFromActiveWorktree } from '../session-chec
 import { readWorktreeHeadCommit } from '../session-checkout-restore'
 import { getMainWindow } from '../main-window-store'
 import { getMainRepoRoot, listWorktrees } from '../git-diff-service'
+import { fetchPageAsMarkdown, formatWebFetchOutcome } from '../web-fetch-service'
+import { formatWebSearchOutcome, searchWeb } from '../web-search-service'
 import { getWorktreeRepos, getAgentWorkspace, listAgentWorkspaces, listAgentWorkspacesWithProjectRootStatus } from '../agent-workspace-manager'
 import { resolveAutomationWorkspace, summarizeAutomationWorkspace } from './automation-workspace'
 import { downloadInstaller, launchInstaller } from '../installer-downloader'
@@ -1555,6 +1557,49 @@ function buildAgentTerminalTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDe
   ] as ToolDefinition[]
 }
 
+function buildWebResearchTools(sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDefinition[] {
+  return [
+    sdk.defineTool({
+      name: 'WebSearch',
+      label: '联网搜索',
+      description: '搜索公开网页并返回标题、链接与摘要。适合需要时效性、准确性或训练数据之外的信息（新闻、版本、价格、发布说明、人物与产品细节）。查询无状态，可并行发两到四条不同角度的查询，不要重复同一条。结果质量依赖公开搜索引擎，命中差或与已知事实冲突时应改用受管浏览器打开来源页核对；需要登录、交互或依赖 JS 渲染的页面也属于浏览器。',
+      promptSnippet: 'WebSearch: 一次聚焦查询返回网页结果（标题、链接、摘要）；可并行多条不同角度的查询。命中差、过时或与已知事实冲突时改用受管浏览器核对原文。',
+      parameters: Type.Object({
+        query: Type.String({ description: '搜索查询，1-128 个字符。' }),
+        count: Type.Optional(Type.Number({ description: '返回条数，默认 10，最多 50。' })),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const input = params as Record<string, unknown>
+        const query = typeof input.query === 'string' ? input.query : ''
+        const count = typeof input.count === 'number' ? input.count : undefined
+        const outcome = await searchWeb(query, { ...(count !== undefined ? { count } : {}), signal })
+        return {
+          content: [{ type: 'text', text: formatWebSearchOutcome(outcome) }],
+          details: outcome,
+        } as AgentToolResult<unknown>
+      },
+    }),
+    sdk.defineTool({
+      name: 'WebFetch',
+      label: '抓取网页正文',
+      description: '抓取一个具体网页并转成 Markdown 正文。通常在 WebSearch 命中长文后使用，或用户直接给出链接时使用。调用无状态，可在同一轮并行抓取多个不同 URL；只抓真正需要的页面，不要逐个抓取搜索结果，也不要重复抓同一地址。需要登录、表单交互或 JS 渲染的页面应改用受管浏览器。',
+      promptSnippet: 'WebFetch: 抓取指定 URL 的正文 Markdown，适合 WebSearch 指向的长文；可并行抓多个不同地址，但不要重复抓同一 URL。页面需要登录或渲染时改用受管浏览器。',
+      parameters: Type.Object({
+        url: Type.String({ description: '绝对 http(s) URL，通常来自上一步的搜索结果。' }),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const input = params as Record<string, unknown>
+        const url = typeof input.url === 'string' ? input.url : ''
+        const outcome = await fetchPageAsMarkdown(url, { signal })
+        return {
+          content: [{ type: 'text', text: formatWebFetchOutcome(outcome) }],
+          details: outcome,
+        } as AgentToolResult<unknown>
+      },
+    }),
+  ]
+}
+
 function buildPromaCloudTools(sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDefinition[] {
   // proma-cloud MCP 工具（get_credentials / create_app_key）通常由 Proma 的
   // 内置 MCP server 进程独立提供（非 SDK in-process），Pi adapter 在 orchestrator
@@ -1659,6 +1704,13 @@ export async function buildPiBuiltinTools(
     tools.push(...buildBrowserTools(sdk, ctx))
   } catch (error) {
     console.error('[Pi 桥接] 注入受管浏览器工具失败:', error)
+  }
+
+  // 联网检索与抓取：本地实现，不依赖 Proma 服务或用户 API Key。
+  try {
+    tools.push(...buildWebResearchTools(sdk, ctx))
+  } catch (error) {
+    console.error('[Pi 桥接] 注入联网工具失败:', error)
   }
 
   // 视觉助手仅在仍不支持原生视觉的 DeepSeek V4 Pro 用户会话中按需出现。

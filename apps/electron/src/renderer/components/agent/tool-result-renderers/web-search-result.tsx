@@ -19,12 +19,17 @@ interface SearchResult {
 
 /** 尝试解析搜索结果（支持多种常见格式） */
 function parseSearchResults(text: string): SearchResult[] | null {
-  // 尝试 JSON 解析
+  // 尝试 JSON 解析：既接受纯数组，也接受 { results: [...] } 包装。
   try {
     const parsed = JSON.parse(text)
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((item: Record<string, unknown>) => item.title || item.url)
+    const list = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as { results?: unknown }).results)
+        ? (parsed as { results: unknown[] }).results
+        : null
+    if (list) {
+      return list
+        .filter((item: Record<string, unknown>) => item && typeof item === 'object' && (item.title || item.url))
         .map((item: Record<string, unknown>) => ({
           title: String(item.title ?? ''),
           url: String(item.url ?? item.link ?? ''),

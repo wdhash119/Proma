@@ -16,7 +16,7 @@
 
 | 能力 | 闭源 | 开源现状 | 状态 |
 | --- | --- | --- | --- |
-| Pi Agent 运行时 | 1.5.2 | 1.5.2（含 `pi-ai` patch） | ✅ 一致 |
+| Pi Agent 运行时 | 1.5.2 | 1.6.0（含 `pi-ai` patch，6 条断流重试模式） | ➕ 领先 |
 | Chat 模式主入口 | 已退役 | 已退役，侧栏无 Chat 按钮 | ✅ 一致 |
 | 历史 Chat 管理 | 设置页 `legacy-chat` | 设置页「历史 Chat」，支持搜索/分页/交给 Agent | ✅ 一致 |
 | 权限模式 / 计划模式 | 已下线 | 已下线，`AgentPermissionService` 保留供 Slack 与协作使用 | ✅ 一致 |
@@ -41,20 +41,36 @@
 | Proma 自操作（10 个） | `PromaObserve` `PromaFind` `PromaAct` `PromaClick` `PromaFill` `PromaPress` `PromaDomAction` `PromaScroll` `PromaWaitFor` `PromaScreenshot` | ✅ |
 | Computer Use | `ComputerUsePreview` | ✅ |
 
-### 2.2 开源未实现
+### 2.2 已补齐（原缺口）
+
+| 工具族 | 工具 | 状态 |
+| --- | --- | --- |
+| 项目指令维护 | `ProjectInstructionsMaintain` `Inspect` `Migrate` `Replan` `Resume` | ✅ 已实现 |
+| 项目地图 | `ProjectMapInspect` `ProjectMapReviewComplete` | ✅ 已实现 |
+| 记忆扩展 | `MemoryInitialize` `MemoryArchive` `MemoryMigrateProfile` | ✅ 已实现 |
+
+### 2.3 仍缺
 
 | 工具族 | 缺失工具 | 影响 |
 | --- | --- | --- |
-| 项目指令维护 | `ProjectInstructionsInspect` `ProjectInstructionsMaintain` `ProjectInstructionsMigrate` `ProjectInstructionsReplan` `ProjectInstructionsResume` | 无法由 Agent 自动初始化/合并项目 `AGENTS.md` |
-| 项目地图 | `ProjectMapInspect` `ProjectMapReviewComplete` | 无法自动记录项目地图复查时间 |
-| 记忆扩展 | `MemoryArchive` `MemoryInitialize` `MemoryMigrateProfile` | 无法归档过期主题、无法迁移旧画像 |
 | macOS OCR | `ComputerUseReadText` | macOS 无树界面文字识别不可用（用户已决定搁置 macOS） |
 
-### 2.3 开源独有
+### 2.4 开源独有
 
 | 工具 | 说明 |
 | --- | --- |
 | `VisionRelay` | 开源自有视觉助手转发，闭源由 Proma Cloud 承担 |
+
+### 2.5 跨供应商协作（闭源没有的能力）
+
+闭源 v0.22.110 的 `delegate_agent` 参数里没有 `channelId`，`list_available_agent_models` 也只列父会话渠道。开源版新增：
+
+- `resolveDelegationTarget` 支持四种组合：都不指定继承父会话、只给 channelId、只给 modelId（跨渠道查唯一归属）、都给（校验归属）
+- 同一 modelId 属于多个启用渠道时要求显式 channelId 并列出候选，不猜
+- `list_available_agent_models` 返回全部启用渠道；`delegate_agent` / `delegate_agents` 的 item 均可指定 `channelId`
+- 凭据链路未改：orchestrator 已按 channelId 解析 provider 与 OAuth 凭据
+
+真实验证：主会话在 DeepSeek 渠道，指定副渠道 channelId 委派，子会话 meta 的 channelId 与 effectiveModelId 均正确，子会话正常启动并回传结果。
 
 ## 3. 联网检索
 
@@ -182,8 +198,6 @@
 | --- | --- | --- |
 | macOS 原生流 / Apple Vision OCR / 权限块 | 无 macOS 测试环境（用户确认搁置） | macOS 上预览走快照轮询，无 OCR |
 | `ComputerUseReadText` 缺失 | 同上 | 无树界面只能看截图 |
-| ProjectInstructions* / ProjectMap* 工具族 | 本轮范围外 | Agent 无法自动维护项目 `AGENTS.md` 与地图复查 |
-| `MemoryArchive` / `MemoryInitialize` / `MemoryMigrateProfile` | 本轮范围外 | 记忆归档与旧画像迁移需手动 |
 | `proma-web-search` Skill | 内容绑定 Proma Cloud 计费模型 | 路由建议已在系统提示词中覆盖 |
 | 按住说话真实录音 | 需麦克风 + 豆包凭据 | UI、落盘、状态守卫已验证，录音链路未跑 |
 | Linux deb/AppImage 打包 | 需 Linux Runner | 配置已静态核对（deb target、afterInstall、显式 depends） |

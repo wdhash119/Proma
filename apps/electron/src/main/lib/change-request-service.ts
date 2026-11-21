@@ -10,7 +10,7 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { BrowserWindow } from 'electron'
 import type { ChangeRequestBinding, ChangeRequestSnapshot, ChangeRequestsActionInput } from '@proma/shared'
-import { CHANGE_REQUESTS_IPC_CHANNELS, normalizeChangeRequestUrl, parseChangeRequestUrl } from '@proma/shared'
+import { CHANGE_REQUESTS_IPC_CHANNELS, extractChangeRequestUrls, normalizeChangeRequestUrl, parseChangeRequestUrl } from '@proma/shared'
 import { getAgentSessionMeta, resolveAgentCwd } from './agent-session-manager'
 import { getAgentWorkspace } from './agent-workspace-manager'
 import type { ChangeRequestFetchResult } from './change-request-store'
@@ -27,6 +27,17 @@ import {
 } from './change-request-store'
 import { ChangeRequestPoller } from './change-request-poller'
 import { isTurnEndEvent, shouldDiscoverAfterTurn, TurnDiscoveryScheduler } from './change-request-turn-discovery'
+import {
+  commandFromToolInput,
+  isPullRequestCreateCommand,
+  isPullRequestReferenceCommand,
+  isPushCommand,
+  isShellToolName,
+  ownChangeRequestUrlFromOutput,
+  PendingCommandTracker,
+  pushedBranchesFromOutput,
+  textOfToolResult,
+} from './change-request-observer'
 import { changeRequestGitHubService, type GitHubRepository } from './github-change-request-service'
 
 const SCOPE_TTL_MS = 60_000
@@ -231,60 +242,36 @@ export async function handleChangeRequestsAction(input: ChangeRequestsActionInpu
 
 // ===== 从 Agent 输出里自动发现 =====
 
-interface PendingCommand {
-  command: string
-}
+const pendingCommands = new PendingCommandTracker()
 
-const pendingCommands = new Map<string, PendingCommand>()
+/**
+ * `git push` 之后按实际推送的分支逐个发现 PR。
+ *
+ * 只按当前分支发现会漏掉「一个 turn 里推了多个分支」的情况；
+ * 每条推送先解析 remote 得到仓库，再用仓库范围过滤，避免跨仓库串绑定。
+ */
+function observePushedBranches(sessionId: string, output: string): void {
+  const pushed = pushedBranchesFromOutput(output)
+  if (pushed.length === 0) return
 
-function isShellToolName(name: string): boolean {
-  const value = name.toLowerCase()
-  return value === 'bash' || value === 'shell' || value === 'terminalexecute' || value === 'run_command'
-}
+  void (async () => {
+    const scope = await sessionRepositoryScope(sessionId)
+    for (const pushedRef of pushed) {
+      const repository = changeRequestGitHubService.repositoryFromRemote(pushedRef.remote) ?? scope?.repo ?? null
+      if (!repository) continue
+      if (scope && !scope.repositories.has(repositoryKey(repository))) continue
 
-function commandFromToolInput(input: unknown): string | null {
-  if (!input || typeof input !== 'object') return null
-  const command = (input as { command?: unknown }).command
-  return typeof command === 'string' && command.trim() ? command : null
-}
-
-function isPullRequestCreateCommand(command: string): boolean {
-  const normalized = command.replace(/\\\r?\n/g, ' ').trim()
-  if (!/\bgh\b/.test(normalized)) return false
-  return /(^|[;&|]\s*)(?:cd\s+[^;&|]+?[;&|]\s*)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*gh\s+pr\s+create\b/.test(normalized)
-}
-
-function isPushCommand(command: string): boolean {
-  return /\bgit(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*\s+push\b/.test(command.replace(/\\\r?\n/g, ' '))
-}
-
-/** 从 `gh pr create` 输出里取它自己创建的链接（优先 `url:` 行与 JSON 字段）。 */
-function ownChangeRequestUrlFromOutput(text: string): string | null {
-  if (!text || text.length > 512 * 1024) return null
-  const candidates: string[] = []
-  for (const match of text.matchAll(/^\s*url:\s*(\S+)\s*$/gim)) candidates.push(match[1] ?? '')
-  for (const match of text.matchAll(/"url"\s*:\s*"([^"]+)"/g)) candidates.push(match[1] ?? '')
-  for (const candidate of candidates) {
-    const normalized = normalizeChangeRequestUrl(candidate.replace(/[.,;:]+$/, ''))
-    if (normalized) return normalized
-  }
-  return null
-}
-
-function textOfToolResult(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((block) => {
-      if (typeof block === 'string') return block
-      if (block && typeof block === 'object' && 'text' in block) {
-        const text = (block as { text?: unknown }).text
-        return typeof text === 'string' ? text : ''
-      }
-      return ''
-    })
-    .filter(Boolean)
-    .join('\n')
+      const matches = await changeRequestGitHubService
+        .findByHead(scope?.cwd ?? homedir(), repository, pushedRef.branch)
+        .catch(() => [])
+      if (matches.length === 0) continue
+      await applyObservedBindings(sessionId, matches.map((match) => match.url), 'discovered', {
+        allowUnknownScope: true,
+      })
+    }
+  })().catch((error) => {
+    console.warn('[变更请求] 推送后发现失败:', error)
+  })
 }
 
 /**
@@ -315,7 +302,7 @@ export function observeAgentStreamPayload(
       if (!block || typeof block !== 'object') continue
       const typed = block as { type?: string; name?: string; id?: string; input?: unknown; text?: string }
       if (typed.type === 'text' && typeof typed.text === 'string') {
-        urls.push(...extractUrls(typed.text))
+        urls.push(...extractChangeRequestUrls(typed.text))
         continue
       }
       if (typed.type !== 'tool_use') continue
@@ -324,7 +311,7 @@ export function observeAgentStreamPayload(
       const command = commandFromToolInput(typed.input)
       if (!command || typeof typed.id !== 'string') continue
       if (isPullRequestCreateCommand(command) || isPushCommand(command)) {
-        pendingCommands.set(typed.id, { command })
+        pendingCommands.remember(typed.id, command)
       }
     }
     if (urls.length > 0) void applyObservedBindings(sessionId, urls, 'referenced')
@@ -338,30 +325,28 @@ export function observeAgentStreamPayload(
     if (!block || typeof block !== 'object') continue
     const typed = block as { type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }
     if (typed.type !== 'tool_result' || typeof typed.tool_use_id !== 'string') continue
-    const pending = pendingCommands.get(typed.tool_use_id)
-    if (!pending) continue
-    pendingCommands.delete(typed.tool_use_id)
+    const command = pendingCommands.take(typed.tool_use_id)
+    if (!command) continue
     // 失败的命令不会有真实 PR；跳过可避免把报错信息里的链接当成本轮产物。
     if (typed.is_error === true) continue
     const output = textOfToolResult(typed.content)
-    if (isPullRequestCreateCommand(pending.command)) {
-      const url = ownChangeRequestUrlFromOutput(output)
-      if (url) void applyObservedBindings(sessionId, [url], 'created', { allowUnknownScope: true })
+    if (isPullRequestCreateCommand(command)) {
+      // 真正创建出来的链接：gh 直接打印 URL，也可能带 url: 前缀或 JSON 字段。
+      const created = extractChangeRequestUrls(output)
+      const own = ownChangeRequestUrlFromOutput(output)
+      const urls = created.length > 0 ? created : own ? [own] : []
+      if (urls.length > 0) void applyObservedBindings(sessionId, urls, 'created', { allowUnknownScope: true })
       continue
     }
-    // push 之后按当前分支重新发现，覆盖「仓库里已有 PR」的情况。
-    void discoverSession(sessionId).then(() => notifyChangeRequestsChanged([sessionId]))
+    if (isPullRequestReferenceCommand(command)) {
+      const own = ownChangeRequestUrlFromOutput(output)
+      if (own) void applyObservedBindings(sessionId, [own], 'referenced')
+      continue
+    }
+    if (isPushCommand(command)) observePushedBranches(sessionId, output)
   }
 }
 
-function extractUrls(text: string): string[] {
-  const urls: string[] = []
-  for (const match of text.match(/https?:\/\/[^\s"'<>`)\]]+/gi) ?? []) {
-    const normalized = normalizeChangeRequestUrl(match.replace(/[.,;:]+$/, ''))
-    if (normalized && !urls.includes(normalized)) urls.push(normalized)
-  }
-  return urls
-}
 
 // ===== 轮次结束时的分支发现 =====
 

@@ -61,6 +61,19 @@ describe('变更请求追踪契约', () => {
     expect(pure).toContain('resolve(input.repositoryRoot) === resolve(input.projectRoot)')
   })
 
+  test('Given git push 输出 When 检查 Then 按实际推送的分支逐个发现', () => {
+    const service = readAppFile('src/main/lib/change-request-service.ts')
+    const observer = readAppFile('src/main/lib/change-request-observer.ts')
+
+    // 解析在纯模块里，服务只负责按分支查 PR。
+    expect(observer).toContain('export function pushedBranchesFromOutput')
+    expect(service).toContain('observePushedBranches')
+    expect(service).toContain('pushedBranchesFromOutput(output)')
+    expect(service).toContain('if (isPushCommand(command)) observePushedBranches(sessionId, output)')
+    // 推送解析出的 remote 决定仓库，而不是永远用当前仓库。
+    expect(service).toContain('repositoryFromRemote(pushedRef.remote)')
+  })
+
   test('Given 失败的工具调用 When 检查 Then 不解析其中的 PR 链接', () => {
     const service = readAppFile('src/main/lib/change-request-service.ts')
 

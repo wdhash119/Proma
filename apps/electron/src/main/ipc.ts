@@ -223,6 +223,7 @@ import {
 import { extractTextFromAttachment } from './lib/document-parser'
 import { getUserProfile, updateUserProfile } from './lib/user-profile-service'
 import { getSettings, updateSettings } from './lib/settings-service'
+import { promaSelfController } from './lib/proma-self-controller'
 import { appendCheckoutEntry, checkoutFromActiveWorktree } from './lib/session-checkout'
 import { handleChangeRequestsAction } from './lib/change-request-service'
 import { readWorktreeHeadCommit, restoreWorktree } from './lib/session-checkout-restore'
@@ -2783,6 +2784,8 @@ export function registerIpcHandlers(): void {
       // 清理 ExitPlanMode 服务中的待处理请求
       exitPlanService.clearSessionPending(id)
       clearAgentQueuedMessages(id)
+      // 清理自操作的引用与在途指令，避免会话删除后仍持有主窗口 debugger 引用。
+      promaSelfController.disposeSession(id)
       await browserController.close(id)
       closeTerminalsForSession(id)
       deleteAgentSession(id)

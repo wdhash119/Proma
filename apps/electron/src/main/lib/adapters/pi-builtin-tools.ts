@@ -40,6 +40,7 @@ import { getMainWindow } from '../main-window-store'
 import { getMainRepoRoot, listWorktrees } from '../git-diff-service'
 import { fetchPageAsMarkdown, formatWebFetchOutcome } from '../web-fetch-service'
 import { formatWebSearchOutcome, searchWeb } from '../web-search-service'
+import { buildPromaSelfTools } from './pi-proma-self-tools'
 import { getWorktreeRepos, getAgentWorkspace, listAgentWorkspaces, listAgentWorkspacesWithProjectRootStatus } from '../agent-workspace-manager'
 import { resolveAutomationWorkspace, summarizeAutomationWorkspace } from './automation-workspace'
 import { downloadInstaller, launchInstaller } from '../installer-downloader'
@@ -118,6 +119,8 @@ export interface PiBuiltinToolsContext {
   lastWindowsTerminalProfile?: TerminalProfile
   /** 用户关闭的生产力能力不能注入给 Agent。 */
   productivityTools?: ProductivityToolsSettings
+  /** Proma 自操作的高副作用动作需要用户明确同意（当前仅创建项目）。 */
+  requestPromaSelfApproval?: import('../proma-self-controller').PromaSelfApprovalRequester
 }
 
 function jsonToolResult(payload: unknown): AgentToolResult<unknown> {
@@ -1711,6 +1714,19 @@ export async function buildPiBuiltinTools(
     tools.push(...buildWebResearchTools(sdk, ctx))
   } catch (error) {
     console.error('[Pi 桥接] 注入联网工具失败:', error)
+  }
+
+  // Proma 自操作：只有可见主窗口的会话才有意义——自动化、协作子会话与外部 Bridge
+  // 既没有窗口可观察，也无法让用户中断，因此不注入。
+  const selfControlAvailable = ctx.triggeredBy !== 'automation'
+    && ctx.triggeredBy !== 'delegation'
+    && ctx.triggeredBy !== 'external'
+  if (selfControlAvailable) {
+    try {
+      tools.push(...buildPromaSelfTools(sdk, ctx) as ToolDefinition[])
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 Proma 自操作工具失败:', error)
+    }
   }
 
   // 视觉助手仅在仍不支持原生视觉的 DeepSeek V4 Pro 用户会话中按需出现。

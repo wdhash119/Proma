@@ -70,6 +70,7 @@ import { exitPlanService } from './agent-exit-plan-service'
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
+import type { PromaSelfApprovalRequester } from './proma-self-controller'
 import { getAgentVaultRoots, getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import { buildAgentRuntimeEnv, type AgentRuntimeEnv } from './agent-runtime-env'
@@ -1084,6 +1085,31 @@ export class AgentOrchestrator {
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const piSdk = await import('@earendil-works/pi-coding-agent')
+      // Proma 自操作的高副作用动作（当前仅创建项目）必须由用户明确同意。
+      // 复用 AskUserQuestion 卡片，让用户在不离开对话的前提下批准或拒绝。
+      const requestPromaSelfApproval: PromaSelfApprovalRequester = async (_kind, signal) => {
+        if (input.triggeredBy === 'automation' || input.triggeredBy === 'delegation' || input.triggeredBy === 'external') {
+          return false
+        }
+        const result = await askUserService.handleAskUserQuestion(
+          sessionId,
+          {
+            questions: [{
+              question: 'Agent 准备在 Proma 界面里创建项目，这会在本地新建目录。是否同意？',
+              header: '创建项目',
+              options: [{ label: '同意' }, { label: '拒绝' }],
+            }],
+          },
+          signal ?? new AbortController().signal,
+          (request: AskUserRequest) => {
+            this.eventBus.emit(sessionId, { kind: 'proma_event', event: { type: 'ask_user_request', request } })
+          },
+        )
+        if (result.behavior !== 'allow') return false
+        const answers = (result as { updatedInput?: { answers?: Record<string, unknown> } }).updatedInput?.answers ?? {}
+        return Object.values(answers).some((value) => typeof value === 'string' && /同意|approve|^yes/i.test(value))
+      }
+
       const builtinMcpResult = await buildPiBuiltinTools(piSdk, {
         sessionId,
         channelId,
@@ -1097,6 +1123,7 @@ export class AgentOrchestrator {
         windowsShellAvailable: process.platform !== 'win32' || runtimeEnv.shellKind != null,
         lastWindowsTerminalProfile: appSettings.lastWindowsTerminalProfile,
         productivityTools,
+        requestPromaSelfApproval,
       })
       piBuiltinTools = builtinMcpResult.tools
       const collaborationAvailable = builtinMcpResult.collaborationAvailable
@@ -1196,6 +1223,7 @@ export class AgentOrchestrator {
           }
         }
 
+
         // AskUserQuestion：始终走交互式问答流程（连续回答会合并为一张卡片）。
         if (toolName === 'AskUserQuestion') {
           return askUserService.handleAskUserQuestion(
@@ -1274,6 +1302,9 @@ export class AgentOrchestrator {
       const memoryRefreshOpportunity = workspaceSlug && !automationContext && !input.triggeredBy && !memoryGuidance?.needsCollaborationProfile
         ? claimWorkspaceMemoryRefreshOpportunity(workspaceSlug)
         : undefined
+      const selfControlAvailable = input.triggeredBy !== 'automation'
+        && input.triggeredBy !== 'delegation'
+        && input.triggeredBy !== 'external'
       const systemPromptAppend = buildSystemPrompt({
         workspaceName: workspace?.name,
         workspaceSlug,
@@ -1288,6 +1319,7 @@ export class AgentOrchestrator {
         productivityTools,
         memoryGuidance,
         memoryRefreshOpportunity,
+        selfControlAvailable,
       }) + (automationContext ? `\n\n## 定时任务执行上下文\n\n${automationContext}` : '')
       const startAutoTitleGeneration = (): void => {
         if (titleGenerationStarted) return

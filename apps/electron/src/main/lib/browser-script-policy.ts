@@ -15,6 +15,16 @@ export interface BrowserDomActionInput {
   text?: string
 }
 
+/**
+ * 可选的页面内守卫：用于 Proma 自操作等需要拦截受保护控件的场景。
+ * 两个 functionSource 必须是自包含的函数声明，注入后可直接调用。
+ */
+export interface BrowserDomActionGuard {
+  protectionFunctionSource: string
+  projectCreationFunctionSource: string
+  errorMessage: string
+}
+
 export interface BrowserScrollInput {
   /** Omit to scroll the document. Selectors may traverse open shadow roots. */
   selector?: string
@@ -102,9 +112,18 @@ export function assertBrowserSelectOption(input: BrowserSelectOptionInput): void
  * 在页面上下文内执行的固定 DOM 操作。参数经过 JSON 序列化，避免 selector/text 被解释成代码。
  * rich-text 编辑器常常没有稳定 AX 节点；这里同时派发 input/change，便于受控前端同步状态。
  */
-export function buildBrowserDomActionExpression(input: BrowserDomActionInput): string {
+export function buildBrowserDomActionExpression(
+  input: BrowserDomActionInput,
+  guard?: BrowserDomActionGuard,
+): string {
   assertBrowserDomAction(input)
-  return `(() => {${finderExpression(input)}
+  const guardSource = guard
+    ? `${guard.protectionFunctionSource}
+    ${guard.projectCreationFunctionSource}
+    const guardConfig = { errorMessage: ${JSON.stringify(guard.errorMessage)} };`
+    : ''
+  const guardCall = guard ? 'guardConfig' : 'null'
+  return `(() => {${guardSource}${finderExpression(input)}
     const element = findElement(document, input.selector);
     if (!element) return { ok: false, error: '未找到匹配 selector 的元素。' };
     const root = element.getRootNode();
@@ -114,6 +133,13 @@ export function buildBrowserDomActionExpression(input: BrowserDomActionInput): s
       if (!(element instanceof HTMLAnchorElement) || !element.href) return null;
       try { const url = new URL(element.href); return url.origin + url.pathname; } catch { return null; }
     })();
+    const guardConfigRef = ${guardCall};
+    const isProtectedElement = guardConfigRef && typeof isPromaSelfControlProtected === 'function'
+      ? isPromaSelfControlProtected(element)
+      : false;
+    const isProjectCreationElement = guardConfigRef && typeof isPromaSelfControlProjectCreation === 'function'
+      ? isPromaSelfControlProjectCreation(element)
+      : false;
     const summary = () => {
       const rawValue = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.isContentEditable ? element.textContent || '' : '';
       const style = getComputedStyle(element);
@@ -143,6 +169,7 @@ export function buildBrowserDomActionExpression(input: BrowserDomActionInput): s
           href: safeHref,
         },
         bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+        ...(guardConfigRef ? { protected: isProtectedElement, projectCreation: isProjectCreationElement } : {}),
         scroll: { top: Math.round(element.scrollTop), height: Math.round(element.scrollHeight), clientHeight: Math.round(element.clientHeight) },
       };
     };
@@ -153,12 +180,14 @@ export function buildBrowserDomActionExpression(input: BrowserDomActionInput): s
       return summary();
     }
     if (input.action === 'click') {
+      if (guardConfigRef && isProtectedElement) return { ok: false, error: guardConfigRef.errorMessage, protected: true };
       element.click();
       return summary();
     }
     if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element.isContentEditable)) {
       return { ok: false, error: '目标不是 input、textarea 或 contenteditable。' };
     }
+    if (guardConfigRef && isProtectedElement) return { ok: false, error: guardConfigRef.errorMessage, protected: true };
     element.focus({ preventScroll: true });
     const text = input.text ?? '';
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {

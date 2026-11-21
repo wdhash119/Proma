@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   MemoryError,
   archiveMemoryTheme,
   readMemoryDocument,
+  recoverPendingMemoryArchives,
   setMemoryRootsForTesting,
 } from './memory-service'
 
@@ -61,6 +62,9 @@ describe('归档记忆主题', () => {
     expect(readFileSync(join(memoryDir(), 'MEMORY.md'), 'utf8')).toBe(nextIndex)
     expect(result.indexRevision).toBe(readMemoryDocument('MEMORY.md', workspaceSlug).revision)
     expect(archiveCopies()).toEqual(['deploy.md'])
+    // 成功后 journal 必须清理，避免下次启动重复续跑。
+    const journalDir = join(memoryDir(), '.archive-journal')
+    expect(existsSync(journalDir) ? readdirSync(journalDir) : []).toEqual([])
   })
 
   test('Given 归档成功 When 查看历史 Then 旧索引已存成可恢复快照', () => {
@@ -162,6 +166,86 @@ describe('归档记忆主题', () => {
 
     expect(() => archiveMemoryTheme(workspaceSlug, '../outside.md', 'a'.repeat(64), index.revision, '# 索引\n'))
       .toThrow('非法的记忆目标')
+  })
+
+  test('Given 正文已移动但索引未更新（模拟崩溃） When 启动续跑 Then 索引与归档一致且 journal 清理', () => {
+    const theme = readMemoryDocument('deploy.md', workspaceSlug)
+    const index = readMemoryDocument('MEMORY.md', workspaceSlug)
+    const nextIndex = '# 项目记忆索引\n\n- [排障](troubleshoot.md) — 常见故障\n'
+    const themePath = join(memoryDir(), 'deploy.md')
+    const archivedTo = join(memoryDir(), '.archive', '2026-01-01T00-00-00-000Z', 'deploy.md')
+    mkdirSync(join(memoryDir(), '.archive', '2026-01-01T00-00-00-000Z'), { recursive: true })
+    renameSync(themePath, archivedTo)
+
+    const journalPath = join(memoryDir(), '.archive-journal', 'deploy.md.json')
+    mkdirSync(join(memoryDir(), '.archive-journal'), { recursive: true })
+    writeFileSync(journalPath, JSON.stringify({
+      version: 1,
+      target: 'deploy.md',
+      themePath,
+      archivedTo,
+      themeRevision: theme.revision,
+      indexRevision: index.revision,
+      indexContent: nextIndex,
+    }), 'utf8')
+
+    const result = recoverPendingMemoryArchives([workspaceSlug])
+
+    expect(result.recovered).toEqual([`${workspaceSlug}:deploy.md`])
+    expect(result.skipped).toEqual([])
+    expect(existsSync(themePath)).toBe(false)
+    expect(readFileSync(archivedTo, 'utf8')).toBe(theme.content)
+    expect(readFileSync(join(memoryDir(), 'MEMORY.md'), 'utf8')).toBe(nextIndex)
+    expect(existsSync(journalPath)).toBe(false)
+  })
+
+  test('Given 正文尚未移动（模拟 rename 前崩溃） When 启动续跑 Then 保持原状并清理 journal', () => {
+    const theme = readMemoryDocument('deploy.md', workspaceSlug)
+    const index = readMemoryDocument('MEMORY.md', workspaceSlug)
+    const themePath = join(memoryDir(), 'deploy.md')
+    const journalPath = join(memoryDir(), '.archive-journal', 'deploy.md.json')
+    mkdirSync(join(memoryDir(), '.archive-journal'), { recursive: true })
+    writeFileSync(journalPath, JSON.stringify({
+      version: 1,
+      target: 'deploy.md',
+      themePath,
+      archivedTo: join(memoryDir(), '.archive', 'stamp', 'deploy.md'),
+      themeRevision: theme.revision,
+      indexRevision: index.revision,
+      indexContent: '# 项目记忆索引\n',
+    }), 'utf8')
+
+    const result = recoverPendingMemoryArchives([workspaceSlug])
+
+    expect(result.recovered).toHaveLength(1)
+    expect(readFileSync(themePath, 'utf8')).toBe(theme.content)
+    expect(readFileSync(join(memoryDir(), 'MEMORY.md'), 'utf8')).toBe(index.content)
+    expect(existsSync(journalPath)).toBe(false)
+    // 不应该创建空的时间戳归档目录。
+    expect(archiveCopies()).toEqual([])
+  })
+
+  test('Given 伪造 journal 目标穿越 When 启动续跑 Then 跳过且不触碰外部文件', () => {
+    const outside = join(root, 'outside.md')
+    writeFileSync(outside, '# 外部\n', 'utf8')
+    const journalPath = join(memoryDir(), '.archive-journal', 'evil.json')
+    mkdirSync(join(memoryDir(), '.archive-journal'), { recursive: true })
+    writeFileSync(journalPath, JSON.stringify({
+      version: 1,
+      target: '../outside.md',
+      themePath: outside,
+      archivedTo: join(memoryDir(), '.archive', 'stamp', 'outside.md'),
+      themeRevision: 'a'.repeat(64),
+      indexRevision: 'b'.repeat(64),
+      indexContent: '# 索引\n',
+    }), 'utf8')
+
+    const result = recoverPendingMemoryArchives([workspaceSlug])
+
+    expect(result.recovered).toEqual([])
+    expect(result.skipped).toHaveLength(1)
+    expect(existsSync(journalPath)).toBe(true)
+    expect(readFileSync(outside, 'utf8')).toBe('# 外部\n')
   })
 
   test('Given 归档后需要恢复 When 把归档文件搬回 Then 正文完全一致', () => {

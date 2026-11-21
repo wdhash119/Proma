@@ -9,7 +9,7 @@
  * 4. 监听菜单 IPC 事件（Cmd+W 关闭标签）
  */
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useAtomValue, useSetAtom, useAtom, useStore } from 'jotai'
 import { appModeAtom } from '@/atoms/app-mode'
 import { settingsOpenAtom, channelFormDirtyAtom, settingsCloseRequestedAtom } from '@/atoms/settings-tab'
@@ -53,6 +53,7 @@ import {
   updateShortcutOverrides,
 } from '@/lib/shortcut-registry'
 import { getFileParentPath } from '@/lib/file-utils'
+import { createQuickCaptureTrigger } from '@/lib/quick-capture-trigger'
 import { isDelegationObservationVisible } from '@/lib/agent-session-list'
 import { getLastInteractedStopTarget, resolveStopGenerationTarget } from '@/lib/stop-generation-target'
 import { CLOSE_ACTIVE_RIGHT_WORKSPACE_TAB_EVENT } from '@/lib/right-workspace-events'
@@ -186,14 +187,21 @@ export function GlobalShortcuts(): null {
     }, [createAgent]),
   )
 
-  // Cmd+Shift+T → 清单快速捕获（全局快捷键同时注册，这里保留应用内回退）
-  useShortcut(
-    'quick-capture',
-    useCallback(() => {
+  // Cmd+Shift+T → 清单快速捕获（全局快捷键同时注册，这里保留应用内回退）。
+  // 全局注册成功且窗口聚焦时，主进程 IPC 与本地 keydown 会同时到达；
+  // 用短时间窗去重，确保只打开一次新建入口。
+  const openQuickCapture = useMemo(
+    () => createQuickCaptureTrigger(() => {
       setActiveView('planning')
       setPlanningTab('todos')
       setTodoCreateRequest((value) => value + 1)
-    }, [setActiveView, setPlanningTab, setTodoCreateRequest]),
+    }),
+    [setActiveView, setPlanningTab, setTodoCreateRequest],
+  )
+
+  useShortcut(
+    'quick-capture',
+    useCallback(() => { openQuickCapture() }, [openQuickCapture]),
   )
 
   // Cmd+B → 切换侧边栏
@@ -435,12 +443,11 @@ export function GlobalShortcuts(): null {
 
   useEffect(() => {
     const cleanup = window.electronAPI.onOpenPlanningQuickCapture(() => {
-      setActiveView('planning')
-      setPlanningTab('todos')
-      setTodoCreateRequest((value) => value + 1)
+      // 与本地 keydown 共用去重入口，避免全局成功路径重复递增。
+      openQuickCapture()
     })
     return cleanup
-  }, [setActiveView, setPlanningTab, setTodoCreateRequest])
+  }, [openQuickCapture])
 
   // ===== 菜单栏 → 打开 / 创建会话 =====
 

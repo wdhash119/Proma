@@ -234,6 +234,7 @@ import { appendCheckoutEntry, checkoutFromActiveWorktree } from './lib/session-c
 import { handleChangeRequestsAction } from './lib/change-request-service'
 import { readWorktreeHeadCommit, restoreWorktree } from './lib/session-checkout-restore'
 import {
+  isValidMemoryRevisionId,
   listMemoryHistory,
   listMemoryTargets,
   readMemoryDocument,
@@ -6314,12 +6315,28 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(MEMORY_IPC_CHANNELS.READ_REVISION, async (_, target: unknown, id: unknown, workspaceSlug: unknown) => {
     if (!isNonEmptyString(target) || !isNonEmptyString(id)) return null
+    // 快照 ID 参与文件名拼接，入参层先拦掉路径分隔符与跨目标 ID。
+    if (!isValidMemoryRevisionId(target, id)) return null
     return readMemoryRevision(target, id, readOptionalSlug(workspaceSlug))
   })
 
-  ipcMain.handle(MEMORY_IPC_CHANNELS.RESTORE_REVISION, async (_, target: unknown, id: unknown, workspaceSlug: unknown) => {
-    if (!isNonEmptyString(target) || !isNonEmptyString(id)) throw new Error('target 与 id 必填')
-    return restoreMemoryRevision(target, id, readOptionalSlug(workspaceSlug))
+  ipcMain.handle(MEMORY_IPC_CHANNELS.RESTORE_REVISION, async (_, input: unknown) => {
+    const payload = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+    const target = typeof payload.target === 'string' ? payload.target : ''
+    const id = typeof payload.id === 'string' ? payload.id : ''
+    const expectedCurrentRevision = typeof payload.expectedCurrentRevision === 'string'
+      ? payload.expectedCurrentRevision
+      : ''
+    if (!isNonEmptyString(target) || !isNonEmptyString(id) || !isNonEmptyString(expectedCurrentRevision)) {
+      throw new Error('target、id 与 expectedCurrentRevision 必填')
+    }
+    if (!isValidMemoryRevisionId(target, id)) throw new Error('历史版本 ID 非法')
+    return restoreMemoryRevision(
+      target,
+      id,
+      expectedCurrentRevision,
+      readOptionalSlug(payload.workspaceSlug),
+    )
   })
 
   // ===== 用户授权的 Markdown Vault =====

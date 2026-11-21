@@ -24,6 +24,12 @@ async function ensureServer(): Promise<string> {
       response.end('纯文本内容\n第二行')
       return
     }
+    if (url.pathname === '/gbk') {
+      // 「中文」的 GBK 字节；content-type 使用带引号的 charset。
+      response.writeHead(200, { 'content-type': 'text/plain; charset="gbk"' })
+      response.end(Buffer.from([0xd6, 0xd0, 0xce, 0xc4]))
+      return
+    }
     if (url.pathname === '/binary') {
       response.writeHead(200, { 'content-type': 'application/pdf' })
       response.end('%PDF-1.4')
@@ -104,6 +110,14 @@ describe('抓取与转换', () => {
 
     expect(outcome.ok).toBe(true)
     if (outcome.ok) expect(outcome.content).toBe('纯文本内容\n第二行')
+  })
+
+  test('Given content-type 使用带引号的 GBK charset When 抓取 Then 正确解码中文', async () => {
+    const base = await ensureServer()
+    const outcome = await fetchPageAsMarkdown(`${base}/gbk`)
+
+    expect(outcome.ok).toBe(true)
+    if (outcome.ok) expect(outcome.content).toBe('中文')
   })
 
   test('Given 重定向 When 抓取 Then 跟随到最终页面', async () => {

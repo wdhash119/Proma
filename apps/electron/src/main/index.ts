@@ -103,6 +103,7 @@ import { startPlanningReminderScheduler, stopPlanningReminderScheduler } from '.
 import { startCuaCdnChecks } from './lib/computer-use-cdn-runtime'
 import { getConfigDir } from './lib/config-paths'
 import { startPlanningNativeSyncCoordinator, stopPlanningNativeSyncCoordinator } from './lib/planning-native-sync-coordinator'
+import { recoverPendingMemoryArchives } from './lib/memory-service'
 import { feishuBridgeManager } from './lib/feishu-bridge-manager'
 import { getFeishuMultiBotConfig } from './lib/feishu-config'
 import { stopFeishuSyncSleepBlocker, syncFeishuSyncSleepBlocker } from './lib/feishu-sleep-blocker'
@@ -776,6 +777,17 @@ async function bootstrap(): Promise<void> {
 
   // 变更请求追踪：同步已有绑定并开始轮询 PR 状态。
   safeRun('initChangeRequestService', initChangeRequestService)
+
+  // 续跑崩溃遗留的记忆主题归档 journal，避免索引仍引用已移动的正文。
+  safeRun('recoverPendingMemoryArchives', () => {
+    const result = recoverPendingMemoryArchives()
+    if (result.recovered.length > 0) {
+      console.log(`[记忆] 启动续跑归档 journal：${result.recovered.join('、')}`)
+    }
+    if (result.skipped.length > 0) {
+      console.warn(`[记忆] 仍有未处理的归档 journal：${result.skipped.join('、')}`)
+    }
+  })
 
   // 飞书实时同步开启时，默认阻止系统自动休眠，保证远程群内继续可用。
   safeRun('syncFeishuSyncSleepBlocker', () => syncFeishuSyncSleepBlocker(getSettings()))

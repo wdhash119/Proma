@@ -200,6 +200,8 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     defaultWin: 'Ctrl+Shift+T',
     category: 'global',
     global: true,
+    // 系统占用全局组合时，仍允许应用内 Ctrl/Cmd+Shift+T 触发快速捕获。
+    localFallback: true,
   },
   {
     id: 'quick-task',

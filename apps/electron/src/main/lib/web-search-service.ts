@@ -10,6 +10,8 @@
  * - 详情要留在来源页上，因此不做二次抓取（那是 WebFetch 的职责）。
  */
 
+import { decodeHtmlEntities } from './html-entities'
+import { readBoundedBody } from './response-body-reader'
 import { normalizeFetchUrl } from './web-fetch-service'
 
 const SEARCH_TIMEOUT_MS = 15_000
@@ -49,21 +51,7 @@ export interface WebSearchOptions {
 }
 
 function decodeEntities(input: string): string {
-  const named: Record<string, string> = {
-    amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'", '#x27': "'",
-    hellip: '…', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘',
-  }
-  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (match, body: string) => {
-    if (body.startsWith('#x') || body.startsWith('#X')) {
-      const code = Number.parseInt(body.slice(2), 16)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
-    }
-    if (body.startsWith('#')) {
-      const code = Number.parseInt(body.slice(1), 10)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
-    }
-    return named[body.toLowerCase()] ?? match
-  })
+  return decodeHtmlEntities(input)
 }
 
 function stripTags(input: string): string {
@@ -124,7 +112,12 @@ export function parseDuckDuckGoHtml(html: string, count: number): WebSearchItem[
   return results
 }
 
-async function defaultFetcher(url: string, signal?: AbortSignal): Promise<string> {
+/** 默认抓取实现；导出供测试注入已取消 signal 与大体积流。 */
+export async function defaultFetcher(url: string, signal?: AbortSignal): Promise<string> {
+  // 调用方传入的 signal 可能已经 aborted，此时 addEventListener 不会再触发，
+  // 必须在发起 fetch 前直接早退，避免搜索照常下载。
+  if (signal?.aborted) throw new Error('检索已取消')
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS)
   const onAbort = (): void => controller.abort()
@@ -142,8 +135,9 @@ async function defaultFetcher(url: string, signal?: AbortSignal): Promise<string
     if (!response.ok) {
       throw new Error(`搜索服务返回 HTTP ${response.status}`)
     }
-    const buffer = await response.arrayBuffer()
-    return new TextDecoder('utf-8').decode(buffer.slice(0, MAX_RESPONSE_BYTES))
+    // 边读边停：超过 2 MiB 立即切尾并取消 reader，不再完整缓冲整页。
+    const body = await readBoundedBody(response, MAX_RESPONSE_BYTES)
+    return new TextDecoder('utf-8').decode(body.bytes)
   } finally {
     clearTimeout(timeout)
     signal?.removeEventListener('abort', onAbort)

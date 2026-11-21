@@ -11,6 +11,8 @@
  * 纯函数、无依赖，可直接在 main 进程与测试中运行。
  */
 
+import { decodeHtmlEntities } from './html-entities'
+
 /** 内容完全丢弃的标签。 */
 const DROP_WITH_CONTENT = [
   'script', 'style', 'noscript', 'svg', 'iframe', 'template', 'canvas', 'object', 'embed',
@@ -30,21 +32,7 @@ const INLINE_MARKERS: Record<string, [string, string]> = {
 }
 
 function decodeEntities(input: string): string {
-  const named: Record<string, string> = {
-    amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'",
-    hellip: '…', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', middot: '·',
-  }
-  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (match, body: string) => {
-    if (body.startsWith('#x') || body.startsWith('#X')) {
-      const code = Number.parseInt(body.slice(2), 16)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
-    }
-    if (body.startsWith('#')) {
-      const code = Number.parseInt(body.slice(1), 10)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
-    }
-    return named[body.toLowerCase()] ?? match
-  })
+  return decodeHtmlEntities(input)
 }
 
 function stripTags(input: string): string {

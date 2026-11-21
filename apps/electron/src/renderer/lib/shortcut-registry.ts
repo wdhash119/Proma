@@ -240,6 +240,15 @@ export function updateShortcutOverrides(overrides: ShortcutOverrides): void {
 }
 
 /**
+ * 测试/诊断：某快捷键当前是否进入渲染进程 keydown 分发缓存。
+ *
+ * 声明 `localFallback` 的全局快捷键应在缓存中；纯全局快捷键不应重复分发。
+ */
+export function isShortcutDispatchedLocally(id: string): boolean {
+  return parsedCache.has(id)
+}
+
+/**
  * 获取某快捷键当前生效的 accelerator 字符串
  *
  * 返回值含义：

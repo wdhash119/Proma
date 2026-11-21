@@ -39,6 +39,22 @@ export interface MemorySearchResultItem {
   score: number
 }
 
+/** 恢复历史版本的请求；expectedCurrentRevision 用于拒绝并发覆盖。 */
+export interface MemoryRestoreRevisionInput {
+  target: string
+  id: string
+  /** 调用方读取正文时拿到的 revision；与恢复前当前正文不一致即拒绝。 */
+  expectedCurrentRevision: string
+  workspaceSlug?: string
+}
+
+export interface MemoryRestoreRevisionResult {
+  target: string
+  revision: string
+  chars: number
+  snapshotId?: string
+}
+
 export const MEMORY_IPC_CHANNELS = {
   /** 列出全局画像与当前工作区的记忆目标 */
   LIST_TARGETS: 'memory:list-targets',

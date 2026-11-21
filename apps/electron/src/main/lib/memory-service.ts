@@ -24,9 +24,9 @@ import {
   rmdirSync,
   unlinkSync,
 } from 'node:fs'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { getConfigDir } from './config-paths'
-import { getWorkspaceAutoMemoryDir } from './agent-workspace-manager'
+import { getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspace-manager'
 import { writeTextFileAtomic } from './safe-file'
 
 /** 记忆目标层级：全局画像、项目索引、项目主题文件。 */
@@ -43,6 +43,10 @@ const MAX_SEARCH_HITS = 40
 export const MAX_MEMORY_FILE_BYTES = 512 * 1024
 /** 归档目录名；与主题文件同层，但不参与主题枚举。 */
 const ARCHIVE_DIR_NAME = '.archive'
+/** 归档 journal 目录名；崩溃后续跑用，独立于归档正文目录。 */
+const ARCHIVE_JOURNAL_DIR_NAME = '.archive-journal'
+/** 历史快照 ID 的文件名模式：`<target 前缀><毫秒时间戳>__<8 位内容哈希>`。 */
+const REVISION_ID_SUFFIX_PATTERN = /^\d+__[0-9a-f]{8}$/
 /** 全局画像预算：常驻每轮上下文，必须可一眼扫完。 */
 export const PROFILE_MAX_CHARS = 5000
 export const PROFILE_MAX_FACTS = 100
@@ -385,6 +389,20 @@ function revisionPrefix(target: string): string {
   return `${slugifyTarget(target)}__`
 }
 
+/**
+ * 校验历史快照 ID 是否属于指定目标。
+ *
+ * ID 会参与文件名拼接，因此必须限制为目标前缀 + 时间戳 + 哈希，
+ * 并显式拒绝路径分隔符，避免 `../` 之类的穿越读取。
+ */
+export function isValidMemoryRevisionId(target: string, id: string): boolean {
+  if (!id || id.length > 200) return false
+  if (id.includes('/') || id.includes('\\') || id.includes('\0')) return false
+  const prefix = revisionPrefix(target)
+  if (!id.startsWith(prefix)) return false
+  return REVISION_ID_SUFFIX_PATTERN.test(id.slice(prefix.length))
+}
+
 function snapshotMemory(filePath: string, target: string, content: string, summary: string): string | undefined {
   if (!content.trim()) return undefined
   const dir = revisionsDir(filePath)
@@ -413,12 +431,30 @@ function pruneRevisions(dir: string, target: string): void {
 }
 
 function readSnapshot(filePath: string, target: string, id: string): { content: string; summary: string; createdAt: number } | null {
+  if (!isValidMemoryRevisionId(target, id)) return null
   const dir = revisionsDir(filePath)
-  const fullPath = join(dir, `${id}.json`)
-  if (!existsSync(fullPath)) return null
+  const fullPath = resolve(dir, `${id}.json`)
+  // 双保险：即使文件名校验被绕过，解析后的绝对路径也必须仍位于快照目录内。
+  if (dirname(fullPath) !== resolve(dir)) return null
+  let stats: ReturnType<typeof lstatSync>
   try {
-    const parsed = JSON.parse(readFileSync(fullPath, 'utf8')) as { content?: unknown; summary?: unknown; createdAt?: unknown }
+    stats = lstatSync(fullPath)
+  } catch {
+    return null
+  }
+  // 快照必须是普通文件；符号链接可能把读取引向任意 JSON。
+  if (stats.isSymbolicLink() || !stats.isFile()) return null
+  try {
+    const parsed = JSON.parse(readFileSync(fullPath, 'utf8')) as {
+      id?: unknown
+      target?: unknown
+      content?: unknown
+      summary?: unknown
+      createdAt?: unknown
+    }
     if (typeof parsed.content !== 'string') return null
+    // 快照必须与请求的目标、ID 一致，避免跨目标恢复或伪造文件名。
+    if (parsed.id !== id || parsed.target !== target) return null
     return {
       content: parsed.content,
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
@@ -462,14 +498,32 @@ export function readMemoryRevision(target: string, id: string, workspaceSlug?: s
   return snapshot ? { id, ...snapshot } : null
 }
 
-/** 恢复到指定历史版本；当前内容会先存成新快照，恢复动作本身也可回退。 */
-export function restoreMemoryRevision(target: string, id: string, workspaceSlug?: string): MemoryUpdateResult {
+/**
+ * 恢复到指定历史版本。
+ *
+ * `expectedCurrentRevision` 必须是调用方刚读到的当前正文 revision：
+ * 恢复前若 Agent 或另一个窗口又写了新内容，这里直接拒绝，避免静默覆盖。
+ * 当前内容会先存成新快照，恢复动作本身也可回退。
+ */
+export function restoreMemoryRevision(
+  target: string,
+  id: string,
+  expectedCurrentRevision: string,
+  workspaceSlug?: string,
+): MemoryUpdateResult {
   const { filePath } = resolveTargetPath(target, workspaceSlug)
+  if (!isValidMemoryRevisionId(target, id)) throw new MemoryError(`非法的历史版本 ID：${id}`)
+  assertRegularMemoryFile(filePath)
   const snapshot = readSnapshot(filePath, target, id)
   if (!snapshot) throw new MemoryError(`历史版本不存在：${id}`)
   const current = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
+  const currentRevision = hashContent(current)
+  if (expectedCurrentRevision !== currentRevision) {
+    throw new MemoryError(`记忆已被修改，请刷新后再恢复（当前 revision: ${currentRevision}）`)
+  }
+  assertWritableMemoryContent(target, snapshot.content)
   const snapshotId = snapshotMemory(filePath, target, current, `恢复到 ${id} 之前的自动快照`)
-  writeTextFileAtomic(filePath, snapshot.content)
+  writeMemoryFileText(filePath, snapshot.content)
   return {
     target,
     revision: hashContent(snapshot.content),
@@ -486,6 +540,7 @@ export function restoreMemoryRevision(target: string, id: string, workspaceSlug?
  */
 export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): MemoryUpdateResult {
   const { filePath } = resolveTargetPath(input.target, workspaceSlug)
+  assertRegularMemoryFile(filePath)
   const current = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
   const currentRevision = hashContent(current)
   if (input.revision !== currentRevision) {
@@ -503,8 +558,10 @@ export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): 
     return { target: input.target, revision: currentRevision, chars: countChars(current) }
   }
 
+  // 统一在服务层校验体积与全局画像预算，覆盖 content 与 operations 两条写入路径。
+  assertWritableMemoryContent(input.target, next)
   const snapshotId = snapshotMemory(filePath, input.target, current, input.summary)
-  writeTextFileAtomic(filePath, next)
+  writeMemoryFileText(filePath, next)
   return {
     target: input.target,
     revision: hashContent(next),
@@ -614,6 +671,17 @@ export function writeMemoryFileText(filePath: string, content: string): void {
   writeTextFileAtomic(filePath, content)
 }
 
+/**
+ * 写入前的统一预算校验：所有记忆正文都必须满足单文件字节上限；
+ * 全局画像额外受常驻上下文预算约束（100 条事实 / 5000 UTF-16 码元）。
+ */
+function assertWritableMemoryContent(target: string, content: string): void {
+  if (Buffer.byteLength(content, 'utf8') > MAX_MEMORY_FILE_BYTES) {
+    throw new MemoryError(`记忆文件超过 512 KiB，请先按主题拆分：${target}`)
+  }
+  if (target === GLOBAL_PROFILE_TARGET) assertProfileBudget(content)
+}
+
 /** 统计正文里 `- ` 事实条目数，供全局画像预算校验。 */
 export function countProfileFacts(content: string): number {
   return content.split('\n').filter((line) => /^\s*-\s+\S/.test(line)).length
@@ -650,6 +718,150 @@ function createArchiveDirectory(archiveRoot: string, now: number): string {
     }
   }
   throw new MemoryError(`无法创建归档目录：${archiveRoot}`)
+}
+
+/**
+ * 归档 journal：在移动正文之前落盘，记录恢复索引所需的全部信息。
+ * 崩溃后启动期据此续跑；journal 本身走 safe-file 原子写。
+ */
+interface MemoryArchiveJournal {
+  version: 1
+  target: string
+  themePath: string
+  archivedTo: string
+  themeRevision: string
+  indexRevision: string
+  indexContent: string
+}
+
+function archiveJournalPath(projectDir: string, target: string): string {
+  // 用 URL 编码保持文件名唯一（中文主题不会都退化成同一个下划线），
+  // target 已在校验阶段拒绝路径分隔符。
+  return join(projectDir, ARCHIVE_JOURNAL_DIR_NAME, `${encodeURIComponent(target)}.json`)
+}
+
+function writeArchiveJournal(projectDir: string, journal: MemoryArchiveJournal): void {
+  const journalPath = archiveJournalPath(projectDir, journal.target)
+  mkdirSync(dirname(journalPath), { recursive: true })
+  writeTextFileAtomic(journalPath, JSON.stringify(journal, null, 2))
+}
+
+function clearArchiveJournal(projectDir: string, target: string): void {
+  try {
+    unlinkSync(archiveJournalPath(projectDir, target))
+  } catch {
+    // journal 已不存在或清理失败：启动期会按当前文件状态幂等处理。
+  }
+}
+
+/** journal 来自磁盘，恢复前必须重新校验目标与归档路径边界。 */
+function isValidArchiveJournal(input: unknown, projectDir: string): input is MemoryArchiveJournal {
+  if (!input || typeof input !== 'object') return false
+  const journal = input as Partial<MemoryArchiveJournal>
+  if (journal.version !== 1) return false
+  const target = journal.target
+  if (
+    typeof target !== 'string'
+    || !target.endsWith('.md')
+    || target.startsWith('.')
+    || target.includes('/')
+    || target.includes('\\')
+  ) {
+    return false
+  }
+  if (journal.themePath !== join(projectDir, target)) return false
+  if (typeof journal.indexRevision !== 'string' || typeof journal.indexContent !== 'string') return false
+  if (typeof journal.themeRevision !== 'string') return false
+  if (typeof journal.archivedTo !== 'string') return false
+  const archiveRoot = join(projectDir, ARCHIVE_DIR_NAME)
+  const relativeToArchive = relative(archiveRoot, journal.archivedTo)
+  if (!relativeToArchive || relativeToArchive.startsWith('..') || isAbsolute(relativeToArchive)) return false
+  if (basename(journal.archivedTo) !== target) return false
+  return true
+}
+
+/**
+ * 续跑单个 journal：按文件现状判断归档停在哪一步。
+ *
+ * - 主题仍在原位：移动尚未发生（或已回滚），保持原状并清掉 journal；
+ * - 主题已移走且归档副本存在：补写索引（仅当索引仍停在原 revision）；
+ * - 两者都不存在：无法自动恢复，保留 journal 供人工处理。
+ */
+function resumeArchiveJournal(slug: string, projectDir: string, journal: MemoryArchiveJournal): boolean {
+  const themeExists = existsSync(journal.themePath)
+  const archivedExists = existsSync(journal.archivedTo)
+
+  if (!themeExists && archivedExists) {
+    const indexFilePath = join(projectDir, PROJECT_INDEX_TARGET)
+    const currentIndex = readMemoryFileAt(indexFilePath)
+    if (currentIndex.revision === journal.indexRevision) {
+      updateMemory({
+        target: PROJECT_INDEX_TARGET,
+        revision: journal.indexRevision,
+        summary: `归档 ${journal.target} 后同步移除索引入口（崩溃恢复）`,
+        content: journal.indexContent,
+      }, slug)
+      console.log(`[记忆] 已续跑未完成的主题归档：${journal.target}`)
+    } else {
+      console.warn(`[记忆] 归档 ${journal.target} 的索引已被外部修改，保留当前索引`)
+    }
+    return true
+  }
+
+  if (themeExists) {
+    // 正文尚未移动；索引即使被改也不擅自覆盖用户内容。
+    console.log(`[记忆] 主题 ${journal.target} 仍在原位，归档未完成移动，保持现状`)
+    return true
+  }
+
+  console.warn(`[记忆] 主题 ${journal.target} 的正文与归档副本均不存在，保留 journal 待人工处理`)
+  return false
+}
+
+export interface MemoryArchiveRecoveryResult {
+  /** 已自动处理并清理 journal 的目标。 */
+  recovered: string[]
+  /** 无法安全处理、保留 journal 的项目。 */
+  skipped: string[]
+}
+
+/**
+ * 启动期续跑所有遗留的归档 journal。
+ *
+ * 默认遍历已登记的工作区；测试可显式传入 slug 列表并使用注入的记忆根目录。
+ */
+export function recoverPendingMemoryArchives(workspaceSlugs?: string[]): MemoryArchiveRecoveryResult {
+  const slugs = workspaceSlugs ?? listAgentWorkspaces().map((workspace) => workspace.slug)
+  const recovered: string[] = []
+  const skipped: string[] = []
+
+  for (const slug of slugs) {
+    const projectDir = projectMemoryDir(slug)
+    const journalDir = join(projectDir, ARCHIVE_JOURNAL_DIR_NAME)
+    if (!existsSync(journalDir)) continue
+    for (const name of readdirSync(journalDir).filter((entry) => entry.endsWith('.json'))) {
+      const journalPath = join(journalDir, name)
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(journalPath, 'utf8'))
+        if (!isValidArchiveJournal(parsed, projectDir)) {
+          console.warn(`[记忆] 忽略非法的归档 journal：${journalPath}`)
+          skipped.push(`${slug}:${name}`)
+          continue
+        }
+        if (resumeArchiveJournal(slug, projectDir, parsed)) {
+          unlinkSync(journalPath)
+          recovered.push(`${slug}:${parsed.target}`)
+        } else {
+          skipped.push(`${slug}:${name}`)
+        }
+      } catch (error) {
+        console.warn(`[记忆] 处理归档 journal 失败：${journalPath}`, error)
+        skipped.push(`${slug}:${name}`)
+      }
+    }
+  }
+
+  return { recovered, skipped }
 }
 
 /**
@@ -697,6 +909,18 @@ export function archiveMemoryTheme(
   mkdirSync(archiveRoot, { recursive: true })
   const archivedTo = join(createArchiveDirectory(archiveRoot, Date.now()), target)
 
+  // 先落 journal 再移动正文：即使 rename 与索引更新之间崩溃，
+  // 启动期也能据 journal 续跑，不会留下「索引仍引用、正文已移走」的悬空状态。
+  writeArchiveJournal(projectDir, {
+    version: 1,
+    target,
+    themePath,
+    archivedTo,
+    themeRevision: revision,
+    indexRevision,
+    indexContent,
+  })
+
   renameSync(themePath, archivedTo)
   let update: MemoryUpdateResult
   try {
@@ -711,11 +935,14 @@ export function archiveMemoryTheme(
     try {
       renameSync(archivedTo, themePath)
       rmdirSync(dirname(archivedTo))
+      clearArchiveJournal(projectDir, target)
     } catch {
-      // 回滚失败时保留归档副本：内容仍在 `.archive` 下，可人工恢复。
+      // 回滚失败时保留 journal 与归档副本：启动期会按现状续跑或提示人工恢复。
     }
     throw error
   }
+
+  clearArchiveJournal(projectDir, target)
 
   return {
     target,

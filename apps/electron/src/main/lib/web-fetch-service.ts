@@ -9,6 +9,7 @@
  */
 
 import { extractHtmlTitle, htmlToMarkdown } from './html-to-markdown'
+import { decodeResponseBody, readBoundedBody } from './response-body-reader'
 
 const DEFAULT_TIMEOUT_MS = 20_000
 const MAX_BYTES = 3 * 1024 * 1024
@@ -123,11 +124,9 @@ export async function fetchPageAsMarkdown(input: string, options: WebFetchOption
       }
     }
 
-    const buffer = await readBounded(response)
-    if (buffer.truncatedBySize) {
-      // 体积超限时仍然解析已读到的部分，并在正文末尾标注。
-    }
-    const raw = buffer.text
+    // 体积超限时仍然解析已读到的部分，并在结果里标注截断。
+    const buffer = await readBoundedBody(response, MAX_BYTES)
+    const raw = decodeResponseBody(buffer.bytes, response.headers.get('content-type'))
     const maxChars = options.maxChars ?? MAX_CONTENT_CHARS
     const isHtml = isHtmlContentType(contentType)
     const title = isHtml ? extractHtmlTitle(raw) : null
@@ -169,46 +168,6 @@ export async function fetchPageAsMarkdown(input: string, options: WebFetchOption
   } finally {
     clearTimeout(timeout)
     options.signal?.removeEventListener('abort', onAbort)
-  }
-}
-
-/** 边读边累计，超过上限就停止，避免大文件把内存吃满。 */
-async function readBounded(response: Response): Promise<{ text: string; truncatedBySize: boolean }> {
-  const body = response.body
-  if (!body) return { text: await response.text(), truncatedBySize: false }
-
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let truncatedBySize = false
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (!value) continue
-    total += value.byteLength
-    if (total > MAX_BYTES) {
-      const remaining = MAX_BYTES - (total - value.byteLength)
-      if (remaining > 0) chunks.push(value.subarray(0, remaining))
-      truncatedBySize = true
-      await reader.cancel().catch(() => undefined)
-      break
-    }
-    chunks.push(value)
-  }
-
-  const merged = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0))
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-
-  const charset = /charset=([\w-]+)/i.exec(response.headers.get('content-type') ?? '')?.[1]
-  try {
-    return { text: new TextDecoder(charset ?? 'utf-8').decode(merged), truncatedBySize }
-  } catch {
-    return { text: new TextDecoder('utf-8').decode(merged), truncatedBySize }
   }
 }
 

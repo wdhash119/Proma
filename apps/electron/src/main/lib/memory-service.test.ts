@@ -169,7 +169,12 @@ describe('写入与版本历史', () => {
 
     const history = memoryService.listMemoryHistory(memoryService.GLOBAL_PROFILE_TARGET)
     const restoreTarget = history[0]!
-    memoryService.restoreMemoryRevision(memoryService.GLOBAL_PROFILE_TARGET, restoreTarget.id)
+    const beforeRestore = memoryService.readMemoryDocument(memoryService.GLOBAL_PROFILE_TARGET)
+    memoryService.restoreMemoryRevision(
+      memoryService.GLOBAL_PROFILE_TARGET,
+      restoreTarget.id,
+      beforeRestore.revision,
+    )
 
     const restored = memoryService.readMemoryDocument(memoryService.GLOBAL_PROFILE_TARGET)
     expect(restored.content).toBe('- 事实一\n')

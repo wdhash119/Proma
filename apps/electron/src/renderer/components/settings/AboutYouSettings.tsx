@@ -85,9 +85,19 @@ export function AboutYouSettings(): React.ReactElement {
   }, [workspaceSlug])
 
   const handleRestore = React.useCallback(async (revision: MemoryRevisionItem) => {
+    if (!document || document.target !== revision.target) {
+      toast.error('当前正文尚未加载完成，请稍后重试')
+      return
+    }
     setRestoringId(revision.id)
     try {
-      await window.electronAPI.restoreMemoryRevision(revision.target, revision.id, workspaceSlug)
+      // 带上读取时的 revision：若期间 Agent 又写了新内容，主进程会拒绝静默覆盖。
+      await window.electronAPI.restoreMemoryRevision({
+        target: revision.target,
+        id: revision.id,
+        expectedCurrentRevision: document.revision,
+        workspaceSlug,
+      })
       toast.success('已恢复到该历史版本')
       refresh()
     } catch (error) {
@@ -95,7 +105,7 @@ export function AboutYouSettings(): React.ReactElement {
     } finally {
       setRestoringId(null)
     }
-  }, [refresh, workspaceSlug])
+  }, [document, refresh, workspaceSlug])
 
   const budget = document?.budgetChars
   const overBudget = !!budget && document.chars > budget

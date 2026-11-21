@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { formatWebSearchOutcome, parseDuckDuckGoHtml, resolveDuckDuckGoHref, searchWeb } from './web-search-service'
+import { defaultFetcher, formatWebSearchOutcome, parseDuckDuckGoHtml, resolveDuckDuckGoHref, searchWeb } from './web-search-service'
 
 /** 构造一段与 DuckDuckGo HTML 结果页结构一致的最小样例。 */
 function ddgPage(items: Array<{ title: string; href: string; snippet?: string }>): string {
@@ -115,6 +115,59 @@ describe('检索编排', () => {
   test('Given 空查询或超长查询 When 检索 Then 直接拒绝', async () => {
     expect((await searchWeb('   ')).ok).toBe(false)
     expect((await searchWeb('x'.repeat(129))).ok).toBe(false)
+  })
+})
+
+describe('默认抓取实现', () => {
+  test('Given 超过 2MiB 的响应 When 抓取 Then 保留量受限且取消剩余下载', async () => {
+    const maxBytes = 2 * 1024 * 1024
+    let canceled = false
+    let sent = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 40) {
+          controller.close()
+          return
+        }
+        sent += 1
+        controller.enqueue(new Uint8Array(64 * 1024).fill(0x61))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    })) as unknown as typeof fetch
+
+    try {
+      const html = await defaultFetcher('https://example.com/search')
+      expect(html.length).toBe(maxBytes)
+      expect(canceled).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('Given 已经 aborted 的 signal When 抓取 Then 不发起 fetch', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    let called = false
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => {
+      called = true
+      return new Response('<html></html>', { status: 200 })
+    }) as unknown as typeof fetch
+
+    try {
+      await expect(defaultFetcher('https://example.com/search', controller.signal))
+        .rejects.toThrow('检索已取消')
+      expect(called).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
 

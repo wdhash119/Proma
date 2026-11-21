@@ -207,6 +207,8 @@ import type {
   MemoryDocumentPayload,
   MemoryRevisionItem,
   MemorySearchResultItem,
+  MemoryRestoreRevisionInput,
+  MemoryRestoreRevisionResult,
 } from '@proma/shared'
 
 /**
@@ -1401,7 +1403,7 @@ export interface ElectronAPI {
   searchMemory: (query: string, workspaceSlug?: string, limit?: number) => Promise<MemorySearchResultItem[]>
   listMemoryHistory: (target: string, workspaceSlug?: string, limit?: number) => Promise<MemoryRevisionItem[]>
   readMemoryRevision: (target: string, id: string, workspaceSlug?: string) => Promise<{ id: string; content: string; summary: string; createdAt: number } | null>
-  restoreMemoryRevision: (target: string, id: string, workspaceSlug?: string) => Promise<{ target: string; revision: string; chars: number; snapshotId?: string }>
+  restoreMemoryRevision: (input: MemoryRestoreRevisionInput) => Promise<MemoryRestoreRevisionResult>
 }
 
 /**
@@ -3173,8 +3175,8 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke(MEMORY_IPC_CHANNELS.LIST_HISTORY, target, workspaceSlug, limit),
   readMemoryRevision: (target: string, id: string, workspaceSlug?: string) =>
     ipcRenderer.invoke(MEMORY_IPC_CHANNELS.READ_REVISION, target, id, workspaceSlug),
-  restoreMemoryRevision: (target: string, id: string, workspaceSlug?: string) =>
-    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.RESTORE_REVISION, target, id, workspaceSlug),
+  restoreMemoryRevision: (input: MemoryRestoreRevisionInput) =>
+    ipcRenderer.invoke(MEMORY_IPC_CHANNELS.RESTORE_REVISION, input),
 }
 
 // 将 API 暴露到渲染进程的 window 对象上

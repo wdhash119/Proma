@@ -69,19 +69,6 @@ export function QuickTaskApp(): React.ReactElement {
             return
           }
         }
-      } else {
-        // Chat 模式读取 localStorage 中的 selectedModel
-        const raw = localStorage.getItem('proma-selected-model')
-        if (raw) {
-          try {
-            const selected = JSON.parse(raw) as { channelId: string; modelId: string }
-            const channel = channels.find((c) => c.id === selected.channelId)
-            if (channel) {
-              setModelInfo({ channelName: channel.name, modelId: selected.modelId })
-              return
-            }
-          } catch { /* 忽略解析错误 */ }
-        }
       }
       setModelInfo(null)
     } catch {
@@ -156,7 +143,7 @@ export function QuickTaskApp(): React.ReactElement {
     for (const file of files) {
       try {
         if (file.size > MAX_ATTACHMENT_SIZE) {
-          const sourcePath = mode === 'agent' ? window.electronAPI.getPathForFile(file) : ''
+          const sourcePath = window.electronAPI.getPathForFile(file)
           if (!sourcePath) {
             rejectedLargeFiles.push(file.name)
             continue
@@ -321,7 +308,7 @@ export function QuickTaskApp(): React.ReactElement {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={mode === 'agent' ? '向 Proma 描述你的任务，Enter 发送...' : '向 Proma 发送消息，Enter 发送...'}
+            placeholder="向 Proma 描述你的任务，Enter 发送..."
             className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50 leading-relaxed"
             style={{ minHeight: '60px', maxHeight: '160px' }}
             disabled={isSubmitting}

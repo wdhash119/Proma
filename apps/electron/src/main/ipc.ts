@@ -10,7 +10,7 @@ import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statS
 import { realpath, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -83,10 +83,12 @@ import type {
   PromaPermissionMode,
   AskUserResponse,
   ExitPlanModeResponse,
-  SystemPromptConfig,
-  SystemPrompt,
-  SystemPromptCreateInput,
-  SystemPromptUpdateInput,
+  PersonaConfig,
+  Persona,
+  PersonaCreateInput,
+  PersonaUpdateInput,
+  PersonaImportResult,
+  PersonaExportResult,
   ChatToolInfo,
   ChatToolState,
   ChatToolMeta,
@@ -215,7 +217,6 @@ import {
   truncateMessagesFrom,
   updateContextDividers,
   autoArchiveConversations,
-  searchConversationMessages,
   searchConversationSessionMessages,
 } from './lib/conversation-manager'
 import { sendMessage, stopGeneration, generateTitle } from './lib/chat-service'
@@ -226,7 +227,6 @@ import {
   openFileDialog,
   openFileOrFolderDialog,
 } from './lib/attachment-service'
-import { extractTextFromAttachment } from './lib/document-parser'
 import { getUserProfile, updateUserProfile } from './lib/user-profile-service'
 import { getSettings, updateSettings } from './lib/settings-service'
 import { promaSelfController } from './lib/proma-self-controller'
@@ -443,15 +443,16 @@ function stopWorkspaceMemoryWatch(webContentsId: number, workspaceSlug: string):
 }
 
 import { getAllToolInfos } from './lib/chat-tool-registry'
-import { updateToolState, addCustomTool, deleteCustomTool } from './lib/chat-tool-config'
+import { updateToolState } from './lib/chat-tool-config'
 import {
-  getSystemPromptConfig,
-  createSystemPrompt,
-  updateSystemPrompt,
-  deleteSystemPrompt,
-  updateAppendSetting,
-  setDefaultPrompt,
-} from './lib/system-prompt-manager'
+  getPersonaConfig,
+  createPersona,
+  updatePersona,
+  deletePersona,
+  setDefaultPersona,
+  importPersonaMarkdown,
+  exportPersonaMarkdown,
+} from './lib/persona-manager'
 import {
   getLatestRelease,
   listReleases as listGitHubReleases,
@@ -1996,31 +1997,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 切换对话归档状态
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.TOGGLE_ARCHIVE,
-    async (_, id: string): Promise<ConversationMeta> => {
-      const conversations = listConversations()
-      const current = conversations.find((c) => c.id === id)
-      if (!current) throw new Error(`对话不存在: ${id}`)
-      const newArchived = !current.archived
-      // 归档时自动取消置顶
-      const updates: Partial<ConversationMeta> = { archived: newArchived }
-      if (newArchived && current.pinned) {
-        updates.pinned = false
-      }
-      return updateConversationMeta(id, updates)
-    }
-  )
-
-  // 搜索所有对话消息内容
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.SEARCH_MESSAGES,
-    async (_, query: string) => {
-      return searchConversationMessages(query)
-    }
-  )
-
   // 搜索当前对话的完整持久化历史（只返回命中元数据，避免传输整份 JSONL）
   ipcMain.handle(
     CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES,
@@ -2187,14 +2163,6 @@ export function registerIpcHandlers(): void {
     CHAT_IPC_CHANNELS.OPEN_FILE_DIALOG,
     async (): Promise<FileDialogResult> => {
       return openFileDialog()
-    }
-  )
-
-  // 提取附件文档的文本内容
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.EXTRACT_ATTACHMENT_TEXT,
-    async (_, localPath: string): Promise<string> => {
-      return extractTextFromAttachment(localPath)
     }
   )
 
@@ -2740,6 +2708,14 @@ export function registerIpcHandlers(): void {
     async (_, id: string, channelId?: string, modelId?: string): Promise<AgentSessionMeta> => {
       // 模型切换允许在运行中提交；当前 query 继续使用启动时的模型，下一轮读取新配置。
       return updateAgentSessionMeta(id, { channelId, modelId })
+    }
+  )
+
+  // 更新 Agent 会话人设选择（下一轮生效；undefined 回退人设库默认）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPDATE_SESSION_PERSONA,
+    async (_, id: string, personaId?: string): Promise<AgentSessionMeta> => {
+      return updateAgentSessionMeta(id, { personaId })
     }
   )
 
@@ -3904,22 +3880,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 创建自定义工具
-  ipcMain.handle(
-    CHAT_TOOL_IPC_CHANNELS.CREATE_CUSTOM_TOOL,
-    async (_, meta: ChatToolMeta): Promise<void> => {
-      addCustomTool(meta)
-    }
-  )
-
-  // 删除自定义工具
-  ipcMain.handle(
-    CHAT_TOOL_IPC_CHANNELS.DELETE_CUSTOM_TOOL,
-    async (_, toolId: string): Promise<void> => {
-      deleteCustomTool(toolId)
-    }
-  )
-
   // ===== AskUserQuestion 交互式问答 =====
 
   // 响应 AskUser 请求
@@ -4967,53 +4927,61 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ===== 系统提示词管理 =====
+  // ===== 人设管理 =====
 
-  // 获取系统提示词配置
+  // 获取人设配置
   ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.GET_CONFIG,
-    async (): Promise<SystemPromptConfig> => {
-      return getSystemPromptConfig()
+    PERSONA_IPC_CHANNELS.GET_CONFIG,
+    async (): Promise<PersonaConfig> => {
+      return getPersonaConfig()
     }
   )
 
-  // 创建提示词
+  // 创建人设
   ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.CREATE,
-    async (_, input: SystemPromptCreateInput): Promise<SystemPrompt> => {
-      return createSystemPrompt(input)
+    PERSONA_IPC_CHANNELS.CREATE,
+    async (_, input: PersonaCreateInput): Promise<Persona> => {
+      return createPersona(input)
     }
   )
 
-  // 更新提示词
+  // 更新人设
   ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.UPDATE,
-    async (_, id: string, input: SystemPromptUpdateInput): Promise<SystemPrompt> => {
-      return updateSystemPrompt(id, input)
+    PERSONA_IPC_CHANNELS.UPDATE,
+    async (_, id: string, input: PersonaUpdateInput): Promise<Persona> => {
+      return updatePersona(id, input)
     }
   )
 
-  // 删除提示词
+  // 删除人设
   ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.DELETE,
+    PERSONA_IPC_CHANNELS.DELETE,
     async (_, id: string): Promise<void> => {
-      return deleteSystemPrompt(id)
+      return deletePersona(id)
     }
   )
 
-  // 更新追加日期时间和用户名开关
+  // 设置默认人设
   ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.UPDATE_APPEND_SETTING,
-    async (_, enabled: boolean): Promise<void> => {
-      return updateAppendSetting(enabled)
-    }
-  )
-
-  // 设置默认提示词
-  ipcMain.handle(
-    SYSTEM_PROMPT_IPC_CHANNELS.SET_DEFAULT,
+    PERSONA_IPC_CHANNELS.SET_DEFAULT,
     async (_, id: string | null): Promise<void> => {
-      return setDefaultPrompt(id)
+      return setDefaultPersona(id)
+    }
+  )
+
+  // 从 Markdown 文件导入人设
+  ipcMain.handle(
+    PERSONA_IPC_CHANNELS.IMPORT_MARKDOWN,
+    async (): Promise<PersonaImportResult> => {
+      return importPersonaMarkdown()
+    }
+  )
+
+  // 导出人设为 Markdown 文件
+  ipcMain.handle(
+    PERSONA_IPC_CHANNELS.EXPORT_MARKDOWN,
+    async (_, id: string): Promise<PersonaExportResult> => {
+      return exportPersonaMarkdown(id)
     }
   )
 

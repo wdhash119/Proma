@@ -779,6 +779,8 @@ export interface AgentSessionMeta {
   codexFastMode?: boolean
   /** 本会话的推理深度；未设置时兼容旧版全局思考设置。 */
   reasoningLevel?: AgentThinkingLevel
+  /** 本会话选择的人设 ID；未设置时使用人设配置的默认人设。 */
+  personaId?: string
   /** @deprecated 使用 reasoningLevel；保留以读取历史会话数据。 */
   openAIThinkingLevel?: AgentThinkingLevel
   /** 所属工作区 ID */
@@ -1857,6 +1859,7 @@ export const AGENT_IPC_CHANNELS = {
   UPDATE_TITLE: 'agent:update-title',
   /** 更新会话模型选择 */
   UPDATE_SESSION_MODEL: 'agent:update-session-model',
+  UPDATE_SESSION_PERSONA: 'agent:update-session-persona',
   /** 选择或清除当前会话的活动 worktree */
   SET_ACTIVE_WORKTREE: 'agent:set-active-worktree',
   /** 主进程通知 Renderer：Agent 主动切换了会话的活动 worktree */

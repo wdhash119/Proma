@@ -125,26 +125,6 @@ export interface ChatMessage {
 // ===== 对话相关 =====
 
 /**
- * 对话（包含消息列表，仅用于运行时）
- */
-export interface Conversation {
-  /** 对话唯一标识 */
-  id: string
-  /** 对话标题 */
-  title: string
-  /** 消息列表 */
-  messages: ChatMessage[]
-  /** 默认使用的模型 ID */
-  modelId?: string
-  /** 系统提示词 */
-  systemMessage?: string
-  /** 创建时间戳 */
-  createdAt: number
-  /** 更新时间戳 */
-  updatedAt: number
-}
-
-/**
  * 对话轻量索引项
  *
  * 存储在 ~/.proma/conversations.json 中，
@@ -200,15 +180,6 @@ export interface SessionMessageSearchResponse {
   queryTooLong: boolean
 }
 
-export interface MessageSearchResult extends SessionMessageSearchResult {
-  /** 对话 ID */
-  conversationId: string
-  /** 对话标题 */
-  conversationTitle: string
-  /** 是否已归档 */
-  archived?: boolean
-}
-
 // ===== 消息发送 =====
 
 /**
@@ -225,8 +196,10 @@ export interface ChatSendInput {
   channelId: string
   /** 模型 ID */
   modelId: string
-  /** 系统提示词（可选） */
+  /** 系统提示词（可选；问答链路传入人设正文） */
   systemMessage?: string
+  /** 人设示范对话（可选；作为静态 few-shot 前缀插在真实历史之前，不持久化） */
+  primerTurns?: import('./persona').PersonaPrimerTurn[]
   /** 上下文长度（轮数），'infinite' 表示全部包含 */
   contextLength?: number | 'infinite'
   /** 上下文分隔线对应的消息 ID 列表 */
@@ -415,16 +388,10 @@ export const CHAT_IPC_CHANNELS = {
   DELETE_ATTACHMENT: 'chat:delete-attachment',
   /** 打开文件选择对话框 */
   OPEN_FILE_DIALOG: 'chat:open-file-dialog',
-  /** 提取附件文档的文本内容 */
-  EXTRACT_ATTACHMENT_TEXT: 'chat:extract-attachment-text',
 
   // 置顶管理
   /** 切换对话置顶状态 */
   TOGGLE_PIN: 'chat:toggle-pin',
-  /** 切换对话归档状态 */
-  TOGGLE_ARCHIVE: 'chat:toggle-archive',
-  /** 搜索所有对话消息内容 */
-  SEARCH_MESSAGES: 'chat:search-messages',
   /** 搜索当前对话的完整消息历史（仅返回命中元数据） */
   SEARCH_SESSION_MESSAGES: 'chat:search-session-messages',
 

@@ -44,8 +44,10 @@ function segmentText(text: string): string[] {
  *
  * @example
  * ```tsx
- * const streamingContent = useAtomValue(streamingContentAtom)
- * const isStreaming = useAtomValue(streamingAtom)
+ * // 从 per-conversation 流式状态 Map 读取当前会话的内容与标志
+ * const streamState = useAtomValue(streamingStatesAtom).get(conversationId)
+ * const streamingContent = streamState?.content ?? ''
+ * const isStreaming = streamState?.streaming ?? false
  *
  * const { displayedContent } = useSmoothStream({
  *   content: streamingContent,

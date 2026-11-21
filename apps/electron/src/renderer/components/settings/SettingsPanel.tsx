@@ -17,7 +17,6 @@ import {
   Palette,
   Info,
   Globe,
-  BookOpen,
   Bot,
   GraduationCap,
   ArrowLeft,
@@ -61,7 +60,7 @@ import { GeneralSettings } from "./GeneralSettings";
 import { ProxySettings } from "./ProxySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AboutSettings } from "./AboutSettings";
-import { PromptSettings } from "./PromptSettings";
+import { PersonaSettings } from "./PersonaSettings";
 import { BotHubSettings } from "./BotHubSettings";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { VoiceInputSettings } from "./VoiceInputSettings";
@@ -93,7 +92,7 @@ const BASE_TABS: TabItem[] = [
   { id: "channels", label: "模型配置", icon: <Radio size={16} /> },
   COMPUTER_USE_TAB,
   { id: "vision-relay", label: "视觉助手", icon: <Eye size={16} /> },
-  { id: "prompts", label: "提示词管理", icon: <BookOpen size={16} /> },
+  { id: "personas", label: "人设管理", icon: <Bot size={16} /> },
   { id: "chat-history", label: "历史 Chat", icon: <Archive size={16} /> },
   { id: "about-you", label: "关于你", icon: <Sparkles size={16} /> },
   { id: "proxy", label: "代理设置", icon: <Globe size={16} /> },
@@ -139,8 +138,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <ComputerUseSettings />;
     case "vision-relay":
       return <VisionRelaySettings />;
-    case "prompts":
-      return <PromptSettings />;
+    case "personas":
+      return <PersonaSettings />;
     case "about-you":
       return <AboutYouSettings />
     case "chat-history":

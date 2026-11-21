@@ -197,7 +197,7 @@ export async function sendMessage(
   const {
     conversationId, userMessage, channelId,
     modelId, systemMessage, contextLength, contextDividers, attachments,
-    thinkingEnabled, thinkingLevel, enabledToolIds,
+    thinkingEnabled, thinkingLevel, enabledToolIds, primerTurns,
   } = input
 
   // 1. 查找渠道
@@ -255,6 +255,18 @@ export async function sendMessage(
   // 5. 过滤历史并提取文档附件文本
   const filteredHistory = filterHistory(fullHistory, contextDividers, contextLength)
   const enrichedHistory = await enrichHistoryWithDocuments(filteredHistory)
+  // 人设示范轮：静态 few-shot 前缀，插在真实历史之前；纯请求期变换，不写入 JSONL。
+  const historyWithPrimer: ChatMessage[] = primerTurns && primerTurns.length > 0
+    ? [
+        ...primerTurns.map((turn, index): ChatMessage => ({
+          id: `persona-primer-${index}`,
+          role: turn.role,
+          content: turn.content,
+          createdAt: 0,
+        })),
+        ...enrichedHistory,
+      ]
+    : enrichedHistory
   const enrichedUserMessage = await enrichMessageWithDocuments(userMessage, attachments)
 
   // 6. 创建 AbortController
@@ -330,7 +342,7 @@ export async function sendMessage(
         baseUrl: channel.baseUrl,
         apiKey,
         modelId,
-        history: enrichedHistory,
+        history: historyWithPrimer,
         userMessage: enrichedUserMessage,
         systemMessage: effectiveSystemMessage,
         attachments,
@@ -401,7 +413,7 @@ export async function sendMessage(
         baseUrl: channel.baseUrl,
         apiKey,
         modelId,
-        history: enrichedHistory,
+        history: historyWithPrimer,
         userMessage: enrichedUserMessage,
         systemMessage: effectiveSystemMessage,
         attachments,

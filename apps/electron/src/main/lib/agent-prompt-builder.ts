@@ -4,6 +4,7 @@
  */
 
 import type { PromaPermissionMode, SessionWorkbenchLayout } from '@proma/shared'
+import { buildPersonaPromptSection, type Persona } from '@proma/shared'
 import { lstatSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -49,6 +50,8 @@ interface SystemPromptContext {
   memoryRefreshOpportunity?: { memoryUpdatedAt?: number; newestSessionAt: number; newerSessionCount: number }
   /** 项目规则维护上下文；缺失时跳过首次维护与项目地图行动段。 */
   instructionContext?: ProjectInstructionContext
+  /** 会话生效的人设；默认助手与空正文不注入，产品提示词契约始终保留。 */
+  persona?: Persona
 }
 
 function buildWorkspacePaths(
@@ -211,6 +214,10 @@ ${agentsMaintenanceRequirement}
 - 贴近事实，不为效果夸大：不用“完美”“彻底”“大幅”这类无依据的强化词；不确定就明说，不把推测写成结论。
 - 日常回复简洁直接；文本交付物需要完整时再展开。非文档类日常输出如需使用 Markdown 标题，应从四级（\`####\`）开始；不得使用一级至三级标题（\`#\`、\`##\`、\`###\`），以保持整体排版协调。文档类交付或用户明确指定的格式不受此限。复杂任务中定期核对相关规则、记忆、Skills 与 Context。`,
   ]
+
+  // 人设段紧跟身份开场段之后：角色与风格优先于通用回复规则，但工具与安全契约不受影响。
+  const personaSection = buildPersonaPromptSection(ctx.persona)
+  if (personaSection) sections.splice(1, 0, personaSection)
 
   sections.push(`## Pi 受管浏览器
 

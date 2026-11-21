@@ -10,7 +10,7 @@ import { Pencil, Check, X, Pin, Columns2 } from 'lucide-react'
 import { conversationsAtom } from '@/atoms/chat-atoms'
 import { useConversationParallelMode } from '@/hooks/useConversationSettings'
 import type { ConversationMeta } from '@proma/shared'
-import { SystemPromptSelector } from './SystemPromptSelector'
+import { PersonaSelector } from './PersonaSelector'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -115,7 +115,7 @@ export function ChatHeader({ conversation }: ChatHeaderProps): React.ReactElemen
 
       {/* 右侧按钮组 */}
       <div className="flex items-center gap-1 titlebar-no-drag ml-auto">
-        <SystemPromptSelector />
+        <PersonaSelector />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

@@ -17,7 +17,7 @@ import {
   getConversationMessagesPath,
 } from './config-paths'
 import { deleteConversationAttachments, deleteAttachment } from './attachment-service'
-import type { ConversationMeta, ChatMessage, RecentMessagesResult, MessageSearchResult, SessionMessageSearchResponse } from '@proma/shared'
+import type { ConversationMeta, ChatMessage, RecentMessagesResult, SessionMessageSearchResponse } from '@proma/shared'
 import {
   createSearchSnippet,
   MAX_NORMALIZED_SEARCH_QUERY_LENGTH,
@@ -573,41 +573,6 @@ function findMatchesInConversationSearchIndex(
       score: match.score,
     }, maxResults)
   }
-  return results
-}
-
-export async function searchConversationMessages(query: string): Promise<MessageSearchResult[]> {
-  if (!query || query.length < 2) return []
-
-  const index = readIndex()
-  const results: MessageSearchResult[] = []
-  let matchedSessionCount = 0
-
-  const sortedConversations = [...index.conversations].sort((a, b) => b.updatedAt - a.updatedAt)
-  for (const conv of sortedConversations) {
-    if (matchedSessionCount >= MAX_SEARCH_SESSIONS) break
-
-    const filePath = getConversationMessagesPath(conv.id)
-    if (!existsSync(filePath)) continue
-
-    const hits = await findMatchesInJsonl(filePath, query, MAX_SEARCH_HITS_PER_SESSION)
-    if (hits.length === 0) continue
-    matchedSessionCount++
-
-    for (const hit of hits.slice(0, MAX_SEARCH_HITS_PER_SESSION)) {
-      results.push({
-        conversationId: conv.id,
-        conversationTitle: conv.title,
-        messageId: hit.messageId,
-        role: hit.role,
-        snippet: hit.snippet,
-        matchStart: hit.matchStart,
-        matchLength: hit.matchLength,
-        archived: conv.archived,
-      })
-    }
-  }
-
   return results
 }
 

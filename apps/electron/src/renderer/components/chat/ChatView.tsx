@@ -20,7 +20,6 @@ import { ChatHeader } from './ChatHeader'
 import { ChatMessages } from './ChatMessages'
 import { ChatInput } from './ChatInput'
 import { AgentRecommendBanner } from './AgentRecommendBanner'
-import { PromptEditorSidebar } from './PromptEditorSidebar'
 import type { InlineEditSubmitPayload } from './ChatMessageItem'
 import {
   conversationsAtom,
@@ -30,20 +29,19 @@ import {
   chatMessageRefreshAtom,
   pendingAgentRecommendationAtom,
   conversationModelsAtom,
-  chatPendingMessageAtom,
   INITIAL_MESSAGE_LIMIT,
 } from '@/atoms/chat-atoms'
-import type { PendingAttachment, ChatPendingMessage } from '@/atoms/chat-atoms'
-import { promptConfigAtom, promptSidebarOpenAtom, conversationPromptIdAtom, resolveSystemMessage, selectedPromptIdAtom } from '@/atoms/system-prompt-atoms'
+import type { PendingAttachment } from '@/atoms/chat-atoms'
+import { resolvePersonaSystemMessage } from '@/atoms/persona-atoms'
+import { usePersonaConfig } from '@/hooks/usePersonaConfig'
 import { activeToolIdsAtom } from '@/atoms/chat-tool-atoms'
-import { userProfileAtom } from '@/atoms/user-profile'
 import { ConversationProvider } from '@/contexts/session-context'
 import {
   useConversationModel,
   useConversationContextLength,
   useConversationThinkingEnabled,
   useConversationThinkingLevel,
-  useConversationPromptId,
+  useConversationPersonaId,
 } from '@/hooks/useConversationSettings'
 import { registerPendingTitle } from '@/hooks/useGlobalChatListeners'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
@@ -110,7 +108,7 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
   const [contextLength] = useConversationContextLength()
   const [thinkingEnabled] = useConversationThinkingEnabled()
   const [thinkingLevel] = useConversationThinkingLevel()
-  const [conversationPromptId] = useConversationPromptId()
+  const [conversationPersonaId] = useConversationPersonaId()
 
   // ===== 全局 atoms（Map 结构，按 conversationId 读取） =====
   const conversations = useAtomValue(conversationsAtom)
@@ -122,16 +120,9 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
   const setChatStreamErrors = useSetAtom(chatStreamErrorsAtom)
   const chatStreamErrors = useAtomValue(chatStreamErrorsAtom)
   const refreshMap = useAtomValue(chatMessageRefreshAtom)
-  const promptConfig = useAtomValue(promptConfigAtom)
-  const userProfile = useAtomValue(userProfileAtom)
-  const promptSidebarOpen = useAtomValue(promptSidebarOpenAtom)
+  const personaConfig = usePersonaConfig()
   const activeToolIds = useAtomValue(activeToolIdsAtom)
   const setPendingRecommendation = useSetAtom(pendingAgentRecommendationAtom)
-  const [chatPendingMessage, setChatPendingMessage] = React.useState<ChatPendingMessage | null>(null)
-
-  // 从全局 atom 读取快速任务待发送消息
-  const globalChatPending = useAtomValue(chatPendingMessageAtom)
-  const setGlobalChatPending = useSetAtom(chatPendingMessageAtom)
 
   React.useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments
@@ -143,14 +134,6 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
       pendingAttachmentsRef.current = []
     }
   }, [])
-
-  // 检测到当前对话的待发送消息时，捕获到本地状态
-  React.useEffect(() => {
-    if (!globalChatPending) return
-    if (globalChatPending.conversationId !== conversationId) return
-    setChatPendingMessage(globalChatPending)
-    setGlobalChatPending(null)
-  }, [globalChatPending, conversationId, setGlobalChatPending])
 
   // ===== 从 Map 派生当前对话状态 =====
   const conversation = conversations.find((c) => c.id === conversationId) ?? null
@@ -355,7 +338,8 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
       attachments: savedAttachments.length > 0 ? savedAttachments : undefined,
       thinkingEnabled: thinkingEnabled || undefined,
       thinkingLevel: thinkingEnabled ? thinkingLevel : undefined,
-      systemMessage: resolveSystemMessage(conversationPromptId, promptConfig, userProfile.userName),
+      systemMessage: resolvePersonaSystemMessage(conversationPersonaId, personaConfig),
+      primerTurns: personaConfig.personas.find((persona) => persona.id === conversationPersonaId)?.primerTurns,
       enabledToolIds: activeToolIds.length > 0 ? activeToolIds : undefined,
     }
 
@@ -410,35 +394,14 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
     contextDividers,
     thinkingEnabled,
     thinkingLevel,
-    conversationPromptId,
-    promptConfig,
-    userProfile.userName,
+    conversationPersonaId,
+    personaConfig,
     activeToolIds,
     setChatStreamErrors,
     setStreamingStates,
     setConversations,
     store,
   ])
-
-  // ===== 自动发送快速任务消息 =====
-  // 使用 queueMicrotask 延迟发送：microtask 在当前任务结束后、React 下一次渲染前执行，
-  // 避免 setState → 重渲染 → cleanup 取消 timer 的竞态。
-  React.useEffect(() => {
-    if (!chatPendingMessage) return
-    if (chatPendingMessage.conversationId !== conversationId) return
-    if (!selectedModel || isStreaming) return
-
-    const pending = chatPendingMessage
-    setChatPendingMessage(null)
-
-    queueMicrotask(() => {
-      handleSend(pending.message, {
-        consumePendingAttachments: false,
-        messageCountBeforeSend: 0,
-        attachments: pending.attachments,
-      })
-    })
-  }, [chatPendingMessage, conversationId, selectedModel, isStreaming, handleSend])
 
   /** 从某条消息起截断（包含该条） */
   const truncateFromMessage = React.useCallback(async (
@@ -738,19 +701,6 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
             onStop={handleStop}
             onClearContext={handleClearContext}
           />
-        </div>
-      </div>
-
-      {/* 提示词编辑侧栏 */}
-      <div className={cn(
-        'relative flex-shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden titlebar-drag-region',
-        promptSidebarOpen ? 'w-[300px] border-l' : 'w-10'
-      )}>
-        <div className={cn(
-          'w-[300px] h-full transition-opacity duration-200 titlebar-no-drag',
-          promptSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        )}>
-          <PromptEditorSidebar />
         </div>
       </div>
     </div>

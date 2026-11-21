@@ -41,8 +41,6 @@ import {
   currentSessionSidePanelOpenAtom,
   isWorkspaceComponentTab,
 } from '@/atoms/agent-atoms'
-import {
-} from '@/atoms/chat-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { planningTabAtom, planningTodoCreateRequestAtom } from '@/atoms/planning-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'

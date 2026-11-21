@@ -40,8 +40,8 @@ export * from './installer'
 // GitHub Release 相关类型
 export * from './github'
 
-// 系统提示词相关类型
-export * from './system-prompt'
+// 人设（Persona）相关类型
+export * from './persona'
 
 // Chat 工具（function calling）相关类型
 export * from './chat-tool'

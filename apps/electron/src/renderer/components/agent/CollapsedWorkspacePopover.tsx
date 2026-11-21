@@ -1,7 +1,7 @@
 /**
  * CollapsedWorkspacePopover — 折叠态侧栏的项目快速切换弹层
  *
- * 鼠标悬停在折叠侧栏的 Agent 模式按钮上时弹出，提供：
+ * 鼠标悬停在折叠侧栏的项目按钮上时弹出，提供：
  * - 当前所有项目列表，点击即切换
  * - 顶部 `+` 按钮支持 inline 新建
  *
@@ -106,8 +106,8 @@ export function CollapsedWorkspacePopover({
           }}
           onMouseLeave={scheduleClose}
           onClickCapture={() => {
-            // 点击触发元素（如 Agent 模式按钮）时关闭弹层，
-            // 避免切换模式后弹层因 hover 状态滞留 150ms
+            // 点击触发元素（项目按钮）时关闭弹层，
+            // 避免点击后弹层因 hover 状态滞留 150ms
             cancelClose()
             setOpen(false)
           }}
@@ -127,7 +127,7 @@ export function CollapsedWorkspacePopover({
         {/* 头部 */}
         <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40">
           <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-wide">
-            Agent 模式 · 项目
+            项目
           </span>
           <div className="flex items-center gap-0.5">
             <button

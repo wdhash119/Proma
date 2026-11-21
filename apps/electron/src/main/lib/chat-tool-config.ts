@@ -8,7 +8,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { getChatToolsConfigPath } from './config-paths'
 import { writeJsonFileAtomic } from './safe-file'
-import type { ChatToolsFileConfig, ChatToolState, ChatToolMeta } from '@proma/shared'
+import type { ChatToolsFileConfig, ChatToolState } from '@proma/shared'
 
 /** 默认配置 */
 const DEFAULT_CONFIG: ChatToolsFileConfig = {
@@ -64,28 +64,5 @@ export function saveChatToolsConfig(config: ChatToolsFileConfig): void {
 export function updateToolState(toolId: string, state: ChatToolState): void {
   const config = getChatToolsConfig()
   config.toolStates[toolId] = state
-  saveChatToolsConfig(config)
-}
-
-/**
- * 添加自定义工具
- */
-export function addCustomTool(meta: ChatToolMeta): void {
-  const config = getChatToolsConfig()
-  // 去重
-  config.customTools = config.customTools.filter((t) => t.id !== meta.id)
-  config.customTools.push(meta)
-  config.toolStates[meta.id] = { enabled: false }
-  saveChatToolsConfig(config)
-}
-
-/**
- * 删除自定义工具
- */
-export function deleteCustomTool(toolId: string): void {
-  const config = getChatToolsConfig()
-  config.customTools = config.customTools.filter((t) => t.id !== toolId)
-  delete config.toolStates[toolId]
-  delete config.toolCredentials[toolId]
   saveChatToolsConfig(config)
 }

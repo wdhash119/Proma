@@ -95,10 +95,6 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   GET_ALL_TOOLS: 'chat-tool:get-all-tools',
   /** 更新单个工具的开关状态 */
   UPDATE_TOOL_STATE: 'chat-tool:update-state',
-  /** 创建自定义工具 */
-  CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
-  /** 删除自定义工具 */
-  DELETE_CUSTOM_TOOL: 'chat-tool:delete-custom',
   /** 自定义工具配置变更通知（文件监听触发） */
   CUSTOM_TOOL_CHANGED: 'chat-tool:custom-tool-changed',
 } as const

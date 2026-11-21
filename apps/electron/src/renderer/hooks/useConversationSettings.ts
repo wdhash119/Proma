@@ -22,9 +22,9 @@ import {
 import type { SelectedModel, ContextLengthValue } from '@/atoms/chat-atoms'
 import type { GeminiThinkingLevel } from '@proma/shared'
 import {
-  selectedPromptIdAtom,
-  conversationPromptIdAtom,
-} from '@/atoms/system-prompt-atoms'
+  selectedPersonaIdAtom,
+  conversationPersonaIdAtom,
+} from '@/atoms/persona-atoms'
 
 // ===== 通用 Map 读写辅助 =====
 
@@ -136,11 +136,11 @@ export function useConversationParallelMode(): [boolean, (v: boolean) => void] {
   return [value, setter]
 }
 
-/** 每个对话独立的系统提示词 ID */
-export function useConversationPromptId(): [string, (v: string) => void] {
+/** 每个对话独立的人设 ID */
+export function useConversationPersonaId(): [string, (v: string) => void] {
   const conversationId = useConversationId()
-  const defaultPromptId = useAtomValue(selectedPromptIdAtom)
-  const value = useMapValue(conversationPromptIdAtom, conversationId, defaultPromptId)
-  const setter = useMapSetter(conversationPromptIdAtom, conversationId)
+  const defaultPersonaId = useAtomValue(selectedPersonaIdAtom)
+  const value = useMapValue(conversationPersonaIdAtom, conversationId, defaultPersonaId)
+  const setter = useMapSetter(conversationPersonaIdAtom, conversationId)
   return [value, setter]
 }

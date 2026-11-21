@@ -667,7 +667,7 @@ export function getAgentSessionSDKMessages(id: string): SDKMessage[] {
  */
 export function updateAgentSessionMeta(
   id: string,
-  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
+  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'personaId' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
 ): AgentSessionMeta {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)
@@ -987,12 +987,15 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
       piEntryBindings: branchBindings,
       activeWorktree: sourceActiveWorktree,
       forkSourceDir: sourceDir,
+      // 分叉继承源会话的人设选择，保持同一对话风格延续。
+      ...(sourceMeta.personaId ? { personaId: sourceMeta.personaId } : {}),
       ...explorationMeta,
     })
     newMeta.sdkSessionId = forkedManager.getSessionId()
     newMeta.piSessionFile = piSessionFile
     newMeta.piEntryBindings = branchBindings
     newMeta.activeWorktree = sourceActiveWorktree
+    if (sourceMeta.personaId) newMeta.personaId = sourceMeta.personaId
     Object.assign(newMeta, explorationMeta)
 
     if (sourceWorkbenchDir && destWorkbenchDir) await copyForkWorkspaceFiles(sourceWorkbenchDir, destWorkbenchDir)

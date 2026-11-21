@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -36,7 +36,6 @@ import type {
   FileDialogResult,
   FileOrFolderDialogResult,
   RecentMessagesResult,
-  MessageSearchResult,
   SessionMessageSearchResponse,
   AgentSessionMeta,
   AgentActiveSessionSnapshot,
@@ -80,13 +79,14 @@ import type {
   AskUserRequest,
   AskUserResponse,
   ExitPlanModeResponse,
-  SystemPromptConfig,
-  SystemPrompt,
-  SystemPromptCreateInput,
-  SystemPromptUpdateInput,
+  PersonaConfig,
+  Persona,
+  PersonaCreateInput,
+  PersonaUpdateInput,
+  PersonaImportResult,
+  PersonaExportResult,
   ChatToolInfo,
   ChatToolState,
-  ChatToolMeta,
   MoveSessionToWorkspaceInput,
   ForkSessionInput,
   RewindSessionInput,
@@ -415,12 +415,6 @@ export interface ElectronAPI {
   /** 切换对话置顶状态 */
   togglePinConversation: (id: string) => Promise<ConversationMeta>
 
-  /** 切换对话归档状态 */
-  toggleArchiveConversation: (id: string) => Promise<ConversationMeta>
-
-  /** 搜索全部对话消息内容 */
-  searchConversationMessages: (query: string) => Promise<MessageSearchResult[]>
-
   /** 搜索当前对话完整持久化历史（仅返回命中元数据） */
   searchConversationSessionMessages: (conversationId: string, query: string) => Promise<SessionMessageSearchResponse>
 
@@ -467,9 +461,6 @@ export interface ElectronAPI {
 
   /** 打开文件选择对话框 */
   openFileDialog: () => Promise<FileDialogResult>
-
-  /** 提取附件文档的文本内容 */
-  extractAttachmentText: (localPath: string) => Promise<string>
 
   // ===== 用户档案相关 =====
 
@@ -637,6 +628,9 @@ export interface ElectronAPI {
 
   /** 更新 Agent 会话模型选择 */
   updateAgentSessionModel: (id: string, channelId?: string, modelId?: string) => Promise<AgentSessionMeta>
+
+  /** 更新 Agent 会话人设选择（下一轮生效；undefined 回退默认人设） */
+  updateAgentSessionPersona: (id: string, personaId?: string) => Promise<AgentSessionMeta>
 
   /** 选择或清除当前会话的活动 worktree */
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => Promise<AgentSessionMeta>
@@ -904,12 +898,6 @@ export interface ElectronAPI {
   /** 更新工具开关状态 */
   updateChatToolState: (toolId: string, state: ChatToolState) => Promise<void>
 
-  /** 创建自定义工具 */
-  createCustomChatTool: (meta: ChatToolMeta) => Promise<void>
-
-  /** 删除自定义工具 */
-  deleteCustomChatTool: (toolId: string) => Promise<void>
-
   /** 监听自定义工具配置变更 */
   onCustomToolChanged: (callback: () => void) => () => void
 
@@ -1074,25 +1062,28 @@ export interface ElectronAPI {
   /** 搜索工作区文件（用于 @ 引用，支持附加目录） */
   searchWorkspaceFiles: (rootPath: string, query: string, limit?: number, additionalPaths?: string[], sessionPaths?: string[]) => Promise<FileSearchResult>
 
-  // ===== 系统提示词管理 =====
+  // ===== 人设管理 =====
 
-  /** 获取系统提示词配置 */
-  getSystemPromptConfig: () => Promise<SystemPromptConfig>
+  /** 获取人设配置 */
+  getPersonaConfig: () => Promise<PersonaConfig>
 
-  /** 创建提示词 */
-  createSystemPrompt: (input: SystemPromptCreateInput) => Promise<SystemPrompt>
+  /** 创建人设 */
+  createPersona: (input: PersonaCreateInput) => Promise<Persona>
 
-  /** 更新提示词 */
-  updateSystemPrompt: (id: string, input: SystemPromptUpdateInput) => Promise<SystemPrompt>
+  /** 更新人设 */
+  updatePersona: (id: string, input: PersonaUpdateInput) => Promise<Persona>
 
-  /** 删除提示词 */
-  deleteSystemPrompt: (id: string) => Promise<void>
+  /** 删除人设 */
+  deletePersona: (id: string) => Promise<void>
 
-  /** 更新追加日期时间和用户名开关 */
-  updateAppendSetting: (enabled: boolean) => Promise<void>
+  /** 设置默认人设 */
+  setDefaultPersona: (id: string | null) => Promise<void>
 
-  /** 设置默认提示词 */
-  setDefaultPrompt: (id: string | null) => Promise<void>
+  /** 从 Markdown 文件导入人设 */
+  importPersonaMarkdown: () => Promise<PersonaImportResult>
+
+  /** 导出人设为 Markdown 文件 */
+  exportPersonaMarkdown: (id: string) => Promise<PersonaExportResult>
 
   // ===== 自动更新 =====
 
@@ -1696,14 +1687,6 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(CHAT_IPC_CHANNELS.TOGGLE_PIN, id)
   },
 
-  toggleArchiveConversation: (id: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.TOGGLE_ARCHIVE, id)
-  },
-
-  searchConversationMessages: (query: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SEARCH_MESSAGES, query)
-  },
-
   searchConversationSessionMessages: (conversationId: string, query: string) => {
     return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES, conversationId, query)
   },
@@ -1765,10 +1748,6 @@ const electronAPI: ElectronAPI = {
 
   openFileDialog: () => {
     return ipcRenderer.invoke(CHAT_IPC_CHANNELS.OPEN_FILE_DIALOG)
-  },
-
-  extractAttachmentText: (localPath: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.EXTRACT_ATTACHMENT_TEXT, localPath)
   },
 
   // 用户档案
@@ -1979,6 +1958,10 @@ const electronAPI: ElectronAPI = {
 
   updateAgentSessionModel: (id: string, channelId?: string, modelId?: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_SESSION_MODEL, id, channelId, modelId)
+  },
+
+  updateAgentSessionPersona: (id: string, personaId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_SESSION_PERSONA, id, personaId)
   },
 
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => {
@@ -2394,14 +2377,6 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.UPDATE_TOOL_STATE, toolId, state)
   },
 
-  createCustomChatTool: (meta: ChatToolMeta) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.CREATE_CUSTOM_TOOL, meta)
-  },
-
-  deleteCustomChatTool: (toolId: string) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.DELETE_CUSTOM_TOOL, toolId)
-  },
-
   onCustomToolChanged: (callback: () => void) => {
     const listener = (): void => callback()
     ipcRenderer.on(CHAT_TOOL_IPC_CHANNELS.CUSTOM_TOOL_CHANGED, listener)
@@ -2639,29 +2614,33 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SEARCH_WORKSPACE_FILES, rootPath, query, limit, additionalPaths, sessionPaths)
   },
 
-  // 系统提示词管理
-  getSystemPromptConfig: () => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.GET_CONFIG)
+  // 人设管理
+  getPersonaConfig: () => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.GET_CONFIG)
   },
 
-  createSystemPrompt: (input: SystemPromptCreateInput) => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.CREATE, input)
+  createPersona: (input: PersonaCreateInput) => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.CREATE, input)
   },
 
-  updateSystemPrompt: (id: string, input: SystemPromptUpdateInput) => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.UPDATE, id, input)
+  updatePersona: (id: string, input: PersonaUpdateInput) => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.UPDATE, id, input)
   },
 
-  deleteSystemPrompt: (id: string) => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.DELETE, id)
+  deletePersona: (id: string) => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.DELETE, id)
   },
 
-  updateAppendSetting: (enabled: boolean) => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.UPDATE_APPEND_SETTING, enabled)
+  setDefaultPersona: (id: string | null) => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.SET_DEFAULT, id)
   },
 
-  setDefaultPrompt: (id: string | null) => {
-    return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.SET_DEFAULT, id)
+  importPersonaMarkdown: () => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.IMPORT_MARKDOWN)
+  },
+
+  exportPersonaMarkdown: (id: string) => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.EXPORT_MARKDOWN, id)
   },
 
   // 自动更新

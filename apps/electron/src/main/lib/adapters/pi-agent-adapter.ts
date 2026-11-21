@@ -75,6 +75,7 @@ import { createDeepSeekReasoningRequestExtension } from './pi-deepseek-reasoning
 import { createOpenAIReasoningRequestExtension } from './pi-openai-reasoning-request-settings'
 import { mergeRuntimeEnv, type AgentRuntimeEnv } from '../agent-runtime-env'
 import { sanitizePiMessageImageContent, sanitizeToolResultImageContent } from '../image-content-validation'
+import { injectPersonaPrimerTurns } from './pi-persona-primer'
 import {
   convertPiMessage,
   convertResultMessage,
@@ -135,6 +136,8 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
     options: CanUseToolOptions,
   ) => Promise<PermissionResult>
   systemPrompt: string
+  /** 会话人设的静态示范轮；每次请求在 system 消息后内存注入，不写入 artifact。 */
+  personaPrimerTurns?: import('@proma/shared').PersonaPrimerTurn[]
   /** Proma 已验证的项目根 instruction files；不触发 Pi 的磁盘自动发现。 */
   projectInstructionFiles?: PromaProjectInstructionFile[]
   /** 用于 typed 文件工具的会话级子目录指令激活；不会解析 Bash。 */
@@ -1503,10 +1506,18 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       session.agent.toolExecution = 'sequential'
       // Pi session artifact 可以来自旧版本，不能假设其历史 tool_result 已通过当前校验。
       // transformContext 在每个 provider 请求前执行，能隔离 resume 的坏图片而不篡改原 artifact。
+      // 人设示范轮同样在此注入：静态前缀、纯内存变换，不污染会话历史。
       const previousTransformContext = session.agent.transformContext
-      session.agent.transformContext = async (messages, signal) => sanitizePiMessageImageContent(
-        await previousTransformContext?.(messages, signal) ?? messages,
-      )
+      const personaPrimerTurns = input.personaPrimerTurns
+      session.agent.transformContext = async (messages, signal) => {
+        const transformed = await previousTransformContext?.(messages, signal) ?? messages
+        const sanitized = sanitizePiMessageImageContent(transformed)
+        return injectPersonaPrimerTurns(sanitized, personaPrimerTurns, {
+          api: model.api,
+          provider: model.provider,
+          modelId: model.id,
+        })
+      }
       // Pi 0.86 的 transcript-aware before_agent_start extension 会在下一轮注入动态项目指令。
       if (piAi && input.codexFastMode && input.provider === 'openai-codex' && isCodexFastModeSupportedModel(input.model)) {
         // Pi 的通用 streamSimple 会丢弃 provider 专属 serviceTier；这里直接走

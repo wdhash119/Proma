@@ -34,6 +34,7 @@ import {
   resolveReasoningProfile,
   collectSkillActivations,
   mergeSkillActivations,
+  resolveSessionPersona,
 } from '@proma/shared'
 import type { PromaPermissionMode, AskUserRequest, SDKSystemMessage } from '@proma/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
@@ -58,6 +59,7 @@ import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, g
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
+import { getPersonaConfig } from './persona-manager'
 import { resolveProjectInstructions } from './project-instruction-resolver'
 import { combinePromaInstructionFiles } from './adapters/pi-resource-loader-overrides'
 import { MAX_CONTEXT_MESSAGES, buildContextPrompt, buildRecoveryPrompt, buildReferencedSessionsPrompt } from './agent-session-context-prompt'
@@ -1315,6 +1317,8 @@ export class AgentOrchestrator {
       const selfControlAvailable = input.triggeredBy !== 'automation'
         && input.triggeredBy !== 'delegation'
         && input.triggeredBy !== 'external'
+      // 会话人设：显式选择优先，否则回退人设库默认；默认助手不注入产品提示词。
+      const sessionPersona = resolveSessionPersona(getPersonaConfig(), sessionMeta?.personaId)
       const systemPromptAppend = buildSystemPrompt({
         workspaceName: workspace?.name,
         workspaceSlug,
@@ -1331,6 +1335,7 @@ export class AgentOrchestrator {
         memoryRefreshOpportunity,
         selfControlAvailable,
         instructionContext,
+        persona: sessionPersona,
       }) + (automationContext ? `\n\n## 定时任务执行上下文\n\n${automationContext}` : '')
       const startAutoTitleGeneration = (): void => {
         if (titleGenerationStarted) return
@@ -1407,6 +1412,7 @@ export class AgentOrchestrator {
         permissionMode: initialPermissionMode,
         canUseTool,
         systemPrompt: systemPromptAppend + buildPiAdditionalDirectoriesPrompt(allAdditionalDirectories),
+        ...(sessionPersona?.primerTurns?.length ? { personaPrimerTurns: sessionPersona.primerTurns } : {}),
         ...(instructionFiles.length > 0 && { projectInstructionFiles: instructionFiles }),
         ...(projectInstructions && {
           projectInstructionScope: {

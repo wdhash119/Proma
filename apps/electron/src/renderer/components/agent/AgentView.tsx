@@ -30,6 +30,7 @@ import { QuotedSelectionChip } from '@/components/diff/QuotedSelectionChip'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ai-elements/rich-text-input'
 import { SpeechButton } from '@/components/ai-elements/speech-button'
 import { InputToolbarOverflow, type ToolbarItem } from '@/components/ai-elements/InputToolbarOverflow'
+import { AgentPersonaPopover } from './AgentPersonaPopover'
 import {
   inputToolbarActiveButtonClass,
   inputToolbarButtonClass,
@@ -1940,6 +1941,25 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     }
   }, [sessionId, streaming, backgroundWaiting, setSessionChannelMap, setSessionModelMap, setDefaultChannelId, setDefaultModelId, setAgentSessions])
 
+  /** 人设选择回调：持久化到会话 meta，下一轮生效（系统提示词每轮重建，无需重建会话） */
+  const handlePersonaSelect = React.useCallback((personaId: string): void => {
+    const previousSessionMeta = sessionMeta
+    setAgentSessions((prev) => prev.map((item) => (
+      item.id === sessionId ? { ...item, personaId, updatedAt: Date.now() } : item
+    )))
+    window.electronAPI.updateAgentSessionPersona(sessionId, personaId)
+      .then((updated) => {
+        setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? updated : item))
+      })
+      .catch((error) => {
+        console.error('[AgentView] 更新人设失败:', error)
+        if (previousSessionMeta) {
+          setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? previousSessionMeta : item))
+        }
+        toast.error('人设切换失败')
+      })
+  }, [sessionId, sessionMeta, setAgentSessions])
+
   const handleCodexFastModeChange = React.useCallback(async (): Promise<void> => {
     if (!isCodexFastModeAvailable || streaming || backgroundWaiting || !sessionMeta) return
 
@@ -2815,6 +2835,15 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         />
       ),
     },
+    {
+      key: 'persona',
+      node: (
+        <AgentPersonaPopover
+          personaId={sessionMeta?.personaId}
+          onSelect={handlePersonaSelect}
+        />
+      ),
+    },
     { key: 'speech', node: <SpeechButton className={inputToolbarButtonClass} voiceInputId={agentVoiceInputId} /> },
     {
       key: 'attach-content',
@@ -2862,6 +2891,8 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     sessionId,
     agentThinking,
     setAgentThinking,
+    sessionMeta?.personaId,
+    handlePersonaSelect,
     streaming,
     handleAttachContent,
     handleCompact,

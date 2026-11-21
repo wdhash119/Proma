@@ -17,11 +17,11 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { Search, X, MessageSquare, Bot, Archive, Loader2 } from 'lucide-react'
+import { Search, X, Bot, Archive, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { searchDialogOpenAtom } from '@/atoms/search-atoms'
-import { conversationsAtom, channelsAtom } from '@/atoms/chat-atoms'
+import { channelsAtom } from '@/atoms/chat-atoms'
 import {
   agentSessionsAtom,
   agentWorkspacesAtom,
@@ -38,7 +38,6 @@ import {
   useSessionMiniMapHover,
 } from '@/components/session-preview/SessionMiniMapPopover'
 import type {
-  MessageSearchResult,
   AgentMessageSearchResult,
 } from '@proma/shared'
 import { findBestSearchMatch } from '@proma/shared'
@@ -47,7 +46,7 @@ import { findBestSearchMatch } from '@proma/shared'
 interface TitleResult {
   id: string
   title: string
-  type: 'chat' | 'agent'
+  type: 'agent'
   archived?: boolean
   updatedAt: number
 }
@@ -56,7 +55,7 @@ interface TitleResult {
 interface ContentResult {
   id: string
   title: string
-  type: 'chat' | 'agent'
+  type: 'agent'
   messageId: string
   snippet: string
   matchStart: number
@@ -109,12 +108,8 @@ function HighlightSnippet({ snippet, matchStart, matchLength }: {
   )
 }
 
-function SearchResultIcon({ result }: { result: SearchResult }): React.ReactElement {
-  return result.type === 'chat' ? (
-    <MessageSquare size={14} className="flex-shrink-0 text-foreground/40" />
-  ) : (
-    <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
-  )
+function SearchResultIcon(_props: { result: SearchResult }): React.ReactElement {
+  return <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
 }
 
 interface SearchResultRowProps {
@@ -140,7 +135,7 @@ function SearchResultRow({
 }: SearchResultRowProps): React.ReactElement {
   const preview = useSessionMiniMapHover(400, miniMapDisabled)
   const isContent = isContentResult(result)
-  const wsName = result.type === 'agent' ? getAgentWorkspaceName(result.id) : undefined
+  const wsName = getAgentWorkspaceName(result.id)
 
   return (
     <>
@@ -205,7 +200,6 @@ function SearchResultRow({
 
 export function SearchDialog(): React.ReactElement {
   const [open, setOpen] = useAtom(searchDialogOpenAtom)
-  const conversations = useAtomValue(conversationsAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
   const sessionHoverPreviewEnabled = useAtomValue(sessionHoverPreviewEnabledAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)

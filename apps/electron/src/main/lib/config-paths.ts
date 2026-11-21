@@ -226,6 +226,15 @@ export function getSystemPromptsPath(): string {
 }
 
 /**
+ * 人设配置文件路径
+ *
+ * @returns ~/.proma/personas.json
+ */
+export function getPersonasPath(): string {
+  return join(getConfigDir(), 'personas.json')
+}
+
+/**
  * 获取 Chat 工具配置文件路径
  *
  * @returns ~/.proma/chat-tools.json

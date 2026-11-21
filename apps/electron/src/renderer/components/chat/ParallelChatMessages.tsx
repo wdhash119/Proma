@@ -28,7 +28,7 @@ import {
   ReasoningTrigger,
   ReasoningContent,
 } from '@/components/ai-elements/reasoning'
-import { streamingModelAtom, channelsAtom } from '@/atoms/chat-atoms'
+import { streamingStatesAtom, channelsAtom } from '@/atoms/chat-atoms'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import type { ChatMessage } from '@proma/shared'
 
@@ -158,7 +158,9 @@ function MessageColumn({
   streamingReasoning = '',
   startedAt,
 }: MessageColumnProps): React.ReactElement {
-  const streamingModel = useAtomValue(streamingModelAtom)
+  // 按本列 conversationId 读流式模型快照；旧全局派生 atom 在参数化问答路径下恒为 null，已修正。
+  const streamingStates = useAtomValue(streamingStatesAtom)
+  const streamingModel = conversationId ? streamingStates.get(conversationId)?.model ?? null : null
   const channels = useAtomValue(channelsAtom)
   const scrollRef = useRef<HTMLDivElement>(null)
 

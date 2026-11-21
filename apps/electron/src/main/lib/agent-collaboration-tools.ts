@@ -39,7 +39,8 @@ import {
   createToolCallIdempotencyCache,
   resolveDelegationPermissionMode,
 } from './agent-collaboration-utils'
-import { assertEnabledModelForChannel, listEnabledAgentModelsForChannel } from './agent-model-selection'
+import { listChannels } from './channel-manager'
+import { listAvailableAgentModelsAcrossChannels, resolveDelegationTarget } from './delegation-target'
 import { serializePiToolResultPayload } from './adapters/pi-tool-result-json'
 
 interface CollaborationToolContext {
@@ -235,6 +236,8 @@ interface DelegateAgentArgs {
   task: string
   expectedOutput?: string
   permissionMode?: PromaPermissionMode
+  /** 跨供应商时的目标渠道；不传则继承父会话渠道。 */
+  channelId?: string
   modelId?: string
   /** 子会话的目标思考强度；未传入时保持新会话默认值。 */
   thinkingLevel?: AgentThinkingLevel
@@ -632,25 +635,9 @@ function getCurrentParentPermissionMode(
 }
 
 function getAvailableAgentModels(ctx: CollaborationToolContext): Record<string, unknown> {
-  const currentModelId = ctx.modelId?.trim() || undefined
-  const summary = listEnabledAgentModelsForChannel(ctx.channelId, '读取协作子会话可用模型')
-  return {
-    channelId: summary.channelId,
-    channelName: summary.channelName,
-    provider: summary.provider,
-    currentModelId,
-    currentModelAvailable: currentModelId
-      ? summary.models.some((model) => model.id === currentModelId)
-      : false,
-    models: summary.models.map((model) => ({
-      ...model,
-      current: model.id === currentModelId,
-    })),
-    modelCount: summary.models.length,
-    note: summary.models.length > 0
-      ? '创建协作子会话时，可从 models[].id 中选择 modelId；不传则继承 currentModelId。'
-      : '当前渠道没有启用的 Agent 模型，请先在渠道设置中启用模型。',
-  }
+  // 跨渠道清单是结构化对象；工具结果统一按 Record 序列化，这里显式展开一次。
+  const summary = listAvailableAgentModelsAcrossChannels(ctx.channelId, ctx.modelId, listChannels())
+  return { ...summary }
 }
 
 function stopDelegation(parentSessionId: string, delegationId: string): Record<string, unknown> {
@@ -697,17 +684,22 @@ function startDelegation(
     args.permissionMode,
   )
   const thinkingLevel = assertThinkingLevel(args.thinkingLevel)
-  const effectiveModelId = args.modelId !== undefined
-    ? assertEnabledModelForChannel({
-        channelId: ctx.channelId,
-        modelId: args.modelId,
-        purpose: '创建协作子会话',
-      })
-    : ctx.modelId?.trim() || undefined
+  // 未显式指定时继承父会话渠道与模型；指定 channelId/modelId 时才跨供应商。
+  const target = resolveDelegationTarget(
+    {
+      parentChannelId: ctx.channelId,
+      parentModelId: ctx.modelId,
+      channelId: args.channelId,
+      modelId: args.modelId,
+    },
+    listChannels(),
+  )
+  const effectiveChannelId = target.channelId
+  const effectiveModelId = target.modelId
 
   const { completion, resolveCompletion } = createDelegationCompletion()
 
-  const child = createAgentSession(title, ctx.channelId, ctx.workspaceId, effectiveModelId)
+  const child = createAgentSession(title, effectiveChannelId, ctx.workspaceId, effectiveModelId)
   const childThinkingLevel: AgentThinkingLevel = thinkingLevel ?? child.reasoningLevel ?? 'high'
   const rootSessionId = parent?.rootSessionId ?? parent?.id ?? ctx.sessionId
   updateAgentSessionMeta(child.id, {
@@ -727,7 +719,7 @@ function startDelegation(
     delegationId,
     parentSessionId: ctx.sessionId,
     childSessionId: child.id,
-    channelId: ctx.channelId,
+    channelId: effectiveChannelId,
     modelId: effectiveModelId,
     thinkingLevel: childThinkingLevel,
     title,
@@ -754,7 +746,7 @@ function startDelegation(
     {
       sessionId: child.id,
       userMessage: prompt,
-      channelId: ctx.channelId,
+      channelId: effectiveChannelId,
       modelId: effectiveModelId,
       workspaceId: ctx.workspaceId,
       permissionModeOverride: permissionMode,
@@ -826,6 +818,7 @@ export function buildPiCollaborationTools(
     role: roleType,
     task: Type.String({ description: '发送给子 Agent 的完整任务说明' }),
     expectedOutput: Type.Optional(Type.String({ description: '希望子 Agent 最终返回的格式或要点' })),
+    channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；跨供应商时填写，省略则继承父会话渠道。' })),
     modelId: Type.Optional(Type.String({ description: '可选目标模型 ID' })),
     thinkingLevel: thinkingLevelType,
   })
@@ -851,13 +844,14 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__delegate_agent',
       label: '委派子 Agent',
-      description: '创建一个真实可见的 Proma 协作子 Agent 会话来并行处理独立子任务。可选 thinkingLevel 指定子会话首轮思考强度；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevel/thinkingLevel 表示配置/请求值，不代表模型 capability normalization 后的实际运行档位。委派只表示子会话已启动。',
+      description: '创建一个真实可见的 Proma 协作子 Agent 会话来并行处理独立子任务。默认继承父会话的渠道与模型；需要让子任务改用其它供应商时显式传 channelId 与 modelId。可选 thinkingLevel 指定子会话首轮思考强度；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevel/thinkingLevel 表示配置/请求值，不代表模型 capability normalization 后的实际运行档位。委派只表示子会话已启动。',
       parameters: Type.Object({
         title: Type.Optional(Type.String({ description: '子会话标题' })),
         role: roleType,
         task: Type.String({ description: '发送给子 Agent 的完整任务说明，必须自包含必要上下文' }),
         expectedOutput: Type.Optional(Type.String({ description: '希望子 Agent 最终返回的格式或要点' })),
-        modelId: Type.Optional(Type.String({ description: '可选目标模型 ID' })),
+        channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；仅在需要让子会话改用其它供应商时填写，省略则继承父会话渠道。' })),
+        modelId: Type.Optional(Type.String({ description: '可选目标模型 ID；跨渠道时须与 channelId 一起给出以确保归属明确。' })),
         thinkingLevel: thinkingLevelType,
       }),
       async execute(toolCallId: string, params: unknown) {
@@ -884,7 +878,7 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__delegate_agents',
       label: '批量委派子 Agent',
-      description: '批量创建多个真实可见的 Proma 协作子 Agent 会话。每个 item 可独立指定首轮 thinkingLevel；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevels/delegations[].thinkingLevel 表示各项配置/请求值，不代表模型 capability normalization 后的实际运行档位。',
+      description: '批量创建多个真实可见的 Proma 协作子 Agent 会话。默认继承父会话渠道与模型；每个 item 可独立指定 channelId/modelId 让子任务使用不同供应商，也可独立指定首轮 thinkingLevel；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevels/delegations[].thinkingLevel 表示各项配置/请求值，不代表模型 capability normalization 后的实际运行档位。',
       parameters: Type.Object({
         sharedContext: Type.Optional(Type.String({ description: '批量子任务共用背景' })),
         items: Type.Array(delegateItemType, { description: '要创建的子会话列表，最多 50 个' }),

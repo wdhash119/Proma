@@ -27,6 +27,14 @@ export type ProviderType =
   | 'qwen'
   | 'qwen-anthropic'
   | 'qwen-token-plan'
+  /** 千问AI平台 API（按量计费，OpenAI 兼容协议）。 */
+  | 'qianwen'
+  /** 千问AI平台 API（按量计费，Anthropic 兼容协议）。 */
+  | 'qianwen-anthropic'
+  /** 千问AI平台 Token Plan（Anthropic 兼容协议）。 */
+  | 'qianwen-token-plan'
+  /** 千问AI平台 Token Plan（OpenAI 兼容协议）。 */
+  | 'qianwen-token-plan-openai'
   | 'xiaomi'
   | 'xiaomi-token-plan'
   | 'openai-codex'
@@ -63,6 +71,11 @@ export const PROVIDER_DEFAULT_URLS: Record<ProviderType, string> = {
   'qwen-anthropic': 'https://dashscope.aliyuncs.com/apps/anthropic',
   // Token Plan Anthropic endpoint is provided as a complete messages URL.
   'qwen-token-plan': 'https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic/v1/messages',
+  // 千问AI平台（platform.qianwenai.com）：API 与 Token Plan 各自提供 OpenAI / Anthropic 两种协议端点。
+  qianwen: 'https://maas.qianwenaiapi.com/compatible-mode/v1',
+  'qianwen-anthropic': 'https://maas.qianwenaiapi.com/apps/anthropic',
+  'qianwen-token-plan': 'https://token-plan.maas.qianwenaiapi.com/apps/anthropic',
+  'qianwen-token-plan-openai': 'https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1',
   xiaomi: 'https://api.xiaomimimo.com/anthropic',
   'xiaomi-token-plan': 'https://token-plan-cn.xiaomimimo.com/anthropic',
   // 订阅登录渠道的 baseUrl 由 Pi SDK 内部管理，无需用户填写。
@@ -93,6 +106,10 @@ export const PROVIDER_LABELS: Record<ProviderType, string> = {
   qwen: '通义千问',
   'qwen-anthropic': '通义千问 (Anthropic 协议·旧版)',
   'qwen-token-plan': '通义千问 Token Plan',
+  qianwen: '千问AI平台 API (OpenAI 兼容)',
+  'qianwen-anthropic': '千问AI平台 API (Anthropic)',
+  'qianwen-token-plan': '千问AI平台 Token Plan (Anthropic)',
+  'qianwen-token-plan-openai': '千问AI平台 Token Plan (OpenAI 兼容)',
   xiaomi: '小米 MiMo (API)',
   'xiaomi-token-plan': '小米 MiMo Token Plan',
   'openai-codex': 'ChatGPT 订阅 (Codex)',

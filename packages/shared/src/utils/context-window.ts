@@ -70,8 +70,10 @@ const ONE_MILLION_CONTEXT_RULES = {
   minimax: ['minimax-m3'],
   // Kimi
   kimi: ['k3'],
-  // 通义千问
+  // 通义千问 / 千问AI平台
   qwen: [
+    'qwen4-max',
+    'qwen4.0-max',
     'qwen3.8',
     'qwen3.7',
     'qwen3.6-plus',

@@ -8,5 +8,9 @@ import type { ProviderType } from '@proma/shared'
  * system 角色。原生 OpenAI 渠道仍可使用 developer。
  */
 export function supportsPiDeveloperRole(provider: ProviderType): boolean {
-  return provider !== 'doubao-api' && provider !== 'qwen' && provider !== 'custom'
+  return provider !== 'doubao-api'
+    && provider !== 'qwen'
+    && provider !== 'qianwen'
+    && provider !== 'qianwen-token-plan-openai'
+    && provider !== 'custom'
 }

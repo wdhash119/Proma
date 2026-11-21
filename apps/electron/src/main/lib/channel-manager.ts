@@ -99,6 +99,36 @@ const QWEN_TOKEN_PLAN_PRESET_MODELS: ChannelModel[] = [
   { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
 ]
 /**
+ * 千问AI平台 API（按量计费）预设文本模型。
+ * OpenAI 兼容端点支持 GET /models 实时拉取；Anthropic 端点未开放模型列表，用此预设兜底。
+ */
+const QIANWEN_API_PRESET_MODELS: ChannelModel[] = [
+  { id: 'qwen3.8-max', name: 'Qwen3.8 Max', enabled: true },
+  { id: 'qwen3.8-flash', name: 'Qwen3.8 Flash', enabled: true },
+  { id: 'qwen3.7-max', name: 'Qwen3.7 Max', enabled: true },
+  { id: 'qwen3.7-plus', name: 'Qwen3.7 Plus', enabled: true },
+  { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
+]
+/**
+ * 千问AI平台 Token Plan 预设模型（仅文本生成类，含平台路由的第三方模型）。
+ * 个人版/团队版专属 API Key 与按量计费 Key 不通用；auto 为平台智能路由模型。
+ * qwen4-max-preview 为限时预览权益，默认不勾选，用户按需启用。
+ */
+const QIANWEN_TOKEN_PLAN_PRESET_MODELS: ChannelModel[] = [
+  { id: 'auto', name: 'Auto (智能路由)', enabled: true },
+  { id: 'qwen4-max', name: 'Qwen4 Max', enabled: true },
+  { id: 'qwen4-max-preview', name: 'Qwen4 Max Preview', enabled: false },
+  { id: 'qwen3.8-max', name: 'Qwen3.8 Max', enabled: true },
+  { id: 'qwen3.8-flash', name: 'Qwen3.8 Flash', enabled: true },
+  { id: 'qwen3.7-max', name: 'Qwen3.7 Max', enabled: false },
+  { id: 'qwen3.7-plus', name: 'Qwen3.7 Plus', enabled: false },
+  { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
+  { id: 'glm-5.3', name: 'GLM-5.3', enabled: false },
+  { id: 'glm-5.2', name: 'GLM-5.2', enabled: false },
+  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', enabled: false },
+  { id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', enabled: false },
+]
+/**
  * 一次性模型候选更新。每个更新使用独立 ID，避免新增模型时重新加入用户已删除的旧候选。
  * 更新独立于 config schema version，商业版等更高版本配置也能安全收到 OSS 新模型。
  */
@@ -252,6 +282,16 @@ function resolveQwenTokenPlanTestModelId(modelId?: string, models?: ChannelModel
   return resolveFirstTestModelId(models) ?? QWEN_TOKEN_PLAN_PRESET_MODELS[0]!.id
 }
 
+function resolveQianwenTestModelId(
+  modelId: string | undefined,
+  models: ChannelModel[] | undefined,
+  presets: ChannelModel[],
+): string {
+  const explicitModelId = modelId?.trim()
+  if (explicitModelId) return explicitModelId
+  return resolveFirstTestModelId(models) ?? presets[0]!.id
+}
+
 function resolveDeepSeekModelsUrl(baseUrl: string): string {
   return `${new URL(baseUrl.trim()).origin}/models`
 }
@@ -263,9 +303,17 @@ function resolveKimiModelsUrl(baseUrl: string): string {
 
 function inferProviderFromBaseUrl(provider: ProviderType, baseUrl: string): ProviderType {
   try {
-    const hostname = new URL(baseUrl.trim()).hostname
+    const parsedUrl = new URL(baseUrl.trim())
+    const hostname = parsedUrl.hostname
     if (hostname === 'token-plan.cn-beijing.maas.aliyuncs.com') {
       return 'qwen-token-plan'
+    }
+    // 千问AI平台：同一域名下按路径区分 OpenAI 兼容与 Anthropic 兼容端点。
+    if (hostname === 'token-plan.maas.qianwenaiapi.com') {
+      return parsedUrl.pathname.startsWith('/compatible-mode') ? 'qianwen-token-plan-openai' : 'qianwen-token-plan'
+    }
+    if (hostname === 'maas.qianwenaiapi.com') {
+      return parsedUrl.pathname.startsWith('/apps/anthropic') ? 'qianwen-anthropic' : 'qianwen'
     }
     if (hostname.startsWith('token-plan-') && hostname.endsWith('.xiaomimimo.com')) {
       return 'xiaomi-token-plan'
@@ -855,6 +903,8 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
       case 'xiaomi-token-plan':
       case 'qwen-anthropic':
       case 'qwen-token-plan':
+      case 'qianwen-anthropic':
+      case 'qianwen-token-plan':
         if (provider === 'deepseek') {
           return await testDeepSeekMessages(
             channel.baseUrl,
@@ -897,6 +947,19 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
             proxyUrl,
           )
         }
+        if (provider === 'qianwen-anthropic' || provider === 'qianwen-token-plan') {
+          return await testQianwenMessages(
+            channel.baseUrl,
+            apiKey,
+            resolveQianwenTestModelId(
+              undefined,
+              channel.models,
+              provider === 'qianwen-token-plan' ? QIANWEN_TOKEN_PLAN_PRESET_MODELS : QIANWEN_API_PRESET_MODELS,
+            ),
+            provider,
+            proxyUrl,
+          )
+        }
         if (provider === 'zhipu-coding-team') {
           return await testZhipuCodingTeam(apiKey, channel.baseUrl, proxyUrl)
         }
@@ -906,6 +969,8 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
       case 'zhipu':
       case 'doubao-api':
       case 'qwen':
+      case 'qianwen':
+      case 'qianwen-token-plan-openai':
       case 'custom':
         return await testOpenAICompatible(channel.baseUrl, apiKey, proxyUrl, provider)
       case 'google':
@@ -1076,6 +1141,37 @@ async function testQwenTokenPlanMessages(
       'content-type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
       'User-Agent': getPromaUserAgent(pkg.version),
+    },
+    body: JSON.stringify({
+      model: modelId,
+      max_tokens: 8,
+      messages: [{ role: 'user', content: 'ping' }],
+    }),
+  }))
+
+  return normalizeHttpResponse(response)
+}
+
+/**
+ * 千问AI平台的 Anthropic 兼容端点（API 与 Token Plan）未开放 /models，
+ * 连接测试改用用户选择的模型发起极小的 messages 请求（与通义千问 Token Plan 同策略）。
+ */
+async function testQianwenMessages(
+  baseUrl: string,
+  apiKey: string,
+  modelId: string,
+  provider: 'qianwen-anthropic' | 'qianwen-token-plan',
+  proxyUrl?: string,
+): Promise<ChannelTestResult> {
+  const url = resolveAnthropicMessagesUrl(baseUrl, provider)
+  const fetchFn = getFetchFn(proxyUrl)
+
+  const response = await fetchFn(url, withTimeout({
+    method: 'POST',
+    headers: {
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: modelId,
@@ -1802,6 +1898,8 @@ export async function testChannelDirect(input: ChannelDirectTestInput): Promise<
       case 'xiaomi-token-plan':
       case 'qwen-anthropic':
       case 'qwen-token-plan':
+      case 'qianwen-anthropic':
+      case 'qianwen-token-plan':
         if (provider === 'deepseek') {
           return await testDeepSeekMessages(
             input.baseUrl,
@@ -1844,6 +1942,19 @@ export async function testChannelDirect(input: ChannelDirectTestInput): Promise<
             proxyUrl,
           )
         }
+        if (provider === 'qianwen-anthropic' || provider === 'qianwen-token-plan') {
+          return await testQianwenMessages(
+            input.baseUrl,
+            input.apiKey,
+            resolveQianwenTestModelId(
+              input.modelId,
+              undefined,
+              provider === 'qianwen-token-plan' ? QIANWEN_TOKEN_PLAN_PRESET_MODELS : QIANWEN_API_PRESET_MODELS,
+            ),
+            provider,
+            proxyUrl,
+          )
+        }
         if (provider === 'zhipu-coding-team') {
           return await testZhipuCodingTeam(input.apiKey, input.baseUrl, proxyUrl)
         }
@@ -1853,6 +1964,8 @@ export async function testChannelDirect(input: ChannelDirectTestInput): Promise<
       case 'zhipu':
       case 'doubao-api':
       case 'qwen':
+      case 'qianwen':
+      case 'qianwen-token-plan-openai':
       case 'custom':
         return await testOpenAICompatible(input.baseUrl, input.apiKey, proxyUrl, provider)
       case 'google':
@@ -1892,6 +2005,8 @@ export async function fetchModels(input: FetchModelsInput): Promise<FetchModelsR
       case 'xiaomi-token-plan':
       case 'qwen-anthropic':
       case 'qwen-token-plan':
+      case 'qianwen-anthropic':
+      case 'qianwen-token-plan':
       case 'openai-codex':
       case 'github-copilot':
       case 'xai':
@@ -1938,12 +2053,20 @@ export async function fetchModels(input: FetchModelsInput): Promise<FetchModelsR
         if (provider === 'qwen-token-plan') {
           return createPresetModelsResult('通义千问 Token Plan', QWEN_TOKEN_PLAN_PRESET_MODELS)
         }
+        if (provider === 'qianwen-anthropic') {
+          return createPresetModelsResult('千问AI平台 API', QIANWEN_API_PRESET_MODELS)
+        }
+        if (provider === 'qianwen-token-plan') {
+          return createPresetModelsResult('千问AI平台 Token Plan', QIANWEN_TOKEN_PLAN_PRESET_MODELS)
+        }
         return await fetchAnthropicCompatibleModels(input.baseUrl, input.apiKey, proxyUrl, provider)
       case 'openai':
       case 'openai-responses':
       case 'zhipu':
       case 'doubao-api':
       case 'qwen':
+      case 'qianwen':
+      case 'qianwen-token-plan-openai':
       case 'custom':
         return await fetchOpenAICompatibleModels(input.baseUrl, input.apiKey, proxyUrl, provider)
       case 'google':

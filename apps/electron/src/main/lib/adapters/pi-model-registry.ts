@@ -473,6 +473,8 @@ function normalizePiApi(provider: ProviderType): Api {
     case 'zhipu':
     case 'doubao-api':
     case 'qwen':
+    case 'qianwen':
+    case 'qianwen-token-plan-openai':
     case 'custom':
       return 'openai-completions'
     case 'openai-responses':
@@ -760,7 +762,11 @@ export function requiresPromaUserAgent(provider: ProviderType): boolean {
 }
 
 function usesBearerOnlyAnthropicAuth(provider: ProviderType): boolean {
-  return requiresPromaUserAgent(provider) || provider === 'minimax' || provider === 'qwen-anthropic'
+  return requiresPromaUserAgent(provider)
+    || provider === 'minimax'
+    || provider === 'qwen-anthropic'
+    || provider === 'qianwen-anthropic'
+    || provider === 'qianwen-token-plan'
 }
 
 export function buildPiRequestHeaders(provider: ProviderType, apiKey: string): PiRequestHeaders | undefined {

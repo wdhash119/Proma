@@ -82,7 +82,37 @@ interface ChannelFormProps {
 }
 
 /** 所有可选供应商（'qwen-anthropic' 仅为兼容存量 Anthropic 渠道保留，不再出现在新建下拉） */
-const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'openai', 'openai-responses', 'openai-codex', 'github-copilot', 'xai', 'deepseek', 'google', 'kimi-api', 'kimi-coding', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'doubao-api', 'minimax', 'qwen', 'qwen-token-plan', 'xiaomi', 'xiaomi-token-plan', 'custom']
+const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'openai', 'openai-responses', 'openai-codex', 'github-copilot', 'xai', 'deepseek', 'google', 'kimi-api', 'kimi-coding', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'doubao-api', 'minimax', 'qwen', 'qwen-token-plan', 'qianwen', 'qianwen-token-plan', 'xiaomi', 'xiaomi-token-plan', 'custom']
+
+/**
+ * 千问AI平台渠道家族：下拉框合并为「API」与「Token Plan」两项，
+ * 协议（OpenAI 兼容 / Anthropic）由独立选择器切换，内部映射到四个 provider 类型。
+ * 默认协议：API → OpenAI 兼容（平台主 API 形态）；Token Plan → Anthropic（官方 Agent 接入形态）。
+ */
+type QianwenFamily = 'qianwen' | 'qianwen-token-plan'
+type QianwenProtocol = 'openai' | 'anthropic'
+
+const QIANWEN_FAMILY_LABELS: Record<QianwenFamily, string> = {
+  qianwen: '千问AI平台 API',
+  'qianwen-token-plan': '千问AI平台 Token Plan',
+}
+
+const QIANWEN_FAMILY_PROVIDERS: Record<QianwenFamily, Record<QianwenProtocol, ProviderType>> = {
+  qianwen: { openai: 'qianwen', anthropic: 'qianwen-anthropic' },
+  'qianwen-token-plan': { openai: 'qianwen-token-plan-openai', anthropic: 'qianwen-token-plan' },
+}
+
+function getQianwenFamily(provider: ProviderType): QianwenFamily | undefined {
+  if (provider === 'qianwen' || provider === 'qianwen-anthropic') return 'qianwen'
+  if (provider === 'qianwen-token-plan' || provider === 'qianwen-token-plan-openai') return 'qianwen-token-plan'
+  return undefined
+}
+
+function getQianwenProtocol(provider: ProviderType): QianwenProtocol | undefined {
+  const family = getQianwenFamily(provider)
+  if (!family) return undefined
+  return QIANWEN_FAMILY_PROVIDERS[family].anthropic === provider ? 'anthropic' : 'openai'
+}
 
 /** 需要用 messages 端点测试的供应商预设模型 */
 const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
@@ -91,14 +121,19 @@ const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
   xiaomi: ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.6-pro-ultraspeed'],
   'xiaomi-token-plan': ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.6-pro-ultraspeed'],
   'qwen-token-plan': ['qwen3.8-max-preview', 'qwen3.7-max', 'qwen3.7-flash', 'qwen3.6-flash'],
+  'qianwen-anthropic': ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-flash'],
+  'qianwen-token-plan': ['auto', 'qwen4-max', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.6-flash'],
 }
 
-/** 供应商选项（用于 SettingsSelect） */
-const PROVIDER_SELECT_OPTIONS = PROVIDER_OPTIONS.map((p) => ({
-  value: p,
-  label: PROVIDER_LABELS[p],
-  icon: getProviderLogo(p),
-}))
+/** 供应商选项（用于 SettingsSelect）；千问AI平台家族用合并后的家族名称展示 */
+const PROVIDER_SELECT_OPTIONS = PROVIDER_OPTIONS.map((p) => {
+  const family = getQianwenFamily(p)
+  return {
+    value: p,
+    label: family ? QIANWEN_FAMILY_LABELS[family] : PROVIDER_LABELS[p],
+    icon: getProviderLogo(p),
+  }
+})
 
 function resolveDirectTestModelId(provider: ProviderType, models: ChannelModel[]): string | undefined {
   if (!PROVIDER_TEST_MODEL_PRESETS[provider]) return undefined
@@ -121,6 +156,8 @@ const ANTHROPIC_PROTOCOL_PROVIDERS: ReadonlySet<ProviderType> = new Set<Provider
   'xiaomi-token-plan',
   'qwen-anthropic',
   'qwen-token-plan',
+  'qianwen-anthropic',
+  'qianwen-token-plan',
 ])
 
 /**
@@ -468,8 +505,51 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           { id: 'qwen3.7-flash', name: 'Qwen3.7 Flash', enabled: true },
           { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
         ])
+      } else if (p === 'qianwen' || p === 'qianwen-anthropic') {
+        setModels([
+          { id: 'qwen3.8-max', name: 'Qwen3.8 Max', enabled: true },
+          { id: 'qwen3.8-flash', name: 'Qwen3.8 Flash', enabled: true },
+          { id: 'qwen3.7-max', name: 'Qwen3.7 Max', enabled: true },
+          { id: 'qwen3.7-plus', name: 'Qwen3.7 Plus', enabled: true },
+          { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
+        ])
+      } else if (p === 'qianwen-token-plan' || p === 'qianwen-token-plan-openai') {
+        setModels([
+          { id: 'auto', name: 'Auto (智能路由)', enabled: true },
+          { id: 'qwen4-max', name: 'Qwen4 Max', enabled: true },
+          { id: 'qwen4-max-preview', name: 'Qwen4 Max Preview', enabled: false },
+          { id: 'qwen3.8-max', name: 'Qwen3.8 Max', enabled: true },
+          { id: 'qwen3.8-flash', name: 'Qwen3.8 Flash', enabled: true },
+          { id: 'qwen3.7-max', name: 'Qwen3.7 Max', enabled: false },
+          { id: 'qwen3.7-plus', name: 'Qwen3.7 Plus', enabled: false },
+          { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
+          { id: 'glm-5.3', name: 'GLM-5.3', enabled: false },
+          { id: 'glm-5.2', name: 'GLM-5.2', enabled: false },
+          { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', enabled: false },
+          { id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash', enabled: false },
+        ])
       }
     }
+  }
+
+  /**
+   * 千问AI平台家族内切换协议：映射到内部 provider 类型并重置默认地址。
+   * 模型 ID 跨协议通用，保留已配置模型；名称仍为默认标签时同步更新。
+   */
+  const handleQianwenProtocolChange = (nextProtocol: string): void => {
+    const family = getQianwenFamily(provider)
+    if (!family) return
+    const nextProvider = QIANWEN_FAMILY_PROVIDERS[family][nextProtocol as QianwenProtocol]
+    if (!nextProvider || nextProvider === provider) return
+    const trimmedName = name.trim()
+    if (!trimmedName || trimmedName === PROVIDER_LABELS[provider]) {
+      setName(PROVIDER_LABELS[nextProvider])
+    }
+    setProvider(nextProvider)
+    setBaseUrl(PROVIDER_DEFAULT_URLS[nextProvider])
+    setAcknowledgedBaseUrl(normalizeBaseUrl(PROVIDER_DEFAULT_URLS[nextProvider]))
+    setTestResult(null)
+    setFetchResult(null)
   }
 
   /** 添加模型 */
@@ -874,16 +954,18 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   /**
    * 编辑模式下若当前 provider 已从新建下拉移除（如旧版 'qwen'），
    * 动态追加对应选项，避免 SettingsSelect 因找不到 value 而显示占位符。
+   * 千问AI平台家族内部类型统一显示为家族代表项，不追加重复选项。
    */
+  const providerSelectValue = getQianwenFamily(provider) ?? provider
   const providerSelectOptions = React.useMemo(() => {
-    if (isEdit && !PROVIDER_OPTIONS.includes(provider)) {
+    if (isEdit && !PROVIDER_OPTIONS.includes(providerSelectValue)) {
       return [
         ...PROVIDER_SELECT_OPTIONS,
-        { value: provider, label: PROVIDER_LABELS[provider], icon: getProviderLogo(provider) },
+        { value: providerSelectValue, label: PROVIDER_LABELS[providerSelectValue], icon: getProviderLogo(providerSelectValue) },
       ]
     }
     return PROVIDER_SELECT_OPTIONS
-  }, [isEdit, provider])
+  }, [isEdit, providerSelectValue])
 
   /** 返回按钮：创建模式下有未保存内容时拦截 */
   const handleBack = (): void => {
@@ -978,11 +1060,25 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         <SettingsCard>
           <SettingsSelect
             label="供应商类型"
-            value={provider}
+            value={providerSelectValue}
             onValueChange={handleProviderChange}
             options={providerSelectOptions}
             placeholder="选择供应商"
           />
+          {getQianwenFamily(provider) && (
+            <SettingsSelect
+              label="API 协议"
+              description={getQianwenFamily(provider) === 'qianwen-token-plan'
+                ? 'Token Plan 需使用套餐专属 API Key（个人版/团队版），与按量计费 Key 不通用；Agent 场景推荐 Anthropic 协议。'
+                : '按量计费使用千问AI平台 API Key；OpenAI 兼容协议可在线拉取模型列表，Anthropic 协议使用预设模型。'}
+              value={getQianwenProtocol(provider) ?? 'openai'}
+              onValueChange={handleQianwenProtocolChange}
+              options={[
+                { value: 'openai', label: 'OpenAI 兼容（compatible-mode/v1）' },
+                { value: 'anthropic', label: 'Anthropic（apps/anthropic）' },
+              ]}
+            />
+          )}
           {provider === 'custom' && (
             <div className="px-4 pb-3 text-xs text-muted-foreground">
               用于 OpenAI Chat Completions 的自定义请求地址，Chat 会按原样发送请求。用于 Agent 时请选择 Pi；若服务提供 Anthropic Messages 端点，请选择「Anthropic 兼容格式」。

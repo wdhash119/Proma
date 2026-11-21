@@ -289,7 +289,8 @@ export class AnthropicAdapter implements ProviderAdapter {
       base['User-Agent'] = getPromaUserAgent()
       return base
     }
-    if (this.providerType === 'minimax' || this.providerType === 'qwen-anthropic') {
+    if (this.providerType === 'minimax' || this.providerType === 'qwen-anthropic'
+      || this.providerType === 'qianwen-anthropic' || this.providerType === 'qianwen-token-plan') {
       base['Authorization'] = `Bearer ${apiKey}`
       return base
     }

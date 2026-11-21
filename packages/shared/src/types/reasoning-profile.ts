@@ -21,6 +21,8 @@ export function inferReasoningTransport(provider: ProviderType | undefined): Rea
     case 'zhipu':
     case 'doubao-api':
     case 'qwen':
+    case 'qianwen':
+    case 'qianwen-token-plan-openai':
     case 'custom':
       return 'openai-completions'
     case 'openai-codex':

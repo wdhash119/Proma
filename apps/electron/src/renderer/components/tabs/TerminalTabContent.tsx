@@ -47,15 +47,17 @@ export function TerminalTabContent({ terminalId, sessionId, cwd, terminateOnUnmo
     const lifecycleGeneration = ++lifecycleGenerationRef.current
     const terminal = new Terminal({
       cursorBlink: true,
-      convertEol: true,
-      // ConPTY 已经负责终端行布局；固定保守 build 让 xterm.js 使用 Windows 的
-      // 兼容路径，避免 resize 或输入回车时与 ConPTY 重复重排而导致光标上跳。
+      // ConPTY 已输出 \r\n；再开 convertEol 会把重绘序列里的裸 \n 变成 \r\n，
+      // 额外回车使光标列复位，产生同行叠影。仅非 Windows 保留旧行为。
+      convertEol: !detectIsWindows(),
+      // 真实 build ≥ 21376 时 xterm 关闭旧版包装启发式并启用 reflow，
+      // 与 ConPTY 的现代重绘协议一致；旧 Win10 仍走保守兼容路径。
       reflowCursorLine: false,
       fontFamily: TERMINAL_FONT_FALLBACKS,
       fontSize: 13,
       lineHeight: 1.25,
       scrollback: 5_000,
-      windowsPty: detectIsWindows() ? getWindowsPtyOptions() : undefined,
+      windowsPty: detectIsWindows() ? getWindowsPtyOptions(window.electronAPI.getWindowsBuildNumber()) : undefined,
       theme: {
         background: '#111113',
         foreground: '#e6e6e9',

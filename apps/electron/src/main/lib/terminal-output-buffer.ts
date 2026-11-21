@@ -45,7 +45,14 @@ export function appendTerminalOutput(
   maxChars: number,
 ): TerminalOutputBuffer {
   const output = `${buffer.output}${event.data}`
-  const retainedOutput = output.length > maxChars ? output.slice(output.length - maxChars) : output
+  let retainedOutput = output.length > maxChars ? output.slice(output.length - maxChars) : output
+  // 容量截断可能落在转义序列中间；重放时从行首开始，避免半个序列被当成普通文本叠进屏幕。
+  if (output.length > maxChars) {
+    const firstNewline = retainedOutput.indexOf('\n')
+    if (firstNewline >= 0 && firstNewline < retainedOutput.length - 1) {
+      retainedOutput = retainedOutput.slice(firstNewline + 1)
+    }
+  }
   const endOffset = buffer.endOffset + event.data.length
   return {
     output: retainedOutput,

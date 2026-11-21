@@ -36,6 +36,8 @@ import {
 } from '@proma/shared'
 import type { CanUseToolOptions, PermissionResult } from '../agent-permission-service'
 import { isPromptTooLongError } from '../agent-error-utils'
+import { getUserAgentsSkillsDir } from '../config-paths'
+import { isDisabledUserGlobalSkill } from '../user-global-skill-filter'
 
 import type {
   AgentSession,
@@ -163,6 +165,11 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   /** Proma 聚合的附加目录；Pi 内置工具 factory 不接收多 root 参数，编排层会把它们注入 systemPrompt。 */
   additionalDirectories?: string[]
   additionalSkillPaths?: string[]
+  /**
+   * 全局禁用的用户级 Skill slug 名单（AppSettings.disabledUserSkillSlugs）。
+   * 只影响 ~/.AGENTS/skills 下的 Skill 注入，工作区同名 Skill 不受影响。
+   */
+  disabledUserSkillSlugs?: string[]
   /** 当前用户输入显式引用的 Skill name（兼容历史 slug 已在编排层归一化） */
   skillMentions?: string[]
   /** Persisted user-message UUID for turn-scoped Skill attribution. */
@@ -497,11 +504,24 @@ function isPromaSkillPath(path: string | undefined, allowedRoots: string[]): boo
   return allowedRoots.some((root) => isPathWithinRoot(guardedPath, root))
 }
 
-function createPromaSkillsOverride(additionalSkillPaths: string[] | undefined): (base: SkillLoadResult) => SkillLoadResult {
+function createPromaSkillsOverride(
+  additionalSkillPaths: string[] | undefined,
+  disabledUserSkillSlugs: string[] | undefined,
+): (base: SkillLoadResult) => SkillLoadResult {
   const allowedRoots = buildAllowedSkillRoots(additionalSkillPaths)
+  const disabledUserSlugs = new Set(disabledUserSkillSlugs ?? [])
+  // 用户全局根目录固定为 ~/.AGENTS/skills（与 config-paths 同一来源）；
+  // 名单非空时再按目录归属过滤，避免给所有 Skill 增加无谓比较。
+  const userGlobalRoot = disabledUserSlugs.size > 0 ? resolveGuardedRealPath(getUserAgentsSkillsDir()) : undefined
+  const isDisabledUserSkill = (skill: Skill): boolean => {
+    if (!userGlobalRoot) return false
+    const baseDir = skill.baseDir || dirname(skill.filePath)
+    return isDisabledUserGlobalSkill(resolveGuardedRealPath(baseDir), userGlobalRoot, disabledUserSlugs)
+  }
   return (base) => ({
     skills: base.skills.filter((skill) =>
-      isPromaSkillPath(skill.filePath, allowedRoots) || isPromaSkillPath(skill.baseDir, allowedRoots)),
+      (isPromaSkillPath(skill.filePath, allowedRoots) || isPromaSkillPath(skill.baseDir, allowedRoots))
+      && !isDisabledUserSkill(skill)),
     diagnostics: base.diagnostics.filter((diagnostic) => isPromaSkillPath(diagnostic.path, allowedRoots)),
   })
 }
@@ -1478,7 +1498,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         ...createPromaManagedResourceLoaderOptions(),
         agentsFilesOverride: createPromaProjectInstructionFilesOverride(input.projectInstructionFiles ?? []),
         additionalSkillPaths: input.additionalSkillPaths ?? [],
-        skillsOverride: createPromaSkillsOverride(input.additionalSkillPaths),
+        skillsOverride: createPromaSkillsOverride(input.additionalSkillPaths, input.disabledUserSkillSlugs),
         ...(extensionFactories.length > 0 && { extensionFactories }),
         systemPromptOverride: () => appendWindowsBaseModeInstruction(input.systemPrompt, input.runtimeEnv),
       })

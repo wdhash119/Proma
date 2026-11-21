@@ -44,6 +44,11 @@ export function SkillDetailView({
   onRequestDelete,
   onOpenFolder,
 }: SkillDetailViewProps): React.ReactElement {
+  /**
+   * 用户全局 Skill（~/.AGENTS/skills）：Proma 只读展示，开关只改全局禁用名单。
+   * 因此隐藏删除/更新/打开工作区目录，并禁用正文与元数据编辑。
+   */
+  const isUserGlobal = skill.source === 'user-global'
   const [content, setContent] = React.useState<string | null>(null)
   const [loadingContent, setLoadingContent] = React.useState(true)
   const [editName, setEditName] = React.useState(skill.name)
@@ -141,6 +146,8 @@ export function SkillDetailView({
   }, [contentVersion, skill.slug, workspaceSlug, updateDraft])
 
   const saveDraft = React.useCallback((): void => {
+    // 用户全局 Skill 的磁盘内容不由 Proma 管理，禁止自动保存覆盖用户文件。
+    if (isUserGlobal) return
     const draft = draftRef.current
     const saved = savedRef.current
     const hasChanges = draft.name !== saved.name
@@ -197,7 +204,7 @@ export function SkillDetailView({
           saveDraftRef.current()
         }
       })
-  }, [workspaceSlug, skill.slug])
+  }, [workspaceSlug, skill.slug, isUserGlobal])
 
   saveDraftRef.current = saveDraft
 
@@ -227,11 +234,13 @@ export function SkillDetailView({
     }
   }, [])
 
-  const sourceLabel = isBuiltin
-    ? 'PROMA 内置'
-    : skill.importSource
-      ? `从 ${skill.importSource.sourceWorkspaceName} 导入`
-      : '当前项目'
+  const sourceLabel = isUserGlobal
+    ? '用户全局（~/.AGENTS/skills，只读）'
+    : isBuiltin
+      ? 'PROMA 内置'
+      : skill.importSource
+        ? `从 ${skill.importSource.sourceWorkspaceName} 导入`
+        : '当前项目'
 
   return (
     <div
@@ -266,6 +275,11 @@ export function SkillDetailView({
                   v{skill.version}
                 </span>
               )}
+              {isUserGlobal && (
+                <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                  全局
+                </span>
+              )}
             </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">{skill.slug}</div>
           </div>
@@ -277,21 +291,23 @@ export function SkillDetailView({
             <Switch checked={skill.enabled} onCheckedChange={onToggle} />
             <span className="text-xs text-muted-foreground">{skill.enabled ? '已启用' : '已禁用'}</span>
           </div>
-          {skill.hasUpdate && (
+          {!isUserGlobal && skill.hasUpdate && (
             <Button size="sm" variant="outline" onClick={onUpdate} disabled={updating}>
               <RefreshCw size={14} className={cn(updating && 'animate-spin')} />
               {updating ? '更新中' : '更新'}
             </Button>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="ghost" onClick={onOpenFolder}>
-                <FolderOpen size={14} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">打开目录</TooltipContent>
-          </Tooltip>
-          {!isBuiltin && (
+          {!isUserGlobal && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" onClick={onOpenFolder}>
+                  <FolderOpen size={14} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">打开目录</TooltipContent>
+            </Tooltip>
+          )}
+          {!isBuiltin && !isUserGlobal && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -307,6 +323,11 @@ export function SkillDetailView({
             </Tooltip>
           )}
         </div>
+        {isUserGlobal && (
+          <p className="mt-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            全局 Skill 位于 ~/.AGENTS/skills，Proma 只读展示；开关只决定是否注入 Agent，请在用户目录中修改文件内容。
+          </p>
+        )}
       </div>
 
       {loadingContent ? (
@@ -318,7 +339,9 @@ export function SkillDetailView({
             <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">元数据</h4>
-              {saveFailed ? (
+              {isUserGlobal ? (
+                <span className="text-xs text-muted-foreground">只读</span>
+              ) : saveFailed ? (
                 <Button size="sm" variant="outline" onClick={retrySave} disabled={saving}>
                   重试保存
                 </Button>
@@ -329,10 +352,19 @@ export function SkillDetailView({
               )}
             </div>
             <SettingsCard divided>
-              <MetaEditRow label="名称" value={editName} onChange={(name) => updateDraft({ name })} />
-              <MetaEditRow label="描述" value={editDescription} onChange={(description) => updateDraft({ description })} multiline />
+              {isUserGlobal ? (
+                <>
+                  <MetaRow label="名称" value={editName} />
+                  <MetaRow label="描述" value={editDescription || '暂无描述'} />
+                </>
+              ) : (
+                <>
+                  <MetaEditRow label="名称" value={editName} onChange={(name) => updateDraft({ name })} />
+                  <MetaEditRow label="描述" value={editDescription} onChange={(description) => updateDraft({ description })} multiline />
+                </>
+              )}
               <MetaRow label="数据源" value={sourceLabel} />
-              <MetaRow label="位置" value={`skills/${skill.slug}`} />
+              <MetaRow label="位置" value={isUserGlobal ? `~/.AGENTS/skills/${skill.slug}` : `skills/${skill.slug}`} />
             </SettingsCard>
           </div>
 
@@ -340,14 +372,16 @@ export function SkillDetailView({
           <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as 'body' | 'files')} className="flex flex-col">
             <TabsList className="self-start shrink-0">
               <TabsTrigger value="body">说明</TabsTrigger>
-              <TabsTrigger value="files">
-                资源文件
-                {fileCount !== null && (
-                  <span className="ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-muted-foreground/15 px-1 text-[10px] font-medium">
-                    {fileCount}
-                  </span>
-                )}
-              </TabsTrigger>
+              {!isUserGlobal && (
+                <TabsTrigger value="files">
+                  资源文件
+                  {fileCount !== null && (
+                    <span className="ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-muted-foreground/15 px-1 text-[10px] font-medium">
+                      {fileCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="body" className="mt-3">
@@ -361,6 +395,7 @@ export function SkillDetailView({
                       value={editBody}
                       onChange={(body) => updateDraft({ body })}
                       onSave={retrySave}
+                      readOnly={isUserGlobal}
                       className="live-markdown-external-scroll skill-detail-live-markdown"
                     />
                   </div>

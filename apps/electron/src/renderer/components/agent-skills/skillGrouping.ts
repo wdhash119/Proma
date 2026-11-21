@@ -7,6 +7,8 @@ export interface SkillGroup {
 }
 
 const UNGROUPED_TITLE = '未分组'
+/** 用户全局 Skills（~/.AGENTS/skills）没有分组时的兜底标题。 */
+const USER_GLOBAL_TITLE = '用户全局'
 
 function normalizeGroup(value: string): string {
   return value.trim().replace(/^["']|["']$/g, '')
@@ -17,6 +19,9 @@ export function getSkillGroupTitle(skill: SkillMeta): string {
     const group = normalizeGroup(skill.group)
     if (group) return group
   }
+
+  // 全局 Skill 与工作区 Skill 混在同一列表时，按来源给出可识别的兜底分组。
+  if (skill.source === 'user-global') return USER_GLOBAL_TITLE
 
   return UNGROUPED_TITLE
 }

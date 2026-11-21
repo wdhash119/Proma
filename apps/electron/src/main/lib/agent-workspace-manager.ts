@@ -835,7 +835,7 @@ function isSkillDirectoryEntry(dir: string, entry: Dirent): boolean {
   }
 }
 
-function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
+export function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
   const skills: SkillMeta[] = []
 
   try {

@@ -356,8 +356,6 @@ export const CHAT_IPC_CHANNELS = {
   GET_MESSAGES_AROUND: 'chat:get-messages-around',
   /** 更新对话标题 */
   UPDATE_TITLE: 'chat:update-title',
-  /** 删除对话 */
-  DELETE_CONVERSATION: 'chat:delete-conversation',
   /** 更新对话使用的模型/渠道 */
   UPDATE_MODEL: 'chat:update-conversation-model',
 

@@ -93,7 +93,11 @@ export function ImportSkillDialog({
     }
   }, [open, workspaceSlug])
 
-  const installedSlugs = React.useMemo(() => new Set(installedSkills.map((s) => s.slug)), [installedSkills])
+  // 用户全局 Skill 不属于当前工作区，导入同名 Skill 仍会生成独立的工作区副本，不参与去重。
+  const installedSlugs = React.useMemo(
+    () => new Set(installedSkills.filter((s) => s.source !== 'user-global').map((s) => s.slug)),
+    [installedSkills],
+  )
 
   const availableWorkspaces = React.useMemo(
     () =>

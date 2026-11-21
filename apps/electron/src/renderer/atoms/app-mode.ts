@@ -7,8 +7,7 @@
  * 保持类型合法（运行时永远不成立），并把 atom 值固定为 'agent'、setter 拒绝切换。
  * 这样历史 localStorage 中残留的 'chat' 也不会让界面回到已退役的模式。
  *
- * 历史 Chat 数据保留在 conversations.json / JSONL 中，可在
- * 「设置 → 历史 Chat」检索并逐条交给 Agent 继续。
+ * 历史 Chat 数据保留在 conversations.json / JSONL 中；设置页已不再提供归档入口。
  */
 
 import { atom } from 'jotai'

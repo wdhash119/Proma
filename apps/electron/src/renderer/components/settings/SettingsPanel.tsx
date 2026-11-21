@@ -24,7 +24,6 @@ import {
   Mic,
   HardDriveDownload,
   HardDrive,
-  Archive,
   Sparkles,
   Monitor,
 } from "lucide-react";
@@ -36,6 +35,7 @@ import {
   settingsCloseRequestedAtom,
   settingsOpenAtom,
   settingsPendingSessionNavigationAtom,
+  normalizeSettingsTab,
   type SettingsSessionNavigation,
 } from "@/atoms/settings-tab";
 import type { SettingsTab } from "@/atoms/settings-tab";
@@ -67,7 +67,6 @@ import { VoiceInputSettings } from "./VoiceInputSettings";
 import { MigrationSettings } from "./MigrationSettings";
 import { StorageSettings } from "./StorageSettings";
 import { OnboardingSettings } from "./OnboardingSettings";
-import { ChatHistorySettings } from "./ChatHistorySettings";
 import { AboutYouSettings } from "./AboutYouSettings";
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useComputerUseUpdateStatus } from '@/hooks/useComputerUseUpdateStatus'
@@ -93,7 +92,6 @@ const BASE_TABS: TabItem[] = [
   COMPUTER_USE_TAB,
   { id: "vision-relay", label: "视觉助手", icon: <Eye size={16} /> },
   { id: "personas", label: "人设管理", icon: <Bot size={16} /> },
-  { id: "chat-history", label: "历史 Chat", icon: <Archive size={16} /> },
   { id: "about-you", label: "关于你", icon: <Sparkles size={16} /> },
   { id: "proxy", label: "代理设置", icon: <Globe size={16} /> },
 ];
@@ -142,8 +140,6 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <PersonaSettings />;
     case "about-you":
       return <AboutYouSettings />
-    case "chat-history":
-      return <ChatHistorySettings />;
     case "proxy":
       return <ProxySettings />;
     case "appearance":
@@ -175,7 +171,12 @@ export function SettingsPanel({
   onClose,
 }: SettingsPanelProps): React.ReactElement {
   const isWindows = React.useMemo(() => detectIsWindows(), [])
-  const [activeTab, setActiveTab] = useAtom(settingsTabAtom);
+  const [storedTab, setActiveTab] = useAtom(settingsTabAtom);
+  // 已移除的标签页（历史 Chat）或热更新后的残留值回退默认页，避免设置面板空白。
+  const activeTab = React.useMemo(() => normalizeSettingsTab(storedTab), [storedTab]);
+  React.useEffect(() => {
+    if (storedTab !== activeTab) setActiveTab(activeTab);
+  }, [activeTab, setActiveTab, storedTab]);
   const channelFormDirty = useAtomValue(channelFormDirtyAtom);
   const [closeRequested, setCloseRequested] = useAtom(settingsCloseRequestedAtom);
   const [pendingSessionNavigation, setPendingSessionNavigation] = useAtom(settingsPendingSessionNavigationAtom);

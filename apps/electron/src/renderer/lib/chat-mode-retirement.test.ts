@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const rendererRoot = join(import.meta.dir, '..')
@@ -20,7 +20,8 @@ describe('Chat 模式退役后的主入口契约', () => {
 
     expect(source).not.toContain("from '@/components/chat'")
     expect(source).toContain('Chat 模式已退役')
-    expect(source).toContain('设置 → 历史 Chat')
+    expect(source).toContain('历史对话数据仍保留在本地；侧栏问答不受影响。')
+    expect(source).not.toContain('设置 → 历史 Chat')
   })
 
   test('Given 侧栏 When 检查 Then 模式切换器与 Chat 入口已移除', () => {
@@ -43,32 +44,44 @@ describe('Chat 模式退役后的主入口契约', () => {
   })
 })
 
-describe('历史 Chat 归档入口', () => {
-  test('Given 设置面板 When 检查 Then 注册了历史 Chat 页', () => {
+describe('历史 Chat 入口已移除', () => {
+  test('Given 设置面板 When 检查 Then 不再注册历史 Chat 页', () => {
     const source = readFileSync(join(settingsDirectory, 'SettingsPanel.tsx'), 'utf8')
 
-    expect(source).toContain('ChatHistorySettings')
-    expect(source).toContain("id: \"chat-history\"")
+    expect(source).not.toContain('ChatHistorySettings')
+    expect(source).not.toContain('chat-history')
   })
 
-  test('Given 历史 Chat 页 When 检查 Then 支持搜索、归档筛选、分页与交给 Agent', () => {
-    const source = readFileSync(join(settingsDirectory, 'ChatHistorySettings.tsx'), 'utf8')
-
-    expect(source).toContain('listConversations')
-    expect(source).toContain("archiveFilter === 'archived'")
-    expect(source).toContain('PAGE_SIZE')
-    expect(source).toContain('migrateChatToAgent')
+  test('Given 历史 Chat 页文件 When 检查 Then 已删除且没有残留引用', () => {
+    expect(existsSync(join(settingsDirectory, 'ChatHistorySettings.tsx'))).toBe(false)
   })
 
-  test('Given 历史 Chat 数据层 When 检查 Then 仍保留检索与迁移 IPC，已移除无调用方的死 IPC', () => {
+  test('Given 历史 Chat 数据层 When 检查 Then 保留列表与迁移 IPC，删除无调用方的死 IPC', () => {
     const preload = readFileSync(join(rendererRoot, '../preload/index.ts'), 'utf8')
+    const shared = readFileSync(join(rendererRoot, '../../../../packages/shared/src/types/chat.ts'), 'utf8')
+    const mainIpc = readFileSync(join(rendererRoot, '../main/ipc.ts'), 'utf8')
 
     expect(preload).toContain('listConversations')
     expect(preload).toContain('migrateChatToAgent')
-    // 问答正文检索 UI 已随 Chat 主入口退役；searchConversationMessages 无调用方，已清理。
-    expect(preload).not.toContain('searchConversationMessages')
+    // 历史 Chat 设置页删除后，删除对话无调用方，四层同步清理；
+    // 问答会话内检索（迷你地图搜索完整历史）仍是活链路，必须保留。
+    expect(preload).not.toContain('deleteConversation')
+    expect(preload).toContain('searchConversationSessionMessages')
+    expect(shared).not.toContain('DELETE_CONVERSATION')
+    expect(shared).toContain('SEARCH_SESSION_MESSAGES')
+    expect(mainIpc).not.toContain('CHAT_IPC_CHANNELS.DELETE_CONVERSATION')
+    expect(mainIpc).toContain('CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES')
     expect(preload).not.toContain('toggleArchiveConversation')
     expect(preload).not.toContain('extractAttachmentText')
+  })
+
+  test('Given 旧文案入口 When 检查 Then 引导与 FAQ 不再指向已删除的设置页', () => {
+    const onboarding = readFileSync(join(rendererRoot, 'components/onboarding/OnboardingView.tsx'), 'utf8')
+    const faq = readFileSync(join(rendererRoot, 'components/onboarding/faq-content.ts'), 'utf8')
+
+    expect(onboarding).not.toContain('设置 → 历史 Chat')
+    expect(faq).not.toContain('设置 → 历史 Chat')
+    expect(faq).toContain('历史对话数据仍然保留在本地')
   })
 })
 

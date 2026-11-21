@@ -5,9 +5,10 @@
  * 存储在 ~/.proma/settings.json
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { getSettingsPath } from './config-paths'
-import { DEFAULT_THEME_MODE, normalizeProductivityToolsSettings } from '../../types'
+import { writeJsonFileAtomic } from './safe-file'
+import { DEFAULT_THEME_MODE, normalizeDisabledUserSkillSlugs, normalizeProductivityToolsSettings } from '../../types'
 import type { AppSettings } from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 
@@ -40,6 +41,7 @@ export function getSettings(): AppSettings {
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
       productivityTools: normalizeProductivityToolsSettings(undefined),
+      disabledUserSkillSlugs: [],
     }
   }
 
@@ -83,6 +85,8 @@ export function getSettings(): AppSettings {
       gitAttributionEnabled: settings.gitAttributionEnabled ?? true,
       // 缺省全部开启：老配置文件不会因升级意外隐藏生产力工具。
       productivityTools: normalizeProductivityToolsSettings(data.productivityTools),
+      // 旧配置没有该字段时视为没有禁用任何用户级 Skill。
+      disabledUserSkillSlugs: normalizeDisabledUserSkillSlugs(data.disabledUserSkillSlugs),
       // 仅保留 macOS 原生 Island 开关；清理旧非原生 surface 的持久化残留字段。
     }
   } catch (error) {
@@ -100,6 +104,7 @@ export function getSettings(): AppSettings {
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
       productivityTools: normalizeProductivityToolsSettings(undefined),
+      disabledUserSkillSlugs: [],
     }
   }
 }
@@ -118,11 +123,15 @@ export function updateSettings(updates: Partial<AppSettings>): AppSettings {
     productivityTools: updates.productivityTools === undefined
       ? normalizeProductivityToolsSettings(current.productivityTools)
       : normalizeProductivityToolsSettings({ ...current.productivityTools, ...updates.productivityTools }),
+    disabledUserSkillSlugs: updates.disabledUserSkillSlugs === undefined
+      ? normalizeDisabledUserSkillSlugs(current.disabledUserSkillSlugs)
+      : normalizeDisabledUserSkillSlugs(updates.disabledUserSkillSlugs),
   }
   const filePath = getSettingsPath()
 
   try {
-    writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8')
+    // 原子写：崩溃或强制关机时不会留下截断的 settings.json。
+    writeJsonFileAtomic(filePath, updated)
     console.log('[设置] 已更新 keys:', Object.keys(updates).join(', '))
   } catch (error) {
     console.error('[设置] 写入失败:', error)

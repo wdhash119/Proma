@@ -48,6 +48,11 @@ export function PersonaSettings(): React.ReactElement {
   const [editPrimer, setEditPrimer] = React.useState<PersonaPrimerTurn[]>([])
   const [hoveredId, setHoveredId] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
+  /** Proma 默认系统提示词只读预览（仅默认助手选中时加载） */
+  const [defaultPrompt, setDefaultPrompt] = React.useState('')
+  const [defaultPromptLoading, setDefaultPromptLoading] = React.useState(false)
+  const [defaultPromptError, setDefaultPromptError] = React.useState<string | null>(null)
+  const [defaultPromptAttempt, setDefaultPromptAttempt] = React.useState(0)
 
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSaveRef = React.useRef<{ id: string; input: PersonaUpdateInput } | null>(null)
@@ -193,8 +198,36 @@ export function PersonaSettings(): React.ReactElement {
   }
 
   const isReadonly = selectedPersona?.builtin === true
-  /** 默认助手不存正文：编辑区换成只读说明，避免误以为人设里有一段提示词。 */
+  /** 默认助手不存正文：编辑区换成 Proma 默认系统提示词的只读预览。 */
   const isBaselinePersona = selectedPersona?.id === BUILTIN_DEFAULT_PERSONA_ID
+
+  /**
+   * 选中「Proma 默认助手」时拉取主进程生成的中性上下文系统提示词。
+   * 这是只读快照，不参与保存，也不代表任何具体会话的实际提示词。
+   */
+  React.useEffect(() => {
+    if (!isBaselinePersona) {
+      setDefaultPromptError(null)
+      return
+    }
+    let cancelled = false
+    setDefaultPromptLoading(true)
+    setDefaultPromptError(null)
+    window.electronAPI.getDefaultSystemPrompt()
+      .then((content) => {
+        if (!cancelled) setDefaultPrompt(content)
+      })
+      .catch((error) => {
+        console.error('[人设设置] 读取默认系统提示词失败:', error)
+        if (!cancelled) setDefaultPromptError('读取 Proma 默认系统提示词失败')
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultPromptLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isBaselinePersona, defaultPromptAttempt])
 
   const updatePrimer = (next: PersonaPrimerTurn[]): void => {
     setEditPrimer(next)
@@ -284,11 +317,42 @@ export function PersonaSettings(): React.ReactElement {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1.5 block">人设正文（Markdown）</label>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    {isBaselinePersona ? '默认系统提示词' : '人设正文（Markdown）'}
+                  </label>
                   {isBaselinePersona ? (
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
-                      <p>默认人设不注入额外提示词：Agent 使用产品系统提示词，侧栏问答使用内置基线。此人设没有可编辑的正文与示范对话。</p>
-                      <p className="mt-2">如需自定义风格，请新建人设后在会话中选择使用。</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-foreground">Proma 默认系统提示词（只读预览）</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">中性上下文快照</span>
+                      </div>
+                      {defaultPromptLoading || (!defaultPrompt && !defaultPromptError) ? (
+                        <div className="rounded-md border border-border bg-muted/40 px-3 py-6 text-center text-xs text-muted-foreground">
+                          正在加载系统提示词…
+                        </div>
+                      ) : defaultPromptError ? (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-4 text-xs text-destructive">
+                          <p>{defaultPromptError}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 h-7 text-xs"
+                            onClick={() => setDefaultPromptAttempt((attempt) => attempt + 1)}
+                          >
+                            重试
+                          </Button>
+                        </div>
+                      ) : (
+                        <pre
+                          className="max-h-[320px] overflow-auto rounded-md border border-border bg-muted/30 px-3 py-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-muted-foreground"
+                          aria-label="Proma 默认系统提示词只读预览"
+                        >
+                          {defaultPrompt}
+                        </pre>
+                      )}
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        此人设不注入额外提示词；以上为 Agent 默认使用的产品系统提示词。预览使用中性上下文生成，实际会话还会按项目、工具与会话状态追加动态段落。
+                      </p>
                     </div>
                   ) : (
                     <Textarea

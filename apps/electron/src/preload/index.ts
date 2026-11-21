@@ -409,13 +409,8 @@ export interface ElectronAPI {
   /** 更新对话使用的模型/渠道 */
   updateConversationModel: (id: string, modelId: string, channelId: string) => Promise<ConversationMeta>
 
-  /** 删除对话 */
-  deleteConversation: (id: string) => Promise<void>
-
   /** 切换对话置顶状态 */
   togglePinConversation: (id: string) => Promise<ConversationMeta>
-
-  /** 搜索当前对话完整持久化历史（仅返回命中元数据） */
   searchConversationSessionMessages: (conversationId: string, query: string) => Promise<SessionMessageSearchResponse>
 
   // ===== 消息发送 =====
@@ -1085,6 +1080,9 @@ export interface ElectronAPI {
   /** 导出人设为 Markdown 文件 */
   exportPersonaMarkdown: (id: string) => Promise<PersonaExportResult>
 
+  /** 获取 Proma 默认系统提示词只读预览（设置页用，中性上下文） */
+  getDefaultSystemPrompt: () => Promise<string>
+
   // ===== 自动更新 =====
 
   /** 更新 API */
@@ -1677,10 +1675,6 @@ const electronAPI: ElectronAPI = {
 
   updateConversationModel: (id: string, modelId: string, channelId: string) => {
     return ipcRenderer.invoke(CHAT_IPC_CHANNELS.UPDATE_MODEL, id, modelId, channelId)
-  },
-
-  deleteConversation: (id: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.DELETE_CONVERSATION, id)
   },
 
   togglePinConversation: (id: string) => {
@@ -2641,6 +2635,10 @@ const electronAPI: ElectronAPI = {
 
   exportPersonaMarkdown: (id: string) => {
     return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.EXPORT_MARKDOWN, id)
+  },
+
+  getDefaultSystemPrompt: (): Promise<string> => {
+    return ipcRenderer.invoke(PERSONA_IPC_CHANNELS.GET_DEFAULT_SYSTEM_PROMPT)
   },
 
   // 自动更新

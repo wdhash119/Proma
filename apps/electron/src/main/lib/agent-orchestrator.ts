@@ -1433,6 +1433,8 @@ export class AgentOrchestrator {
             getWorkspaceSkillsDir(workspaceSlug),
             ...(existsSync(getUserAgentsSkillsDir()) ? [getUserAgentsSkillsDir()] : []),
           ],
+          // 用户全局 Skill 的开关只写入设置层禁用名单；运行时按名单过滤注入。
+          disabledUserSkillSlugs: appSettings.disabledUserSkillSlugs ?? [],
           skillWorkspaceSlug: workspaceSlug,
         } : {}),
         ...(mentionedSkills?.length ? { skillMentions: mentionedSkills } : {}),

@@ -1159,6 +1159,11 @@ export interface SkillMeta {
   icon?: string
   version?: string
   enabled: boolean
+  /**
+   * Skill 来源：workspace = 当前工作区 skills/（缺省，兼容旧数据），
+   * user-global = 用户全局目录 ~/.AGENTS/skills，由 Proma 只读展示并可全局禁用。
+   */
+  source?: 'workspace' | 'user-global'
   /** 如果此 Skill 是从其他工作区导入的，则携带来源信息 */
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
@@ -1975,9 +1980,9 @@ export const AGENT_IPC_CHANNELS = {
   GET_SKILLS_DIR: 'agent:get-skills-dir',
   /** 使用系统文件管理器打开指定工作区 Skill 的实际目录 */
   OPEN_SKILL_FOLDER: 'agent:open-skill-folder',
-  /** 删除工作区 Skill */
+  /** 删除工作区 Skill（用户全局 Skill 会被拒绝） */
   DELETE_SKILL: 'agent:delete-skill',
-  /** 切换工作区 Skill 启用/禁用 */
+  /** 切换 Skill 启用/禁用；用户全局 Skill 走全局禁用名单，不移动磁盘目录 */
   TOGGLE_SKILL: 'agent:toggle-skill',
   /** 获取其他工作区的 Skill 列表 */
   GET_OTHER_WORKSPACE_SKILLS: 'agent:get-other-workspace-skills',

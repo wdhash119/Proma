@@ -382,4 +382,6 @@ export const PERSONA_IPC_CHANNELS = {
   IMPORT_MARKDOWN: 'persona:import-markdown',
   /** 导出人设为 Markdown 文件（主进程弹保存框） */
   EXPORT_MARKDOWN: 'persona:export-markdown',
+  /** 获取 Proma 默认系统提示词（设置页只读预览，中性上下文） */
+  GET_DEFAULT_SYSTEM_PROMPT: 'persona:get-default-system-prompt',
 } as const

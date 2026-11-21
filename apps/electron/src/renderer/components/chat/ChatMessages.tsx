@@ -340,6 +340,7 @@ export function ChatMessages({
   }, [parallelMode, hasMore, handleLoadMore])
 
   // 迷你地图数据（必须在所有条件分支之前调用，遵守 hooks 规则）
+  // 问答会话历史分页加载，检索走主进程 IPC 覆盖完整持久化历史（仅返回命中元数据）。
   const searchMessages = React.useCallback<SessionMessageSearch>(
     (query) => window.electronAPI.searchConversationSessionMessages(conversationId, query),
     [conversationId],

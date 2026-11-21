@@ -299,6 +299,13 @@ export function normalizeProductivityToolsSettings(input: unknown): Productivity
   }
 }
 
+/** 容错读取全局禁用的用户级 Skill slug 名单；缺省为空（全部启用）。 */
+export function normalizeDisabledUserSkillSlugs(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  const slugs = input.filter((slug): slug is string => typeof slug === 'string' && slug.trim().length > 0)
+  return [...new Set(slugs.map((slug) => slug.trim()))]
+}
+
 /** 提升此版本可要求用户重新确认更新后的受管浏览器风险告知。 */
 export const BROWSER_RISK_DISCLAIMER_VERSION = 1
 
@@ -372,6 +379,11 @@ export interface AppSettings {
   browserRiskDisclaimerVersion?: number
   /** Todo、日程与 Obsidian 的可见性和 Agent 工具注入开关，默认全部开启。 */
   productivityTools: ProductivityToolsSettings
+  /**
+   * 全局禁用的用户级 Skills（~/.AGENTS/skills）slug 名单，跨工作区生效。
+   * 只影响 Agent 运行时的 Skill 注入，不改动用户目录磁盘内容。
+   */
+  disabledUserSkillSlugs: string[]
   /** 启动时自动清理临时文件（proma-preview、proma-installers），默认 true */
   autoCleanupTempOnStart?: boolean
   /** 自动清理 N 天前已归档会话的 SDK 数据（0 = 禁用，默认 0） */

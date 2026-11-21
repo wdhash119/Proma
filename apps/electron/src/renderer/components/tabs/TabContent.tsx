@@ -40,7 +40,7 @@ export function TabContent({ tabId }: TabContentProps): React.ReactElement {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
         <span>Chat 模式已退役</span>
-        <span className="text-xs">历史对话可在「设置 → 历史 Chat」中检索并交给 Agent 继续。</span>
+        <span className="text-xs">历史对话数据仍保留在本地；侧栏问答不受影响。</span>
       </div>
     )
   }

@@ -212,7 +212,6 @@ import {
   getConversationMessagesAround,
   getRecentMessages,
   updateConversationMeta,
-  deleteConversation,
   deleteMessage,
   truncateMessagesFrom,
   updateContextDividers,
@@ -381,6 +380,13 @@ import {
   removeWorktreeRepo,
   cleanupStaleWorkspaceAttachedPaths,
 } from './lib/agent-workspace-manager'
+import {
+  assertNotUserGlobalSkill,
+  getUserGlobalSkills,
+  isUserGlobalSkillSlug,
+  readUserGlobalSkillContent,
+  setUserGlobalSkillEnabled,
+} from './lib/user-global-skills'
 import { movePathSafely } from './lib/file-move-service'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
@@ -453,6 +459,7 @@ import {
   importPersonaMarkdown,
   exportPersonaMarkdown,
 } from './lib/persona-manager'
+import { buildSystemPrompt } from './lib/agent-prompt-builder'
 import {
   getLatestRelease,
   listReleases as listGitHubReleases,
@@ -1972,14 +1979,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 删除对话
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.DELETE_CONVERSATION,
-    async (_, id: string): Promise<void> => {
-      return deleteConversation(id)
-    }
-  )
-
   // 切换对话置顶状态
   ipcMain.handle(
     CHAT_IPC_CHANNELS.TOGGLE_PIN,
@@ -3395,11 +3394,15 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 获取工作区 Skill 列表（含活跃和不活跃，设置页 UI 用）
+  // 获取 Skill 列表（工作区活跃/不活跃 + 用户全局），设置页 UI 用
   ipcMain.handle(
     AGENT_IPC_CHANNELS.GET_SKILLS,
     async (_, workspaceSlug: string): Promise<SkillMeta[]> => {
-      return getAllWorkspaceSkills(workspaceSlug)
+      const workspaceSkills = getAllWorkspaceSkills(workspaceSlug)
+      // 同名时工作区 Skill 优先，避免列表出现重复 slug；全局项仍可在设置层单独禁用。
+      const workspaceSlugs = new Set(workspaceSkills.map((skill) => skill.slug))
+      const userGlobalSkills = getUserGlobalSkills().filter((skill) => !workspaceSlugs.has(skill.slug))
+      return [...workspaceSkills, ...userGlobalSkills]
     }
   )
 
@@ -3449,23 +3452,32 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.OPEN_SKILL_FOLDER,
     async (_, workspaceSlug: string, skillSlug: string): Promise<void> => {
+      // 用户全局 Skill 不在工作区目录内，交给用户自行在 ~/.AGENTS/skills 管理。
+      assertNotUserGlobalSkill(skillSlug)
       const error = await shell.openPath(getWorkspaceSkillFolder(workspaceSlug, skillSlug))
       if (error) throw new Error(`无法打开 Skill 目录: ${error}`)
     }
   )
 
-  // 删除工作区 Skill
+  // 删除工作区 Skill（用户全局 Skill 拒绝）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SKILL,
     async (_, workspaceSlug: string, skillSlug: string): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       return deleteWorkspaceSkill(workspaceSlug, skillSlug)
     }
   )
 
-  // 切换工作区 Skill 启用/禁用
+  // 切换 Skill 启用/禁用
+  // 用户全局 Skill 只更新全局禁用名单（原子写 settings.json），不移动用户目录；
+  // 工作区 Skill 仍沿用 skills/ ↔ skills-inactive/ 的目录移动语义。
   ipcMain.handle(
     AGENT_IPC_CHANNELS.TOGGLE_SKILL,
     async (_, workspaceSlug: string, skillSlug: string, enabled: boolean): Promise<void> => {
+      if (isUserGlobalSkillSlug(skillSlug)) {
+        setUserGlobalSkillEnabled(skillSlug, enabled)
+        return
+      }
       return toggleWorkspaceSkill(workspaceSlug, skillSlug, enabled)
     }
   )
@@ -3506,6 +3518,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.UPDATE_SKILL_FROM_SOURCE,
     async (_, targetSlug: string, skillSlug: string): Promise<SkillMeta> => {
+      assertNotUserGlobalSkill(skillSlug)
       return updateSkillFromSource(targetSlug, skillSlug)
     }
   )
@@ -3513,13 +3526,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
     async (_, workspaceSlug: string, skillSlug: string): Promise<string> => {
-      return readWorkspaceSkillContent(workspaceSlug, skillSlug)
+      // 工作区 Skill 命中工作区目录；用户全局 Skill 只读回退到 ~/.AGENTS/skills。
+      return readUserGlobalSkillContent(workspaceSlug, skillSlug, readWorkspaceSkillContent)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.WRITE_SKILL_CONTENT,
     async (_, workspaceSlug: string, skillSlug: string, content: string): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       writeWorkspaceSkillContent(workspaceSlug, skillSlug, content)
     }
   )
@@ -3543,6 +3558,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.WRITE_SKILL_FILE,
     async (_, workspaceSlug: string, skillSlug: string, relativePath: string, content: string): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       writeSkillFile(workspaceSlug, skillSlug, relativePath, content)
     }
   )
@@ -3550,6 +3566,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_SKILL_ENTRY,
     async (_, workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory'): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       createSkillEntry(workspaceSlug, skillSlug, relativePath, type)
     }
   )
@@ -3557,6 +3574,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SKILL_ENTRY,
     async (_, workspaceSlug: string, skillSlug: string, relativePath: string): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       deleteSkillEntry(workspaceSlug, skillSlug, relativePath)
     }
   )
@@ -3564,6 +3582,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.RENAME_SKILL_ENTRY,
     async (_, workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string): Promise<void> => {
+      assertNotUserGlobalSkill(skillSlug)
       renameSkillEntry(workspaceSlug, skillSlug, fromRelative, toRelative)
     }
   )
@@ -4982,6 +5001,21 @@ export function registerIpcHandlers(): void {
     PERSONA_IPC_CHANNELS.EXPORT_MARKDOWN,
     async (_, id: string): Promise<PersonaExportResult> => {
       return exportPersonaMarkdown(id)
+    }
+  )
+
+  // Proma 默认系统提示词只读预览
+  // 设置页展示用：用中性上下文生成一份产品提示词快照，不代表任何具体会话、
+  // 工作区或权限状态；不写入磁盘，也不影响会话实际使用的提示词。
+  ipcMain.handle(
+    PERSONA_IPC_CHANNELS.GET_DEFAULT_SYSTEM_PROMPT,
+    async (): Promise<string> => {
+      const settings = getSettings()
+      return buildSystemPrompt({
+        sessionId: 'persona-default-preview',
+        permissionMode: 'plan',
+        productivityTools: settings.productivityTools,
+      })
     }
   )
 

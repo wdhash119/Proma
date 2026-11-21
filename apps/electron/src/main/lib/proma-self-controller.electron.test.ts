@@ -46,7 +46,8 @@ test('Given a real Electron window When Proma self-control tools run Then observ
         <div data-proma-self-control="deny"><button id="denied">点了也不该生效</button></div>
         <input id="name" aria-label="名称" placeholder="名称" />
         <div style="position:relative;width:320px;height:56px;margin-top:16px">
-          <button id="covered">被浮层盖住的按钮</button>
+          <button class="sidebar-collapse-button mt-2 flex items-center justify-center rounded-[10px]" style="width:40px;height:40px"><svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="#999"/></svg></button>
+        <button id="covered">被浮层盖住的按钮</button>
           <div id="cover" style="position:absolute;inset:0;z-index:9;background:#eee">浮层</div>
         </div>
         <div id="log"></div>
@@ -167,6 +168,15 @@ test('Given a real Electron window When Proma self-control tools run Then observ
       )
       report.blockedDomRejected = true
 
+      currentStep = 'named-hint'
+      // 无名按钮必须带 hint（从 class / data-* 提炼），否则模型只能靠顺序猜
+      const withHint = await controller.observe(sessionId, 200)
+      const hinted = withHint.elements.filter((element) => element.hint)
+      assert.ok(hinted.length > 0, '无名交互元素应带 hint 线索')
+      const sidebarHint = hinted.find((element) => String(element.hint).includes('sidebar-collapse-button'))
+      assert.ok(sidebarHint, '应能为侧栏折叠按钮提炼出 sidebar-collapse-button 线索，实际 hints: ' + hinted.map((element) => element.hint).join(', '))
+      report.unnamedHint = sidebarHint.hint
+
       currentStep = 'occluded'
       // 浮层压在被覆盖按钮上方：命中检测必须拒绝点击，并报出挡在前面的是什么
       const forCovered = await controller.observe(sessionId, 200)
@@ -282,9 +292,16 @@ test('Given a real Electron window When Proma self-control tools run Then observ
     expect(report.blockedLabelRejected).toBe(true)
     expect(report.blockedContainerRejected).toBe(true)
     expect(report.blockedDomRejected).toBe(true)
-    expect(Number(report.screenshotBytes)).toBeGreaterThan(2000)
+    // 截图依赖 Chromium 合成器：无显示/远程会话下会失败，此时必须给出可读提示。
+    // 两条路径都算通过，但成功时数据必须真的非空。
+    if (report.screenshotUnavailable === undefined) {
+      expect(Number(report.screenshotBytes)).toBeGreaterThan(2000)
+    } else {
+      expect(String(report.screenshotUnavailable)).toContain('无法截取 Proma 窗口画面')
+    }
     expect(Number(report.observeCount)).toBeGreaterThan(0)
     expect(report.occludedClickRejected).toBe(true)
+    expect(String(report.unnamedHint)).toContain('sidebar-collapse-button')
     expect(report.waitTimeoutDiagnosed).toBe(true)
     expect(String(report.occlusionMessage)).toContain('遮挡')
   } finally {

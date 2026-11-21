@@ -109,6 +109,7 @@ export function AttachmentPreviewItem({
         {/* hover 关闭按钮 */}
         <button
           type="button"
+          aria-label={`移除附件 ${filename}`}
           onClick={handleRemoveClick}
           onKeyDown={handleRemoveKeyDown}
           className={cn(
@@ -161,6 +162,7 @@ export function AttachmentPreviewItem({
       {/* 关闭按钮 */}
       <button
         type="button"
+        aria-label={`移除附件 ${filename}`}
         onClick={handleRemoveClick}
         onKeyDown={handleRemoveKeyDown}
         className={cn(

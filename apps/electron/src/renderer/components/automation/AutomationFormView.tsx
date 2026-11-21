@@ -681,6 +681,8 @@ export function AutomationFormView({ embedded = false }: { embedded?: boolean } 
         <div className="relative flex items-center justify-between gap-2 px-4 py-4 flex-shrink-0">
           <span className="text-sm font-semibold text-foreground">配置</span>
           <button
+            type="button"
+            aria-label="关闭定时任务编辑"
             onClick={close}
             className="titlebar-no-drag p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
           >

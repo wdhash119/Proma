@@ -3137,6 +3137,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <TooltipTrigger asChild>
             <button
               type="button"
+              aria-label="收起侧边栏"
               onClick={() => setSidebarCollapsed(true)}
               className={cn(
                 'sidebar-collapse-button mt-2 size-10 flex-shrink-0 flex items-center justify-center rounded-[10px] text-foreground/40 sidebar-control-surface hover:text-foreground/60 titlebar-no-drag transition-[background-color,color] duration-150'

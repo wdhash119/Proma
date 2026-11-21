@@ -30,6 +30,7 @@ import type { BrowserDomActionGuard } from './browser-script-policy'
 import { cdpAxPropertyBoolean, cdpTextValue, isEditableCdpAxNode, type CdpAxNode } from './cdp-ax'
 import { isValidImageBytes } from './image-content-validation'
 import { describeClickObstruction, describeWaitTimeout, summarizeVisibleText } from './proma-self-observation-hints'
+import { attributesToRecord, buildElementHint, describeUnnamedElement } from './proma-self-element-hint'
 import {
   PROMA_SELF_CONTROL_PROJECT_CONSENT_DENIED,
   PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR,
@@ -44,6 +45,8 @@ const MAX_SCRIPT_RESULT_CHARS = 64_000
 /** 同意创建项目后 2 分钟内不必重复询问。 */
 const PROJECT_CONSENT_TTL_MS = 2 * 60 * 1000
 const WAIT_POLL_INTERVAL_MS = 250
+/** 单次观察最多为多少个无名元素补线索，避免观察变慢。 */
+const MAX_UNNAMED_HINT_LOOKUPS = 12
 
 export type PromaSelfApprovalKind = 'create-project'
 
@@ -58,6 +61,10 @@ export interface PromaSelfElement {
   role: string
   name: string
   editable: boolean
+  /** 无名元素从 DOM 属性提炼的识别线索（data-testid / id / 语义类名）。 */
+  hint?: string
+  /** 无名且无线索时的操作指引，避免模型凭顺序猜。 */
+  note?: string
 }
 
 export interface PromaSelfSnapshot {
@@ -238,12 +245,14 @@ export class PromaSelfController {
     return { title: window.getTitle() || 'Proma', url: window.webContents.getURL() }
   }
 
-  private elementsFromNodes(
+  private async elementsFromNodes(
+    contents: WebContents,
     state: SessionState,
     nodes: CdpAxNode[],
     maxElements: number,
+    signal: AbortSignal,
     filter?: PromaSelfFindQuery,
-  ): PromaSelfElement[] {
+  ): Promise<PromaSelfElement[]> {
     const candidates: Array<{ backendNodeId: number; role: string; name: string; editable: boolean }> = []
     const roleFilter = filter?.role?.trim().toLowerCase()
     const nameFilter = filter?.name?.trim().toLowerCase()
@@ -270,18 +279,75 @@ export class PromaSelfController {
     state.generation += 1
     state.refs.clear()
 
+    // 只对无名候选补线索，且限制数量：每个元素要一次 CDP 调用，太多会拖慢观察。
+    const unnamed = selected.filter((candidate) => !candidate.name).slice(0, MAX_UNNAMED_HINT_LOOKUPS)
+    const hints = await this.readElementHints(contents, unnamed.map((candidate) => candidate.backendNodeId), signal)
+
     const elements: PromaSelfElement[] = []
     for (const candidate of selected) {
       const ref = `p${state.generation}-${elements.length + 1}`
+      const hint = candidate.name ? '' : hints.get(candidate.backendNodeId) ?? ''
+      const label = candidate.name
+        ? `${candidate.role}「${candidate.name.slice(0, 80)}」`
+        : hint
+          ? `${candidate.role}[${hint}]`
+          : candidate.role
       state.refs.set(ref, {
         backendNodeId: candidate.backendNodeId,
         generation: state.generation,
-        label: candidate.name ? `${candidate.role}「${candidate.name.slice(0, 80)}」` : candidate.role,
+        label,
         editable: candidate.editable,
       })
-      elements.push({ ref, role: candidate.role, name: candidate.name, editable: candidate.editable })
+      elements.push({
+        ref,
+        role: candidate.role,
+        name: candidate.name,
+        editable: candidate.editable,
+        ...(hint ? { hint } : {}),
+        // 既无名也无线索的交互元素最容易点错，明确提示改用 selector。
+        ...(!candidate.name && !hint ? { note: describeUnnamedElement(candidate.role) } : {}),
+      })
     }
     return elements
+  }
+
+  /**
+   * 批量读取无名元素的识别线索。
+   * 用一次 pushNodesByBackendIdsToFrontend 把 backendNodeId 转成 nodeId，
+   * 再逐个取属性——只对无名元素做，开销可控。
+   */
+  private async readElementHints(
+    contents: WebContents,
+    backendNodeIds: number[],
+    signal: AbortSignal,
+  ): Promise<Map<number, string>> {
+    const result = new Map<number, string>()
+    if (backendNodeIds.length === 0) return result
+
+    try {
+      // DOM.pushNodesByBackendIdsToFrontend 依赖已请求的文档树；
+      // 首次调用前必须 getDocument，否则会报 "Document needs to be requested first"。
+      await this.cdp(contents, 'DOM.getDocument', { depth: 0 }, undefined, signal)
+      const pushed = await this.cdp(contents, 'DOM.pushNodesByBackendIdsToFrontend', {
+        backendNodeIds,
+      }, undefined, signal)
+      const nodeIds = Array.isArray(pushed.nodeIds) ? (pushed.nodeIds as unknown[]) : []
+      for (let index = 0; index < backendNodeIds.length; index += 1) {
+        const nodeId = nodeIds[index]
+        if (typeof nodeId !== 'number' || nodeId <= 0) continue
+        try {
+          const attributes = await this.cdp(contents, 'DOM.getAttributes', { nodeId }, undefined, signal)
+          const record = attributesToRecord(Array.isArray(attributes.attributes) ? attributes.attributes as string[] : undefined)
+          const hint = buildElementHint(record)
+          if (hint) result.set(backendNodeIds[index]!, hint)
+        } catch {
+          // 单个节点取属性失败不影响其它元素。
+        }
+      }
+    } catch (error) {
+      console.warn('[Proma 自操作] 无名元素线索读取跳过:', error)
+    }
+    return result
   }
 
   async observe(sessionId: string, requestedMaxElements: number | undefined, signal?: AbortSignal): Promise<PromaSelfSnapshot> {
@@ -296,7 +362,7 @@ export class PromaSelfController {
         operationSignal,
       )
       const nodes = Array.isArray(response.nodes) ? (response.nodes as CdpAxNode[]) : []
-      const elements = this.elementsFromNodes(state, nodes, maxElements)
+      const elements = await this.elementsFromNodes(window.webContents, state, nodes, maxElements, operationSignal)
       return { ...this.metadata(window), generation: state.generation, elements }
     })
   }
@@ -317,7 +383,7 @@ export class PromaSelfController {
         operationSignal,
       )
       const nodes = Array.isArray(response.nodes) ? (response.nodes as CdpAxNode[]) : []
-      const elements = this.elementsFromNodes(state, nodes, maxResults, { ...query, maxResults })
+      const elements = await this.elementsFromNodes(window.webContents, state, nodes, maxResults, operationSignal, { ...query, maxResults })
       return { ...this.metadata(window), generation: state.generation, elements }
     })
   }

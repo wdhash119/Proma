@@ -9,6 +9,15 @@ import { computeDiffStats } from './tool-utils'
 
 const INTERNAL_TOOL_INPUT_PREFIX = '_'
 
+/**
+ * 短语文本的字符兜底上限。
+ *
+ * 该值只用于防御异常超长输入（如整段日志被塞进命令），
+ * 正常长度的路径与命令不再被字符数提前截断；
+ * 真正的视觉溢出由行内 CSS truncate 处理。
+ */
+const LABEL_MAX = 256
+
 /** 判断工具输入是否提供了可帮助用户识别本次调用的额外上下文。 */
 function hasMeaningfulToolInput(input: Record<string, unknown>): boolean {
   return Object.entries(input).some(([key, value]) => {
@@ -63,12 +72,12 @@ export interface ToolPhrase {
  */
 function getExplicitToolIntent(toolName: string, input: Record<string, unknown>): string | null {
   const intent = input._intent
-  if (typeof intent === 'string' && intent.trim()) return truncate(intent.trim(), 96)
+  if (typeof intent === 'string' && intent.trim()) return truncate(intent.trim(), LABEL_MAX)
 
   if (toolName === 'Bash') {
     const description = input.description
     if (typeof description === 'string' && description.trim()) {
-      return truncate(description.trim(), 96)
+      return truncate(description.trim(), LABEL_MAX)
     }
   }
 
@@ -92,7 +101,7 @@ function skillNameFromEntryPath(path: string): string | null {
   return match?.[1] ?? null
 }
 
-/** 截断文本 */
+/** 截断文本（仅作超长输入兜底，视觉截断交给 CSS） */
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + '…' : text
 }
@@ -163,7 +172,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       const intent = getExplicitToolIntent(toolName, input)
       if (intent) return phrase(intent)
       if (typeof cmd === 'string') {
-        return phrase(`执行 ${truncate(cmd, 80)}`)
+        return phrase(`执行 ${truncate(cmd, LABEL_MAX)}`)
       }
       return phrase('执行命令')
     }
@@ -200,7 +209,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
     case 'WebFetch': {
       const url = input.url
       if (typeof url === 'string') {
-        return phrase(`抓取 ${truncate(url, 60)}`)
+        return phrase(`抓取 ${truncate(url, LABEL_MAX)}`)
       }
       return phrase('抓取网页')
     }
@@ -208,7 +217,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
     case 'WebSearch': {
       const query = input.query
       if (typeof query === 'string') {
-        return phrase(`搜索 "${truncate(query, 60)}"`)
+        return phrase(`搜索 "${truncate(query, LABEL_MAX)}"`)
       }
       return phrase('搜索网页')
     }
@@ -232,7 +241,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
     case 'Task': {
       const desc = input.description ?? input.prompt
       if (typeof desc === 'string') {
-        return phrase(`子任务 ${truncate(desc, 80)}`)
+        return phrase(`子任务 ${truncate(desc, LABEL_MAX)}`)
       }
       return phrase('子任务')
     }
@@ -241,9 +250,9 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       const name = input.name
       const desc = input.description ?? input.prompt
       if (typeof name === 'string' && typeof desc === 'string') {
-        return phrase(`Agent ${name} · ${truncate(desc, 60)}`)
+        return phrase(`Agent ${name} · ${truncate(desc, LABEL_MAX)}`)
       }
-      if (typeof desc === 'string') return phrase(`Agent ${truncate(desc, 80)}`)
+      if (typeof desc === 'string') return phrase(`Agent ${truncate(desc, LABEL_MAX)}`)
       if (typeof name === 'string') return phrase(`Agent ${name}`)
       return phrase('Agent')
     }
@@ -258,7 +267,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
 
     case 'generate_image': {
       const prompt = input.prompt
-      if (typeof prompt === 'string') return phrase(`生成图片 ${truncate(prompt, 60)}`)
+      if (typeof prompt === 'string') return phrase(`生成图片 ${truncate(prompt, LABEL_MAX)}`)
       return phrase('生成图片')
     }
 
@@ -279,7 +288,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       if (Array.isArray(questions) && questions.length > 0) {
         const first = questions[0] as Record<string, unknown>
         if (typeof first.question === 'string') {
-          return phrase(`询问 ${truncate(first.question, 60)}`)
+          return phrase(`询问 ${truncate(first.question, LABEL_MAX)}`)
         }
       }
       return phrase('等待用户输入')
@@ -288,8 +297,8 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
     case 'REPL': {
       const description = input.description
       const code = input.code
-      if (typeof description === 'string' && description.trim()) return phrase(`执行 REPL ${truncate(description, 50)}`)
-      if (typeof code === 'string') return phrase(`执行 REPL ${truncate(code, 50)}`)
+      if (typeof description === 'string' && description.trim()) return phrase(`执行 REPL ${truncate(description, LABEL_MAX)}`)
+      if (typeof code === 'string') return phrase(`执行 REPL ${truncate(code, LABEL_MAX)}`)
       return phrase('执行 REPL')
     }
 
@@ -305,7 +314,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       const delaySeconds = input.delaySeconds
       const reason = input.reason
       if (typeof delaySeconds === 'number' && typeof reason === 'string') {
-        return phrase(`安排 ${delaySeconds}s 后唤醒 · ${truncate(reason, 40)}`)
+        return phrase(`安排 ${delaySeconds}s 后唤醒 · ${truncate(reason, LABEL_MAX)}`)
       }
       if (typeof delaySeconds === 'number') return phrase(`安排 ${delaySeconds}s 后唤醒`)
       return phrase('安排唤醒')
@@ -313,13 +322,13 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
 
     case 'Monitor': {
       const description = input.description
-      if (typeof description === 'string') return phrase(`监控 ${truncate(description, 50)}`)
+      if (typeof description === 'string') return phrase(`监控 ${truncate(description, LABEL_MAX)}`)
       return phrase('监控任务')
     }
 
     case 'PushNotification': {
       const message = input.message
-      if (typeof message === 'string') return phrase(`发送通知 ${truncate(message, 50)}`)
+      if (typeof message === 'string') return phrase(`发送通知 ${truncate(message, LABEL_MAX)}`)
       return phrase('发送通知')
     }
 
@@ -327,7 +336,7 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       const cron = input.cron
       const prompt = input.prompt
       if (typeof cron === 'string' && typeof prompt === 'string') {
-        return phrase(`创建定时任务 ${cron} · ${truncate(prompt, 40)}`)
+        return phrase(`创建定时任务 ${cron} · ${truncate(prompt, LABEL_MAX)}`)
       }
       if (typeof cron === 'string') return phrase(`创建定时任务 ${cron}`)
       return phrase('创建定时任务')
@@ -378,9 +387,9 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       const server = input.server
       const uri = input.uri
       if (typeof server === 'string' && typeof uri === 'string') {
-        return phrase(`读取 MCP 资源 ${server} / ${truncate(uri, 40)}`)
+        return phrase(`读取 MCP 资源 ${server} / ${truncate(uri, LABEL_MAX)}`)
       }
-      if (typeof uri === 'string') return phrase(`读取 MCP 资源 ${truncate(uri, 60)}`)
+      if (typeof uri === 'string') return phrase(`读取 MCP 资源 ${truncate(uri, LABEL_MAX)}`)
       return phrase('读取 MCP 资源')
     }
 
@@ -405,14 +414,14 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
         // 尝试从 input 中提取第一个有意义的参数作为摘要
         const summary = extractFirstMeaningfulValue(input)
         if (summary) {
-          return phrase(`${server} / ${tool} ${truncate(summary, 60)}`)
+          return phrase(`${server} / ${tool} ${truncate(summary, LABEL_MAX)}`)
         }
         return phrase(`${server} / ${tool}`)
       }
       // 未知工具
       const summary = extractFirstMeaningfulValue(input)
       if (summary) {
-        return phrase(`${toolName} ${truncate(summary, 60)}`)
+        return phrase(`${toolName} ${truncate(summary, LABEL_MAX)}`)
       }
       return phrase(toolName)
     }

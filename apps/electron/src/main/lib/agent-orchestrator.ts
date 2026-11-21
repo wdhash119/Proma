@@ -55,7 +55,8 @@ import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgen
 import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceAgentsMdPath, readWorkspaceAgentsMd, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getLocalProjectRootStatus } from './project-root-health'
 import { getMcpApiKeyEnvironment, getMcpOAuthHeaders } from './mcp-oauth-service'
-import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
+import { existsSync } from 'node:fs'
+import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir, getUserAgentsSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
@@ -1426,7 +1427,12 @@ export class AgentOrchestrator {
         piSessionDir: join(getSdkConfigDir(), 'sessions'),
         ...(allAdditionalDirectories.length > 0 && { additionalDirectories: allAdditionalDirectories }),
         ...(workspaceSlug ? {
-          additionalSkillPaths: [getWorkspaceSkillsDir(workspaceSlug)],
+          // 工作区 Skills 与用户级全局 Skills（~/.AGENTS/skills/）共同作为 Skill 根目录；
+          // 用户级目录不存在时不注入，避免把不存在的路径传给资源加载器。
+          additionalSkillPaths: [
+            getWorkspaceSkillsDir(workspaceSlug),
+            ...(existsSync(getUserAgentsSkillsDir()) ? [getUserAgentsSkillsDir()] : []),
+          ],
           skillWorkspaceSlug: workspaceSlug,
         } : {}),
         ...(mentionedSkills?.length ? { skillMentions: mentionedSkills } : {}),

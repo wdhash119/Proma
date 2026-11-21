@@ -148,3 +148,42 @@ ${sharedContext}
 子任务：
 ${task}`
 }
+
+/** 子会话以异常状态结束：failed / cancelled / interrupted 都意味着目标结果不可用。 */
+const ABNORMAL_DELEGATION_STATUSES: ReadonlySet<AgentDelegationStatus> = new Set<AgentDelegationStatus>([
+  'failed',
+  'cancelled',
+  'interrupted',
+])
+
+const KNOWN_DELEGATION_STATUSES: readonly AgentDelegationStatus[] = [
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+]
+
+/**
+ * 把持久化摘要里的未知值规范化为委派状态。
+ *
+ * 旧记录可能缺少 status 字段；无法识别的值按未知处理，不参与异常判定。
+ */
+export function normalizeDelegationStatus(value: unknown): AgentDelegationStatus | undefined {
+  return KNOWN_DELEGATION_STATUSES.find((status) => status === value)
+}
+
+/** 委派目标的最小状态视图，用于异常结束判定。 */
+export interface DelegationStatusSummary {
+  status: AgentDelegationStatus
+}
+
+/**
+ * 判断本次等待目标中是否存在异常结束的子会话。
+ *
+ * running 与 completed 属于正常状态：前者表示仍在推进（等待超时不应算失败），
+ * 后者表示已成功收敛。只有 failed / cancelled / interrupted 才是真正的异常结束。
+ */
+export function hasAbnormalDelegation(summaries: DelegationStatusSummary[]): boolean {
+  return summaries.some((item) => ABNORMAL_DELEGATION_STATUSES.has(item.status))
+}

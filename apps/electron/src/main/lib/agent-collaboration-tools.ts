@@ -37,6 +37,8 @@ import {
   buildDelegationTaskWithSharedContext,
   buildDelegationPrompt,
   createToolCallIdempotencyCache,
+  hasAbnormalDelegation,
+  normalizeDelegationStatus,
   resolveDelegationPermissionMode,
 } from './agent-collaboration-utils'
 import { listChannels } from './channel-manager'
@@ -940,7 +942,7 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__wait_for_delegations',
       label: '等待子会话完成',
-      description: '父会话用于收敛子会话结果的等待屏障：等待指定的 Proma 协作子会话完成，并返回结构化结果摘要。只要本轮回复、决策或交付依赖已委派任务，主会话必须在回复前调用本工具，不能只因 delegate_agent/delegate_agents 已返回就宣称完成；需要全部结果时传入所有 delegationIds 并使用 mode=all，需要部分早期结果时才使用 mode=any。若返回 timeout 或仍有 running 委派，必须如实说明未收敛状态，不能把未完成任务当作已有结果。',
+      description: '父会话用于收敛子会话结果的等待屏障：等待指定的 Proma 协作子会话完成，并返回结构化结果摘要。只要本轮回复、决策或交付依赖已委派任务，主会话必须在回复前调用本工具，不能只因 delegate_agent/delegate_agents 已返回就宣称完成；需要全部结果时传入所有 delegationIds 并使用 mode=all，需要部分早期结果时才使用 mode=any。若返回 timeout 或仍有 running 委派，必须如实说明未收敛状态，不能把未完成任务当作已有结果。返回结果仅在本次等待目标中有子会话异常结束（failed/cancelled/interrupted）时标记为 isError；等待超时返回正常的 timeout 结果。',
       parameters: Type.Object({
         delegationIds: Type.Optional(Type.Array(Type.String(), { description: '要等待的委派 ID' })),
         mode: Type.Optional(Type.Union([Type.Literal('all'), Type.Literal('any')])),
@@ -971,13 +973,24 @@ export function buildPiCollaborationTools(
           ? await waitForLiveRecords(liveRecords, timeoutSeconds, liveTarget)
           : 'completed'
         const allDelegations = [...liveRecords.map(getDelegationSummary), ...settled]
-        return piJsonResult({
+        // 仅当本次等待目标中存在异常结束的子会话时标记 isError；
+        // 等待超时仍返回正常结果，避免把仍在运行的子会话误报为失败。
+        const abnormal = hasAbnormalDelegation(
+          [
+            ...liveRecords.map((record) => record.status),
+            ...settled.map((item) => normalizeDelegationStatus(item.status)),
+          ].flatMap((status) => (status ? [{ status }] : [])),
+        )
+        const payload = {
           status: waitResult,
           mode,
           completedCount: allDelegations.filter((item) => item.status !== 'running').length,
           runningCount: allDelegations.filter((item) => item.status === 'running').length,
           delegations: allDelegations,
-        })
+        }
+        return abnormal
+          ? { ...piJsonResult(payload), isError: true }
+          : piJsonResult(payload)
       },
     }),
     sdk.defineTool({

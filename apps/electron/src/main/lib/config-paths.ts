@@ -429,6 +429,19 @@ export function getInactiveSkillsDir(slug: string): string {
 }
 
 /**
+ * 获取用户级全局 Skills 目录路径
+ *
+ * 这是跨工作区生效的只读 Skills 来源：Pi 资源加载器把它作为额外的
+ * additionalSkillPaths 根目录，因此其中的 Skill 对所有工作区可见。
+ * 该目录不由 Proma 创建或管理，不存在时由调用方自行跳过。
+ *
+ * @returns ~/.AGENTS/skills/
+ */
+export function getUserAgentsSkillsDir(): string {
+  return join(homedir(), '.AGENTS', 'skills')
+}
+
+/**
  * 获取默认 Skills 模板目录路径
  *
  * 新建工作区时自动复制此目录的内容到工作区 skills/ 下。

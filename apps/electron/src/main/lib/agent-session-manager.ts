@@ -27,6 +27,7 @@ import {
   getProjectFilesPath,
   listAgentWorkspaces,
 } from './agent-workspace-manager'
+import { appendCheckoutEntry, checkoutFromActiveWorktree, isCurrentCheckout, resolveSessionCheckout } from './session-checkout'
 import { resolvePiThinkingLevel } from './agent-thinking-level'
 import { getSettings } from './settings-service'
 import type {
@@ -43,6 +44,7 @@ import type {
   AgentCwdMode,
   AgentActiveWorktree,
   SessionWorkbenchLayout,
+  SessionCheckoutEntry,
 } from '@proma/shared'
 import { migratePermissionMode, mergeSkillActivations, findBestSearchMatch, insertTopSearchResult } from '@proma/shared'
 import { getConversationMessages } from './conversation-manager'
@@ -353,6 +355,14 @@ export function getActiveWorktreePath(
   }
 }
 
+function isExistingDirectory(target: string): boolean {
+  try {
+    return statSync(target).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 /** 缺少标记的历史会话继续使用 `.context/`，避免失效的计划和工具历史路径。 */
 export function getSessionWorkbenchLayout(
   meta?: Pick<AgentSessionMeta, 'sessionWorkbenchLayout'>,
@@ -379,11 +389,26 @@ export function resolveAgentCwd(
   activeWorktree?: AgentActiveWorktree,
 ): string | undefined {
   if (!workspace) return undefined
-  const activeWorktreePath = getActiveWorktreePath({ activeWorktree })
-  if (activeWorktreePath) return activeWorktreePath
-  return getAgentCwdMode({ agentCwdMode }) === 'project'
-    ? getProjectFilesPath(workspace.slug)
-    : getAgentSessionWorkspacePath(workspace.slug, sessionId)
+  const meta = getAgentSessionMeta(sessionId)
+  const effectiveWorktree = activeWorktree ?? meta?.activeWorktree
+  // 显式传入但尚未写入日志时补一条，保证「选择后立即生效」与日志一致。
+  const history = effectiveWorktree && !isCurrentCheckout(meta?.checkoutHistory, effectiveWorktree.path)
+    ? appendCheckoutEntry(meta?.checkoutHistory, checkoutFromActiveWorktree(effectiveWorktree))
+    : meta?.checkoutHistory
+  const checkout = resolveSessionCheckout({
+    history,
+    activeWorktree: effectiveWorktree,
+    agentCwdMode: getAgentCwdMode({ agentCwdMode: agentCwdMode ?? meta?.agentCwdMode }),
+    projectPath: getProjectFilesPath(workspace.slug),
+    workbenchPath: getAgentSessionWorkspacePath(workspace.slug, sessionId),
+    isDirectory: isExistingDirectory,
+  })
+  return checkout?.path
+}
+
+/** 会话检出日志的只读快照；供「恢复已删除的 worktree」入口展示。 */
+export function getSessionCheckoutHistory(sessionId: string): SessionCheckoutEntry[] {
+  return getAgentSessionMeta(sessionId)?.checkoutHistory ?? []
 }
 
 export function resolveAgentWorkbenchDir(
@@ -610,7 +635,7 @@ export function getAgentSessionSDKMessages(id: string): SDKMessage[] {
  */
 export function updateAgentSessionMeta(
   id: string,
-  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
+  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
 ): AgentSessionMeta {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)

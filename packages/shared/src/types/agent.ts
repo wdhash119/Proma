@@ -713,6 +713,36 @@ export interface AgentActiveWorktree {
   selectedAt: number
 }
 
+/** 会话执行目录的检出类型：私有工作台、项目根或 linked worktree。 */
+export type SessionCheckoutKind = 'workbench' | 'project' | 'worktree'
+
+/**
+ * 会话检出日志项。按时间追加，解析 cwd 时从最新一项向前找仍存在的目录，
+ * 因此 worktree 被删除后不会让整个会话变成不可用。
+ */
+export interface SessionCheckoutEntry {
+  kind: SessionCheckoutKind
+  /** 绝对路径 */
+  path: string
+  /** 开始使用该目录的时间戳；默认检出为 0 */
+  since: number
+  /** worktree 所属主仓库根目录，恢复被删除的 worktree 时需要 */
+  mainRepoRoot?: string
+  /** worktree 分支名 */
+  branch?: string
+  /** 选择 worktree 时的 HEAD 提交，用于分支已被删除时重建 */
+  baseCommit?: string
+}
+
+/** 恢复已删除 worktree 的结果。 */
+export interface RestoreSessionWorktreeResult {
+  restored: true
+  path: string
+  branch: string
+  /** 分支已不存在、按 baseCommit 重建时为 true */
+  branchRecreated: boolean
+}
+
 /** 更新 Agent 会话活动 worktree 的输入；null 表示回到默认 cwd。 */
 export interface SetAgentSessionActiveWorktreeInput {
   sessionId: string
@@ -763,6 +793,11 @@ export interface AgentSessionMeta {
    * worktree 失效时主进程会主动清除，不会猜测切换到其它分支。
    */
   activeWorktree?: AgentActiveWorktree
+  /**
+   * 会话检出日志（最多保留 20 条）。activeWorktree 仍为当前选择，
+   * 这里额外记录历史，worktree 目录被删除后可从日志重建。
+   */
+  checkoutHistory?: SessionCheckoutEntry[]
   /**
    * 会话私有工作台的文件布局。新会话在 workbench 根目录直接存放计划、handoff
    * 等私有资料；缺失字段的历史会话保留 `.context/` 路径以兼容工具历史。
@@ -1822,6 +1857,8 @@ export const AGENT_IPC_CHANNELS = {
   SET_ACTIVE_WORKTREE: 'agent:set-active-worktree',
   /** 主进程通知 Renderer：Agent 主动切换了会话的活动 worktree */
   ACTIVE_WORKTREE_UPDATED: 'agent:active-worktree-updated',
+  /** 从会话检出日志恢复被删除的 worktree */
+  RESTORE_SESSION_WORKTREE: 'agent:restore-session-worktree',
   /** 删除会话 */
   DELETE_SESSION: 'agent:delete-session',
   /** 迁移 Chat 对话记录到 Agent 会话 */

@@ -614,6 +614,8 @@ export interface ElectronAPI {
 
   /** 选择或清除当前会话的活动 worktree */
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => Promise<AgentSessionMeta>
+  /** 从会话检出日志恢复被删除的 worktree */
+  restoreSessionWorktree: (sessionId: string, worktreePath: string) => Promise<AgentSessionMeta>
 
   /** 删除 Agent 会话 */
   deleteAgentSession: (id: string) => Promise<void>
@@ -1929,6 +1931,10 @@ const electronAPI: ElectronAPI = {
 
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_ACTIVE_WORKTREE, input)
+  },
+
+  restoreSessionWorktree: (sessionId: string, worktreePath: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RESTORE_SESSION_WORKTREE, sessionId, worktreePath)
   },
 
   deleteAgentSession: (id: string) => {

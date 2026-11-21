@@ -34,6 +34,8 @@ import {
   runAutomationNow,
 } from '../automation-scheduler'
 import { getAgentSessionMeta, updateAgentSessionMeta } from '../agent-session-manager'
+import { appendCheckoutEntry, checkoutFromActiveWorktree } from '../session-checkout'
+import { readWorktreeHeadCommit } from '../session-checkout-restore'
 import { getMainWindow } from '../main-window-store'
 import { getMainRepoRoot, listWorktrees } from '../git-diff-service'
 import { getWorktreeRepos, getAgentWorkspace, listAgentWorkspaces, listAgentWorkspacesWithProjectRootStatus } from '../agent-workspace-manager'
@@ -1343,13 +1345,22 @@ async function selectAgentWorktree(ctx: PiBuiltinToolsContext, worktreePath: str
   }
   if (!authorized) throw new Error('该 worktree 不属于当前会话已授权或已登记的仓库')
 
+  const previous = getAgentSessionMeta(ctx.sessionId)
+  const activeWorktree = {
+    path: canonicalPath(selected.path),
+    mainRepoRoot: canonicalPath(mainRepoRoot),
+    branch: selected.branch,
+    selectedAt: Date.now(),
+  }
+  // 记录选择当时的 HEAD：分支日后被删掉时，恢复 worktree 需要这个基准提交。
+  const baseCommit = await readWorktreeHeadCommit(activeWorktree.path)
   const session = updateAgentSessionMeta(ctx.sessionId, {
-    activeWorktree: {
-      path: canonicalPath(selected.path),
-      mainRepoRoot: canonicalPath(mainRepoRoot),
-      branch: selected.branch,
-      selectedAt: Date.now(),
-    },
+    activeWorktree,
+    // 目录日志与 activeWorktree 双写：cwd 解析读日志，UI 与历史会话继续读 activeWorktree。
+    checkoutHistory: appendCheckoutEntry(
+      previous?.checkoutHistory,
+      checkoutFromActiveWorktree(activeWorktree, baseCommit),
+    ),
   })
   const mainWindow = getMainWindow()
   if (mainWindow && !mainWindow.isDestroyed()) {

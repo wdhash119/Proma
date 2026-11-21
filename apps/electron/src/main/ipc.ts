@@ -222,6 +222,8 @@ import {
 import { extractTextFromAttachment } from './lib/document-parser'
 import { getUserProfile, updateUserProfile } from './lib/user-profile-service'
 import { getSettings, updateSettings } from './lib/settings-service'
+import { appendCheckoutEntry, checkoutFromActiveWorktree } from './lib/session-checkout'
+import { readWorktreeHeadCommit, restoreWorktree } from './lib/session-checkout-restore'
 import {
   listMemoryHistory,
   listMemoryTargets,
@@ -2689,15 +2691,60 @@ export function registerIpcHandlers(): void {
 
       const mainRepoRoot = await getMainRepoRoot(selected.path)
       if (!mainRepoRoot) throw new Error('无法确认 worktree 的主仓库')
+      const activeWorktree = {
+        path: realpathOrResolve(selected.path),
+        mainRepoRoot: realpathOrResolve(mainRepoRoot),
+        branch: selected.branch,
+        selectedAt: Date.now(),
+      }
+      // 记下选择时的 HEAD，分支日后被删掉时仍能重建这个 worktree。
+      const baseCommit = await readWorktreeHeadCommit(activeWorktree.path)
       return updateAgentSessionMeta(input.sessionId, {
-        activeWorktree: {
-          path: realpathOrResolve(selected.path),
-          mainRepoRoot: realpathOrResolve(mainRepoRoot),
-          branch: selected.branch,
-          selectedAt: Date.now(),
-        },
+        activeWorktree,
+        checkoutHistory: appendCheckoutEntry(
+          session.checkoutHistory,
+          checkoutFromActiveWorktree(activeWorktree, baseCommit),
+        ),
       })
     },
+  )
+
+  // 从会话检出日志恢复被删除的 worktree
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RESTORE_SESSION_WORKTREE,
+    async (_, sessionId: unknown, worktreePath: unknown): Promise<AgentSessionMeta> => {
+      if (!isNonEmptyString(sessionId) || !isNonEmptyString(worktreePath)) {
+        throw new Error('恢复 worktree 参数无效')
+      }
+      const session = getAgentSessionMeta(sessionId)
+      if (!session) throw new Error(`Agent 会话不存在: ${sessionId}`)
+
+      const entry = (session.checkoutHistory ?? []).find((item) => (
+        item.kind === 'worktree' && normalizePathForCompare(item.path) === normalizePathForCompare(worktreePath)
+      ))
+      if (!entry?.branch) throw new Error('检出日志中没有该 worktree 的记录')
+      const repoPath = entry.mainRepoRoot ?? (await getMainRepoRoot(entry.path))
+      if (!repoPath) throw new Error('无法确定 worktree 所属仓库，不能恢复')
+
+      await restoreWorktree({ path: entry.path, branch: entry.branch, baseCommit: entry.baseCommit, repoPath })
+
+      const activeWorktree = {
+        path: entry.path,
+        mainRepoRoot: repoPath,
+        branch: entry.branch,
+        selectedAt: Date.now(),
+      }
+      const restored = updateAgentSessionMeta(sessionId, {
+        activeWorktree,
+        checkoutHistory: appendCheckoutEntry(
+          session.checkoutHistory,
+          checkoutFromActiveWorktree(activeWorktree, entry.baseCommit),
+        ),
+      })
+      const mainWindow = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+      if (mainWindow) mainWindow.webContents.send(AGENT_IPC_CHANNELS.ACTIVE_WORKTREE_UPDATED, restored)
+      return restored
+    }
   )
 
   // 生成 Agent 会话标题

@@ -1,12 +1,11 @@
 diff --git a/dist/utils/retry.js b/dist/utils/retry.js
-index dae863c..3a86924 100644
 --- a/dist/utils/retry.js
 +++ b/dist/utils/retry.js
-@@ -83,9 +83,18 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
+@@ -94,9 +94,18 @@
      // "stream ended without ..." and "Anthropic stream ended before message_stop"
      // (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
      "ended without",
-+    // Proma patch: Pi 的精确断流错误码；部分 OpenAI 兼容网关会省略 "response"。
++    // Proma patch: Pi 的精确断流错误码；部分 OpenAI 兼容网关会省略 "upstream_" 前缀。
 +    "stream_read_error",
 +    "stream ended before (?:a )?terminal(?: response)? event",
      "stream ended before message_stop",
@@ -16,7 +15,7 @@ index dae863c..3a86924 100644
 +    "unexpected non-whitespace character after JSON",
 +    "peer closed connection",
 +    "incomplete chunked read",
-+    // Proma patch: 浏览器/undici 措辞 `TypeError: Failed to fetch`。
++    // Proma patch: 浏览器/undici 措辞 `TypeError: Failed to fetch`；上游只有 "fetch failed"。
 +    "failed to fetch",
      // Codex CLI mid-stream disconnect, relayed by proxies that wrap the Codex CLI,
      // e.g. "stream disconnected before completion: stream closed before response.completed" (#11057).

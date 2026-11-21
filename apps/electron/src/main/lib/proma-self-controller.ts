@@ -29,6 +29,7 @@ import { buildBrowserDomActionExpression, buildBrowserScrollExpression } from '.
 import type { BrowserDomActionGuard } from './browser-script-policy'
 import { cdpAxPropertyBoolean, cdpTextValue, isEditableCdpAxNode, type CdpAxNode } from './cdp-ax'
 import { isValidImageBytes } from './image-content-validation'
+import { describeClickObstruction, describeWaitTimeout, summarizeVisibleText } from './proma-self-observation-hints'
 import {
   PROMA_SELF_CONTROL_PROJECT_CONSENT_DENIED,
   PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR,
@@ -412,6 +413,121 @@ export class PromaSelfController {
     }
   }
 
+  /**
+   * 点击前的遮挡检测。
+   *
+   * `DOM.getBoxModel` 给的是元素几何中心，但浮层、tooltip 或粘性工具栏可能盖在上面：
+   * 这时真实点击会打到别的控件（例如想收侧栏却点到了思考强度选择器）。
+   * 命中检测允许「落点就是目标」或两者互为祖先/后代（按钮内的 span、包裹容器），
+   * 其余情况直接拒绝，并把挡在前面的控件报给模型。
+   */
+  private async assertClickPointReachable(
+    contents: WebContents,
+    target: RefEntry,
+    point: { x: number; y: number },
+    signal: AbortSignal,
+  ): Promise<void> {
+    let hitBackendNodeId = 0
+    try {
+      const hit = await this.cdp(contents, 'DOM.getNodeForLocation', {
+        x: Math.round(point.x),
+        y: Math.round(point.y),
+        // pointer-events: none 的浮层不拦截真实点击，检测时也要忽略。
+        ignorePointerEventsNone: true,
+      }, undefined, signal)
+      hitBackendNodeId = typeof hit.backendNodeId === 'number' ? hit.backendNodeId : 0
+    } catch (error) {
+      // 命中检测是尽力而为的额外护栏：CDP 不支持或节点已失效时不阻断正常点击。
+      console.warn('[Proma 自操作] 点击命点检测跳过:', error)
+      return
+    }
+
+    if (!hitBackendNodeId || hitBackendNodeId === target.backendNodeId) return
+
+    const related = await this.areNodesRelated(contents, hitBackendNodeId, target.backendNodeId, signal)
+    if (related) return
+
+    throw new Error(describeClickObstruction(await this.describeNodeByBackendId(contents, hitBackendNodeId, signal)))
+  }
+
+  /** 两个节点是否为同一节点，或互为祖先/后代。 */
+  private async areNodesRelated(
+    contents: WebContents,
+    leftBackendNodeId: number,
+    rightBackendNodeId: number,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const resolveObjectId = async (backendNodeId: number): Promise<string> => {
+      const resolved = await this.cdp(contents, 'DOM.resolveNode', { backendNodeId }, undefined, signal)
+      const object = resolved.object as { objectId?: unknown } | undefined
+      return typeof object?.objectId === 'string' ? object.objectId : ''
+    }
+
+    const [leftObjectId, rightObjectId] = await Promise.all([
+      resolveObjectId(leftBackendNodeId),
+      resolveObjectId(rightBackendNodeId),
+    ])
+    if (!leftObjectId || !rightObjectId) return false
+
+    const response = await this.cdp(contents, 'Runtime.callFunctionOn', {
+      objectId: leftObjectId,
+      functionDeclaration: 'function(other) { if (!other) return false; return this === other || this.contains(other) || other.contains(this); }',
+      arguments: [{ objectId: rightObjectId }],
+      returnByValue: true,
+    }, undefined, signal)
+
+    const result = response.result as { value?: unknown } | undefined
+    return result?.value === true
+  }
+
+  /** 读取某个节点的 role 与名称，用于把「点到了什么」讲清楚。 */
+  private async describeNodeByBackendId(
+    contents: WebContents,
+    backendNodeId: number,
+    signal: AbortSignal,
+  ): Promise<{ role: string; name: string } | null> {
+    try {
+      const response = await this.cdp(contents, 'Accessibility.getPartialAXTree', {
+        backendNodeId,
+        fetchRelatives: false,
+      }, undefined, signal)
+      const nodes = Array.isArray(response.nodes) ? (response.nodes as CdpAxNode[]) : []
+      const node = nodes.find((item) => item && item.backendDOMNodeId === backendNodeId) ?? nodes[0]
+      if (!node) return null
+      const role = cdpTextValue(node.role) || '元素'
+      const name = cdpTextValue(node.name)
+      if (name) return { role, name }
+      // 覆盖层常见是没有可访问名的容器（role=generic）：回退到它的可见文本，
+      // 才能告诉模型「被什么挡住了」而不是只报一个 generic。
+      return { role, name: await this.readNodeTextSample(contents, backendNodeId, signal) }
+    } catch {
+      return null
+    }
+  }
+
+  /** 读取节点自身的短文本取样，用于描述没有可访问名的覆盖层。 */
+  private async readNodeTextSample(
+    contents: WebContents,
+    backendNodeId: number,
+    signal: AbortSignal,
+  ): Promise<string> {
+    try {
+      const resolved = await this.cdp(contents, 'DOM.resolveNode', { backendNodeId }, undefined, signal)
+      const object = resolved.object as { objectId?: unknown } | undefined
+      const objectId = typeof object?.objectId === 'string' ? object.objectId : ''
+      if (!objectId) return ''
+      const response = await this.cdp(contents, 'Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: 'function() { return (this.innerText || this.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60); }',
+        returnByValue: true,
+      }, undefined, signal)
+      const result = response.result as { value?: unknown } | undefined
+      return typeof result?.value === 'string' ? result.value : ''
+    } catch {
+      return ''
+    }
+  }
+
   private async clickRef(
     window: Electron.BrowserWindow,
     state: SessionState,
@@ -428,6 +544,8 @@ export class PromaSelfController {
     this.assertGeneration(state, generation, signal)
     // 滚动或等待期间界面可能重新渲染，点击前再校验一次。
     await this.assertRefAllowed(window.webContents, target, signal)
+    // 几何中心可能被浮层覆盖：点之前确认落点真的属于目标。
+    await this.assertClickPointReachable(window.webContents, target, { x, y }, signal)
     await this.cdp(window.webContents, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }, undefined, signal)
     this.assertGeneration(state, generation, signal)
     await this.cdp(window.webContents, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }, undefined, signal)
@@ -578,7 +696,7 @@ export class PromaSelfController {
     condition: PromaSelfWaitCondition,
     timeoutMs: number,
     signal: AbortSignal,
-  ): Promise<{ matched: boolean }> {
+  ): Promise<{ matched: boolean; message?: string; visibleText?: string }> {
     const startedAt = Date.now()
     // 条件作为数据注入，避免被当作代码执行。
     const payload = JSON.stringify(condition).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
@@ -599,7 +717,31 @@ export class PromaSelfController {
         signal.addEventListener('abort', abort, { once: true })
       })
     }
-    return { matched: false }
+    // 超时后带回当前可见文本：让模型知道自己等的东西和屏幕上的东西不一致，
+    // 而不是只收到 matched:false 再去重复同一个等待。
+    const sample = await this.readVisibleText(window.webContents, signal)
+    return {
+      matched: false,
+      message: describeWaitTimeout(condition.kind, condition.value, sample),
+      visibleText: summarizeVisibleText(sample),
+    }
+  }
+
+  /** 读取当前页面可见文本片段；读取失败不影响等待结果本身。 */
+  private async readVisibleText(contents: WebContents, signal: AbortSignal): Promise<string> {
+    try {
+      const value = await this.executeExpression(
+        contents,
+        '(() => ({ text: document.body?.innerText || "", title: document.title || "" }))()',
+        signal,
+      )
+      const record = value as { text?: unknown; title?: unknown } | null
+      const text = typeof record?.text === 'string' ? record.text : ''
+      const title = typeof record?.title === 'string' ? record.title : ''
+      return title ? `${title} ${text}` : text
+    } catch {
+      return ''
+    }
   }
 
   async waitFor(
@@ -607,7 +749,7 @@ export class PromaSelfController {
     condition: PromaSelfWaitCondition,
     timeoutMs = 10_000,
     signal?: AbortSignal,
-  ): Promise<{ matched: boolean }> {
+  ): Promise<{ matched: boolean; message?: string; visibleText?: string }> {
     this.assertWait(condition, timeoutMs)
     return this.run(sessionId, signal, async (window, operationSignal) => (
       this.waitForInternal(window, condition, timeoutMs, operationSignal)
@@ -621,7 +763,7 @@ export class PromaSelfController {
     timeoutMs = 10_000,
     signal?: AbortSignal,
     requestApproval?: PromaSelfApprovalRequester,
-  ): Promise<{ ok: true; label: string; wait: { matched: boolean } | null }> {
+  ): Promise<{ ok: true; label: string; wait: { matched: boolean; message?: string; visibleText?: string } | null }> {
     if (waitFor) this.assertWait(waitFor, timeoutMs)
     return this.run(sessionId, signal, async (window, operationSignal) => {
       const target = await this.clickRef(window, this.state(sessionId), ref, operationSignal, requestApproval)

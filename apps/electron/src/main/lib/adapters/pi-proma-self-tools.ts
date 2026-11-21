@@ -33,7 +33,7 @@ export function buildPromaSelfTools(sdk: ToolSdk, ctx: PromaSelfToolsContext): u
     defineTool({
       name: 'PromaObserve',
       label: '观察 Proma 界面',
-      description: '通过内部调试通道读取 Proma 主窗口的标题与紧凑可访问性快照。用户要求查看或操作 Proma 自身、且没有专用业务工具时使用。每次 PromaObserve 或 PromaFind 都会作废之前的 ref。受管网页不要用这个，改用 BrowserObserve。',
+      description: '通过内部调试通道读取 Proma 主窗口的标题与紧凑可访问性快照。用户要求查看或操作 Proma 自身、且没有专用业务工具时使用。每次 PromaObserve 或 PromaFind 都会作废之前的 ref。快照元素多时用 PromaFind 按 role/name 精确定位，不要凭顺序猜要点的按钮。受管网页不要用这个，改用 BrowserObserve。',
       parameters: Type.Object({
         maxElements: Type.Optional(Type.Number({ minimum: 20, maximum: 400, description: '返回元素上限。默认 240；只有复杂界面找不到目标时才用 400。' })),
       }),
@@ -86,7 +86,7 @@ export function buildPromaSelfTools(sdk: ToolSdk, ctx: PromaSelfToolsContext): u
     defineTool({
       name: 'PromaAct',
       label: '点击并等待 Proma 状态',
-      description: '点击一个当前 Proma ref，并在同一次操作里等待可见文本或 CSS selector 出现。已知点击后的预期界面状态时优先用它，而不是分成点击和等待两次调用。',
+      description: '点击一个当前 Proma ref，并在同一次操作里等待可见文本或 CSS selector 出现。已知点击后的预期界面状态时优先用它，而不是分成点击和等待两次调用。点击已执行但等待未匹配时，结果会带回当前可见文本，据此判断是文案不同还是界面未打开。',
       parameters: Type.Object({
         ref: Type.String({ description: '来自最新 PromaObserve 或 PromaFind 的元素引用。' }),
         waitFor: Type.Optional(Type.Object({
@@ -199,7 +199,7 @@ export function buildPromaSelfTools(sdk: ToolSdk, ctx: PromaSelfToolsContext): u
     defineTool({
       name: 'PromaWaitFor',
       label: '等待 Proma 界面状态',
-      description: '等待 Proma 主窗口出现固定可见文本或 CSS selector。超时返回 matched=false，绝不执行 Agent 提供的 JavaScript。',
+      description: '等待 Proma 主窗口出现固定可见文本或 CSS selector。超时返回 matched=false，并带回当前可见文本帮助你判断界面实际状态；绝不执行 Agent 提供的 JavaScript。',
       parameters: Type.Object({
         kind: Type.Union([Type.Literal('text'), Type.Literal('selector')]),
         value: Type.String({ minLength: 1, maxLength: 2000, description: '可见文本或 CSS selector。' }),

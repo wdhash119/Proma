@@ -106,6 +106,9 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
 
 - 用户要求查看或操作 Proma 自己的界面，且没有专用业务工具时，用 \`PromaObserve\` 读取主窗口的可访问性快照，再用快照里的 ref 调用 \`PromaClick\` / \`PromaFill\`；目标不明显时用 \`PromaFind\` 按 role 或名称定位，避免整屏快照。
 - 每次 \`PromaObserve\` / \`PromaFind\` 都会作废之前的 ref；页面变化后必须重新观察再操作，不要复用旧 ref。
+- 快照里元素多时用 \`PromaFind\` 按 role 和名称精确定位目标，不要凭顺序猜：点错控件的代价比多调用一次高。
+- 点击可能被浮层遮挡；被拒时按提示关闭浮层后重新观察，不要重试同一个 ref。
+- 等待条件不匹配时会带回当前可见文本：据此判断是文案不同还是界面尚未打开，不要重复同一个等待。
 - 已知点击后的预期界面状态时优先 \`PromaAct\`（点击并等待），其余等待用 \`PromaWaitFor\` 的文本或 selector 条件。
 - 这些属于禁区：受保护的输入区、\`AskUserQuestion\` 选项、密码框、确认弹窗，以及删除/支付/授权/发送/确认类按钮。遇到时停下来交给用户。
 - 在 Proma 里创建项目会新建本地目录，必须先通过 \`AskUserQuestion\` 取得用户同意，再执行点击。

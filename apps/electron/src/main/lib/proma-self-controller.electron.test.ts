@@ -45,6 +45,10 @@ test('Given a real Electron window When Proma self-control tools run Then observ
         <button id="danger">删除项目</button>
         <div data-proma-self-control="deny"><button id="denied">点了也不该生效</button></div>
         <input id="name" aria-label="名称" placeholder="名称" />
+        <div style="position:relative;width:320px;height:56px;margin-top:16px">
+          <button id="covered">被浮层盖住的按钮</button>
+          <div id="cover" style="position:absolute;inset:0;z-index:9;background:#eee">浮层</div>
+        </div>
         <div id="log"></div>
         <div id="mirror"></div>
         <div style="height:2400px"></div>
@@ -163,6 +167,32 @@ test('Given a real Electron window When Proma self-control tools run Then observ
       )
       report.blockedDomRejected = true
 
+      currentStep = 'occluded'
+      // 浮层压在被覆盖按钮上方：命中检测必须拒绝点击，并报出挡在前面的是什么
+      const forCovered = await controller.observe(sessionId, 200)
+      const covered = forCovered.elements.find((element) => element.name === '被浮层盖住的按钮')
+      assert.ok(covered, '应观察到被浮层盖住的按钮')
+      const obstructionMessage = await expectRejection(
+        controller.click(sessionId, covered.ref),
+        '遮挡',
+        '浮层遮挡点击',
+      )
+      assert.ok(
+        obstructionMessage.includes('浮层'),
+        '遮挡提示应说明挡在前面的是什么，实际为: ' + obstructionMessage,
+      )
+      report.occludedClickRejected = true
+      report.occlusionMessage = obstructionMessage
+
+      currentStep = 'wait-timeout'
+      // 等待一个不存在的文本：必须返回 matched=false 并带回当前可见文本
+      const missed = await controller.waitFor(sessionId, { kind: 'text', value: '这个文本不存在' }, 600)
+      assert.equal(missed.matched, false, '不存在的文本应等待超时')
+      assert.ok(missed.visibleText, '超时结果应带回当前可见文本')
+      assert.ok(missed.visibleText.includes('打开设置'), '可见文本应包含页面实际内容，实际为: ' + missed.visibleText)
+      assert.ok(missed.message.includes('不要重复同一个等待'), '超时提示应劝阻重复等待')
+      report.waitTimeoutDiagnosed = true
+
       currentStep = 'scroll'
       // 9) 滚动
       const scrolled = await controller.scroll(sessionId, { deltaY: 600 })
@@ -254,6 +284,9 @@ test('Given a real Electron window When Proma self-control tools run Then observ
     expect(report.blockedDomRejected).toBe(true)
     expect(Number(report.screenshotBytes)).toBeGreaterThan(2000)
     expect(Number(report.observeCount)).toBeGreaterThan(0)
+    expect(report.occludedClickRejected).toBe(true)
+    expect(report.waitTimeoutDiagnosed).toBe(true)
+    expect(String(report.occlusionMessage)).toContain('遮挡')
   } finally {
     // 设置 PROMA_KEEP_VERIFY=1 可保留临时脚本，便于排查 Electron 侧失败。
     if (!process.env.PROMA_KEEP_VERIFY) rmSync(home, { recursive: true, force: true })

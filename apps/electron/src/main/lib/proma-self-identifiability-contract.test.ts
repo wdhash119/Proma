@@ -48,6 +48,35 @@ describe('自操作可辨识性契约', () => {
     expect(hint).toContain('不要凭顺序猜')
   })
 
+  test('Given 用户答完问题 When 检查 Then 作废此前持有的界面引用', () => {
+    const ipc = readAppFile('src/main/ipc.ts')
+    const controller = readAppFile('src/main/lib/proma-self-controller.ts')
+
+    expect(controller).toContain('invalidateSessionRefs')
+    // 回答 AskUserQuestion 时用户很可能已离开 Agent 打开的界面，旧 ref 必须立刻失效。
+    expect(ipc).toContain('promaSelfController.invalidateSessionRefs(sessionId)')
+  })
+
+  test('Given CDP 报节点失效 When 检查 Then 翻译成可执行提示而非原始错误名', () => {
+    const controller = readAppFile('src/main/lib/proma-self-controller.ts')
+    const errors = readAppFile('src/main/lib/proma-self-cdp-errors.ts')
+
+    expect(controller).toContain('normalizeCdpError(error)')
+    expect(controller).toContain('isDocumentNotRequestedError(error)')
+    expect(errors).toContain('STALE_ELEMENT_MESSAGE')
+    // 覆盖 CDP 的两种 detached 措辞。
+    expect(errors).toContain("'detached node'")
+    expect(errors).toContain("'detached from document'")
+  })
+
+  test('Given 需要提问 When 检查提示词 Then 要求先恢复到原状再发问', () => {
+    const prompt = readAppFile('src/main/lib/agent-prompt-builder.ts')
+
+    expect(prompt).toContain('先把 Agent 打开的界面恢复到原状再发问')
+    expect(prompt).toContain('用户必须离开你打开的设置页才能回答')
+    expect(prompt).toContain('用户回答后，你之前持有的界面引用一律已失效')
+  })
+
   test('Given 只读任务 When 检查提示词 Then 要求关闭临时界面并禁止顺手改状态', () => {
     const prompt = readAppFile('src/main/lib/agent-prompt-builder.ts')
 

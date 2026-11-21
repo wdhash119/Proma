@@ -3852,6 +3852,9 @@ export function registerIpcHandlers(): void {
       const sessionId = askUserService.respondToAskUser(requestId, answers)
 
       if (sessionId) {
+        // 用户回答时很可能已经离开 Agent 打开的界面（例如关掉设置回到对话），
+        // 之前持有的界面引用一律作废，避免拿失效节点继续操作。
+        promaSelfController.invalidateSessionRefs(sessionId)
         event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
           sessionId,
           payload: { kind: 'proma_event', event: { type: 'ask_user_resolved', requestId } },

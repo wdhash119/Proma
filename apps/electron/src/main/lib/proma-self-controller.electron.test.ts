@@ -168,6 +168,19 @@ test('Given a real Electron window When Proma self-control tools run Then observ
       )
       report.blockedDomRejected = true
 
+      currentStep = 'invalidate-after-ask'
+      // 用户答完问题后作废引用：之前的 ref 必须立刻不可用（走「重新观察」路径）
+      const beforeInvalidate = await controller.observe(sessionId, 200)
+      const anyTarget = beforeInvalidate.elements.find((element) => element.name === '打开设置')
+      assert.ok(anyTarget, '作废前应能观察到「打开设置」')
+      controller.invalidateSessionRefs(sessionId)
+      await expectRejection(
+        controller.click(sessionId, anyTarget.ref),
+        '已失效',
+        'invalidateSessionRefs 后的点击',
+      )
+      report.refInvalidatedAfterAsk = true
+
       currentStep = 'named-hint'
       // 无名按钮必须带 hint（从 class / data-* 提炼），否则模型只能靠顺序猜
       const withHint = await controller.observe(sessionId, 200)
@@ -202,6 +215,32 @@ test('Given a real Electron window When Proma self-control tools run Then observ
       assert.ok(missed.visibleText.includes('打开设置'), '可见文本应包含页面实际内容，实际为: ' + missed.visibleText)
       assert.ok(missed.message.includes('不要重复同一个等待'), '超时提示应劝阻重复等待')
       report.waitTimeoutDiagnosed = true
+
+      currentStep = 'stale-cdp-error'
+      // 生成一代 ref 后把目标节点从 DOM 删掉，模拟用户关掉了那个界面：
+      // CDP 会抛 "No node with given id found"，必须翻译成「重新观察」而不是原样冒泡。
+      const beforeRemoval = await controller.observe(sessionId, 200)
+      const removable = beforeRemoval.elements.find((element) => element.name === '被浮层盖住的按钮')
+      assert.ok(removable, '删除前应能观察到目标按钮')
+      await controller.domAction(sessionId, { action: 'inspect', selector: '#cover' })
+      // 用页面脚本移除目标节点（不影响 ref 的 generation）
+      await win.webContents.executeJavaScript(
+        'document.getElementById("covered")?.remove(); "removed"',
+      )
+      const staleError = await (async () => {
+        try {
+          await controller.click(sessionId, removable.ref)
+          return null
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error)
+        }
+      })()
+      assert.ok(staleError, '节点被移除后点击应失败')
+      assert.ok(
+        staleError.includes('重新调用 PromaObserve') && staleError.includes('不要原样重试'),
+        'CDP 失效错误必须翻译成可执行提示，实际为: ' + staleError,
+      )
+      report.staleCdpErrorNormalized = staleError
 
       currentStep = 'scroll'
       // 9) 滚动
@@ -300,7 +339,9 @@ test('Given a real Electron window When Proma self-control tools run Then observ
       expect(String(report.screenshotUnavailable)).toContain('无法截取 Proma 窗口画面')
     }
     expect(Number(report.observeCount)).toBeGreaterThan(0)
+    expect(report.refInvalidatedAfterAsk).toBe(true)
     expect(report.occludedClickRejected).toBe(true)
+    expect(String(report.staleCdpErrorNormalized)).toContain('不要原样重试')
     expect(String(report.unnamedHint)).toContain('sidebar-collapse-button')
     expect(report.waitTimeoutDiagnosed).toBe(true)
     expect(String(report.occlusionMessage)).toContain('遮挡')

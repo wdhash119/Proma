@@ -31,6 +31,7 @@ import { cdpAxPropertyBoolean, cdpTextValue, isEditableCdpAxNode, type CdpAxNode
 import { isValidImageBytes } from './image-content-validation'
 import { describeClickObstruction, describeWaitTimeout, summarizeVisibleText } from './proma-self-observation-hints'
 import { attributesToRecord, buildElementHint, describeUnnamedElement } from './proma-self-element-hint'
+import { isDocumentNotRequestedError, normalizeCdpError } from './proma-self-cdp-errors'
 import {
   PROMA_SELF_CONTROL_PROJECT_CONSENT_DENIED,
   PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR,
@@ -193,9 +194,28 @@ export class PromaSelfController {
     throwIfBrowserOperationAborted(signal)
     this.ensureDebugger(contents)
     const command = () => contents.debugger.sendCommand(method, params) as Promise<Record<string, unknown>>
-    return timeoutMs === undefined
-      ? withBrowserCdpTimeout(command, method, undefined, signal)
-      : withBrowserCdpTimeout(command, method, timeoutMs, signal)
+    try {
+      return timeoutMs === undefined
+        ? await withBrowserCdpTimeout(command, method, undefined, signal)
+        : await withBrowserCdpTimeout(command, method, timeoutMs, signal)
+    } catch (error) {
+      // 中断要原样上抛，否则调用方无法区分「用户取消」和「操作失败」。
+      if (error instanceof BrowserOperationAbortedError) throw error
+      // 文档树未请求属于可自行修复的内部状态，不该冒泡成用户可见错误。
+      if (isDocumentNotRequestedError(error)) {
+        await contents.debugger.sendCommand('DOM.getDocument', { depth: 0 })
+        return timeoutMs === undefined
+          ? withBrowserCdpTimeout(command, method, undefined, signal)
+          : withBrowserCdpTimeout(command, method, timeoutMs, signal)
+      }
+      const normalized = normalizeCdpError(error)
+      if (normalized.stale) {
+        // 原始 message 留在日志里便于排查，模型只看到可执行提示。
+        console.warn(`[Proma 自操作] CDP ${method} 命中失效节点:`, normalized.original)
+        throw new Error(normalized.message)
+      }
+      throw error
+    }
   }
 
   private async run<T>(
@@ -213,6 +233,19 @@ export class PromaSelfController {
     })
     state.commandTail = operation.then(() => undefined, () => undefined)
     return operation
+  }
+
+  /**
+   * 只作废旧 ref，不中断在途操作。
+   *
+   * 用于「界面一定被用户动过」的时刻（例如答完 AskUserQuestion 后），
+   * 让后续点击必定走「引用已失效 → 重新观察」路径，而不是拿旧节点乱点。
+   */
+  invalidateSessionRefs(sessionId: string): void {
+    const state = this.sessions.get(sessionId)
+    if (!state) return
+    state.generation += 1
+    state.refs.clear()
   }
 
   /** 用户中断或会话结束时取消在途操作并作废旧 ref。 */

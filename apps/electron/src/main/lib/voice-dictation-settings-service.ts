@@ -18,6 +18,7 @@ const DEFAULT_VOICE_DICTATION_SETTINGS: VoiceDictationSettings = {
   endpointMode: 'async',
   outputMode: 'auto',
   customHotwords: '',
+  pressToTalkEnabled: false,
 }
 
 function encryptSecret(value: string): string {
@@ -50,6 +51,7 @@ export function getVoiceDictationSettings(): VoiceDictationSettings {
     appId: raw.appId ?? raw.appKey ?? '',
     accessToken: decryptSecret(encryptedAccessToken),
     customHotwords: typeof raw.customHotwords === 'string' ? raw.customHotwords : '',
+    pressToTalkEnabled: raw.pressToTalkEnabled === true,
   }
 }
 

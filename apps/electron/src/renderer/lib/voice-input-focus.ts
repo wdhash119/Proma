@@ -78,3 +78,6 @@ export const VOICE_DICTATION_CLEAR_PREVIEW_EVENT = 'proma:clear-voice-dictation-
 
 /** 底部输入工具栏显示的语音状态。 */
 export const VOICE_DICTATION_STATUS_EVENT = 'proma:voice-dictation-status'
+
+/** 语音输入设置保存后派发，供输入框即时切换「按住说话」等开关。 */
+export const VOICE_DICTATION_SETTINGS_CHANGED_EVENT = 'proma:voice-dictation-settings-changed'

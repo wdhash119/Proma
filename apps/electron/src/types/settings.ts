@@ -66,6 +66,8 @@ export interface VoiceDictationSettings {
   outputMode: VoiceDictationOutputMode
   /** 自定义热词，按行或逗号分隔，启动识别时直传给豆包 ASR */
   customHotwords: string
+  /** 是否启用「按住说话」：按住输入框麦克风按钮说话，松开结束 */
+  pressToTalkEnabled?: boolean
   /** 语音输入浮窗上次拖动后的位置 */
   windowPosition?: VoiceDictationWindowPosition
 }
@@ -98,6 +100,19 @@ export interface VoiceDictationStateEvent {
 /** 渲染进程请求切换听写时携带的来源输入框。 */
 export interface VoiceDictationToggleInput {
   sourceInputId?: string
+  /** 「按住说话」长按事件：带 token 才能区分同一次按下与松开。 */
+  pressToTalk?: VoicePressToTalkRequest
+}
+
+/**
+ * 「按住说话」的一次长按请求。
+ *
+ * 渲染端为每次按下生成唯一 token，主进程只在 token 匹配时才允许结束该会话，
+ * 避免旧会话迟到的松开事件误停新会话。
+ */
+export interface VoicePressToTalkRequest {
+  action: 'start' | 'stop'
+  token: string
 }
 
 /** 主进程冻结的一次听写输出上下文。 */

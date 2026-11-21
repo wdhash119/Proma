@@ -8,22 +8,29 @@
 import { app, BrowserWindow, screen, type BrowserWindowConstructorOptions } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { VOICE_DICTATION_IPC_CHANNELS, type VoiceDictationOutputMode, type VoiceDictationShownEvent } from '../../types'
+import {
+  VOICE_DICTATION_IPC_CHANNELS,
+  type VoiceDictationOutputMode,
+  type VoiceDictationShownEvent,
+  type VoicePressToTalkRequest,
+} from '../../types'
 import { getSettings } from './settings-service'
+import { getVoiceDictationSettings } from './voice-dictation-settings-service'
 import {
   beginVoiceDictationOutputContext,
   captureVoiceDictationTarget,
   releaseVoiceDictationOutputContext,
 } from './text-output-service'
+import { canStartVoicePressToTalk, canStopVoicePressToTalk, type VoiceDictationLifecycleState } from './voice-press-to-talk-ownership'
 import { getMainWindow } from '../index'
 
 const INDICATOR_WIDTH = 360
 const INDICATOR_HEIGHT = 110
 const INDICATOR_BOTTOM_MARGIN = 28
 
-type VoiceDictationLifecycleState = 'idle' | 'active' | 'stopping'
-
 let voiceDictationState: VoiceDictationLifecycleState = 'idle'
+/** 当前长按会话的 token；非长按发起的会话为 null。 */
+let activePressToTalkToken: string | null = null
 let usesExternalIndicator = false
 let indicatorState: 'preparing' | 'recording' | 'stopping' = 'preparing'
 let indicatorVolume = 0
@@ -34,6 +41,8 @@ let voiceIndicatorWindow: BrowserWindow | null = null
 interface VoiceDictationToggleOptions {
   targetIsProma?: boolean
   sourceInputId?: string
+  /** 「按住说话」长按事件；省略时走原有 toggle 行为。 */
+  pressToTalk?: VoicePressToTalkRequest
 }
 
 /**
@@ -45,19 +54,46 @@ export function createVoiceDictationWindow(): void {
   installVoiceDictationMediaPermissions(mainWindow)
 }
 
-export function toggleVoiceDictationWindow(options: VoiceDictationToggleOptions = {}): void {
+/**
+ * 开始或停止一次语音输入会话。
+ *
+ * @returns 是否真正执行了开始/停止；false 表示被状态守卫或前置检查拒绝，
+ *          渲染端据此区分「已生效」与「被忽略」，避免长按管理器误判会话已建立。
+ */
+export function toggleVoiceDictationWindow(options: VoiceDictationToggleOptions = {}): boolean {
+  const press = options.pressToTalk
+
+  // 「按住说话」的松开事件：只有同一 token 的会话才能被结束，避免旧松开事件停掉新会话。
+  if (press?.action === 'stop') {
+    if (!canStopVoicePressToTalk(voiceDictationState, activePressToTalkToken, press.token)) {
+      return false
+    }
+    voiceDictationState = 'stopping'
+    indicatorState = 'stopping'
+    sendIndicatorState()
+    getMainWindow()?.webContents.send(VOICE_DICTATION_IPC_CHANNELS.TOGGLE_STOP)
+    return true
+  }
+
+  if (
+    press?.action === 'start' &&
+    !canStartVoicePressToTalk(voiceDictationState, getVoiceDictationSettings().pressToTalkEnabled)
+  ) {
+    return false
+  }
+
   if (!isVoiceDictationEnabled()) {
     console.log('[语音输入] 功能未启用，忽略唤起请求')
-    return
+    return false
   }
 
   const mainWindow = getMainWindow()
-  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!mainWindow || mainWindow.isDestroyed()) return false
   installVoiceDictationMediaPermissions(mainWindow)
 
   if (voiceDictationState === 'stopping') {
     // 停止/提交尚未完成时，忽略重复点击，避免旧会话与新会话交叉。
-    return
+    return false
   }
 
   if (voiceDictationState === 'active') {
@@ -65,15 +101,17 @@ export function toggleVoiceDictationWindow(options: VoiceDictationToggleOptions 
     indicatorState = 'stopping'
     sendIndicatorState()
     mainWindow.webContents.send(VOICE_DICTATION_IPC_CHANNELS.TOGGLE_STOP)
-    return
+    return true
   }
 
   const targetIsProma = captureVoiceDictationTarget(options.targetIsProma)
-  const outputMode = getSettings().voiceDictation?.outputMode ?? 'auto'
+  // 长按发起时用户必然在 Proma 输入框内，文本直接回填到该输入框，无需依赖光标所在应用。
+  const outputMode = press ? 'proma-input' : getSettings().voiceDictation?.outputMode ?? 'auto'
   const routeToPromaInput = shouldRouteVoiceDictationToPromaInput(targetIsProma, outputMode)
   const outputContextId = randomUUID()
   beginVoiceDictationOutputContext(outputContextId, { routeToPromaInput, outputMode })
   activeOutputContextId = outputContextId
+  activePressToTalkToken = press?.token ?? null
   voiceDictationState = 'active'
   usesExternalIndicator = !targetIsProma
   indicatorState = 'preparing'
@@ -86,11 +124,13 @@ export function toggleVoiceDictationWindow(options: VoiceDictationToggleOptions 
     sourceInputId: options.sourceInputId,
   }
   mainWindow.webContents.send(VOICE_DICTATION_IPC_CHANNELS.SHOWN, shownEvent)
+  return true
 }
 
 /** 听写完成、取消或失败后关闭所有可见状态。 */
 export function hideVoiceDictationWindow(): void {
   voiceDictationState = 'idle'
+  activePressToTalkToken = null
   usesExternalIndicator = false
   indicatorVolume = 0
   indicatorTranscript = ''

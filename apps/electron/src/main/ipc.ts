@@ -5698,13 +5698,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     VOICE_DICTATION_IPC_CHANNELS.TOGGLE,
-    async (event, input?: VoiceDictationToggleInput): Promise<void> => {
-      const { toggleVoiceDictationWindow } = await import('./lib/voice-dictation-window')
+    async (event, input?: VoiceDictationToggleInput): Promise<boolean> => {
+      const [{ toggleVoiceDictationWindow }, { normalizeVoicePressToTalkRequest }] = await Promise.all([
+        import('./lib/voice-dictation-window'),
+        import('./lib/voice-press-to-talk-ownership'),
+      ])
       const sourceWindow = BrowserWindow.fromWebContents(event.sender)
       const sourceInputId = typeof input?.sourceInputId === 'string' && input.sourceInputId.length > 0 && input.sourceInputId.length <= 512
         ? input.sourceInputId
         : undefined
-      toggleVoiceDictationWindow({ targetIsProma: !!sourceWindow, sourceInputId })
+      // 「按住说话」长按事件来自渲染端，token 与 action 必须校验后再透传。
+      const pressToTalk = normalizeVoicePressToTalkRequest(input?.pressToTalk)
+      return toggleVoiceDictationWindow({ targetIsProma: !!sourceWindow, sourceInputId, pressToTalk })
     }
   )
 

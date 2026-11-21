@@ -1275,8 +1275,8 @@ export interface ElectronAPI {
   updateVoiceDictationSettings: (updates: VoiceDictationSettingsUpdate) => Promise<VoiceDictationSettings>
   /** 测试语音输入连接 */
   testVoiceDictationConnection: (updates?: VoiceDictationSettingsUpdate) => Promise<VoiceDictationTestResult>
-  /** 唤起或停止语音输入浮窗 */
-  toggleVoiceDictation: (input?: VoiceDictationToggleInput) => Promise<void>
+  /** 唤起或停止语音输入浮窗；返回主进程是否真的执行了本次切换 */
+  toggleVoiceDictation: (input?: VoiceDictationToggleInput) => Promise<boolean>
   /** 开始语音输入会话 */
   startVoiceDictation: (input: VoiceDictationStartInput) => Promise<void>
   /** 发送语音音频分片 */
@@ -2967,7 +2967,7 @@ const electronAPI: ElectronAPI = {
   },
 
   toggleVoiceDictation: (input?: VoiceDictationToggleInput) => {
-    return ipcRenderer.invoke(VOICE_DICTATION_IPC_CHANNELS.TOGGLE, input)
+    return ipcRenderer.invoke(VOICE_DICTATION_IPC_CHANNELS.TOGGLE, input) as Promise<boolean>
   },
 
   startVoiceDictation: (input: VoiceDictationStartInput) => {

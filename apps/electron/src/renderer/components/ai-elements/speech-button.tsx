@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { VOICE_DICTATION_STATUS_EVENT } from '@/lib/voice-input-focus'
+import { useVoicePressToTalk } from '@/hooks/use-voice-press-to-talk'
 
 interface SpeechButtonProps {
   /** @deprecated 语音结果统一由全局语音输入回填到当前输入框 */
@@ -46,6 +47,9 @@ export function SpeechButton({
   voiceInputId,
 }: SpeechButtonProps): React.ReactElement {
   const [voiceStatus, setVoiceStatus] = useState<InlineVoiceStatus>(IDLE_VOICE_STATUS)
+  const pressToTalk = useVoicePressToTalk(voiceInputId)
+  const { shouldSuppressClick } = pressToTalk
+  const pressToTalkReady = pressToTalk.available && !disabled
   const isRecording = voiceStatus.status === 'recording'
   const isPreparing = voiceStatus.status === 'connecting'
   const isStopping = voiceStatus.status === 'stopping'
@@ -72,6 +76,8 @@ export function SpeechButton({
   }, [voiceInputId])
 
   const handleClick = useCallback((): void => {
+    // 长按已经开始过录音时，松手后的 click 不再重复触发一次 toggle。
+    if (pressToTalkReady && shouldSuppressClick()) return
     void (async () => {
       try {
         const settings = await window.electronAPI.getVoiceDictationSettings()
@@ -88,7 +94,7 @@ export function SpeechButton({
         toast.error('切换语音输入失败')
       }
     })()
-  }, [voiceInputId])
+  }, [voiceInputId, pressToTalkReady, shouldSuppressClick])
 
   return (
     <Tooltip>
@@ -104,8 +110,13 @@ export function SpeechButton({
               className
             )}
             onClick={handleClick}
+            onPointerDown={pressToTalkReady ? pressToTalk.down : undefined}
+            onPointerMove={pressToTalkReady ? pressToTalk.move : undefined}
+            onPointerUp={pressToTalkReady ? pressToTalk.up : undefined}
+            onPointerCancel={pressToTalkReady ? pressToTalk.cancel : undefined}
+            onPointerLeave={pressToTalkReady ? pressToTalk.cancel : undefined}
             disabled={disabled}
-            aria-label={isActive ? '停止语音输入' : '开始语音输入'}
+            aria-label={isActive ? '停止语音输入' : pressToTalkReady ? '按住说话' : '开始语音输入'}
           >
             {isPreparing || isStopping ? (
               <Loader2 className="size-4 animate-spin" />
@@ -131,7 +142,13 @@ export function SpeechButton({
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">
-        <p>{isActive ? voiceStatus.message || '正在听写' : '语音输入'}</p>
+        <p>
+          {isActive
+            ? voiceStatus.message || '正在听写'
+            : pressToTalkReady
+              ? '按住说话，松开结束'
+              : '语音输入'}
+        </p>
       </TooltipContent>
     </Tooltip>
   )

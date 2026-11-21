@@ -16,6 +16,7 @@ import {
   SettingsToggle,
 } from './primitives'
 import type { VoiceDictationSettings, MicPermissionResult } from '../../../types'
+import { VOICE_DICTATION_SETTINGS_CHANGED_EVENT } from '@/lib/voice-input-focus'
 
 const ENDPOINT_OPTIONS = [
   { value: 'async', label: '双向流式优化版' },
@@ -91,6 +92,10 @@ export function VoiceInputSettings(): React.ReactElement {
     try {
       const saved = await window.electronAPI.updateVoiceDictationSettings(optimistic)
       setSettings(saved)
+      // 让输入框即时同步「按住说话」等开关：长按能力完全依赖设置。
+      window.dispatchEvent(
+        new CustomEvent<VoiceDictationSettings>(VOICE_DICTATION_SETTINGS_CHANGED_EVENT, { detail: saved }),
+      )
       window.electronAPI.reregisterGlobalShortcuts().catch(console.error)
     } catch (error) {
       console.error('[语音输入] 保存设置失败:', error)
@@ -219,6 +224,12 @@ export function VoiceInputSettings(): React.ReactElement {
             description="启用后可使用 Ctrl+～ 打开语音输入浮窗，再按一次停止。"
             checked={settings.enabled}
             onCheckedChange={(enabled) => update({ enabled })}
+          />
+          <SettingsToggle
+            label="按住说话"
+            description="按住麦克风按钮说话，松开结束；按住 450 毫秒后才开始录音，移动过远会取消。"
+            checked={settings.pressToTalkEnabled === true}
+            onCheckedChange={(pressToTalkEnabled) => update({ pressToTalkEnabled })}
           />
           <SettingsInput
             label="豆包 APP ID"

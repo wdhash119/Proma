@@ -142,6 +142,29 @@ export function isCheckPending(check: ChangeRequestCheck): boolean {
   return status === 'PENDING' || status === 'QUEUED' || status === 'IN_PROGRESS' || status === 'WAITING'
 }
 
+/** 视为失败的结论；覆盖 CheckRun 与经典 StatusContext 的终态。 */
+const FAILED_CONCLUSIONS = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED'])
+
+/**
+ * Check 是否失败。
+ *
+ * 新快照统一写入 conclusion；旧快照里经典 StatusContext 的 state 可能落在
+ * status 字段，因此这里同时兼容两种存储形态。
+ */
+export function isCheckFailed(check: ChangeRequestCheck): boolean {
+  const conclusion = (check.conclusion || '').toUpperCase()
+  if (conclusion) return FAILED_CONCLUSIONS.has(conclusion)
+  const status = (check.status || '').toUpperCase()
+  return status === 'FAILURE' || status === 'ERROR'
+}
+
+/** Check 是否成功；同样兼容旧快照把 StatusContext state 写在 status 的情况。 */
+export function isCheckSuccessful(check: ChangeRequestCheck): boolean {
+  const conclusion = (check.conclusion || '').toUpperCase()
+  if (conclusion) return conclusion === 'SUCCESS'
+  return (check.status || '').toUpperCase() === 'SUCCESS'
+}
+
 export function normalizeChangeRequestState(state: string | undefined): ChangeRequestState {
   const value = (state || '').toUpperCase()
   return value === 'MERGED' || value === 'CLOSED' ? value : 'OPEN'

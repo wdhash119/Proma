@@ -9,23 +9,14 @@ import type {
   SDKAssistantMessage,
   SDKMessage,
 } from '@proma/shared'
+import { shouldNotifyByPolicy } from '@proma/shared'
+
+export { shouldNotifyByPolicy }
 
 interface AutomationNotificationCardPayload {
   automation: Automation
   run: AutomationRun
   summary: string
-}
-
-/**
- * 结果提醒策略：成功结果默认也会通知，用户可以把单个任务设为「仅失败提醒」或「完全安静」。
- */
-export function shouldNotifyByPolicy(
-  policy: Automation['notifyPolicy'],
-  status: AutomationRun['status'],
-): boolean {
-  if (policy === 'never') return false
-  if (policy === 'failures-only') return status === 'error'
-  return true
 }
 
 export function shouldNotifyAutomationTarget(

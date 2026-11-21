@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
   extractChangeRequestUrls,
+  isCheckFailed,
   isCheckPending,
+  isCheckSuccessful,
   normalizeChangeRequestState,
   normalizeChangeRequestUrl,
   parseChangeRequestUrl,
@@ -66,5 +68,22 @@ describe('变更请求链接解析', () => {
     expect(isCheckPending({ name: 'build', status: 'queued', conclusion: '' })).toBe(true)
     expect(isCheckPending({ name: 'build', status: 'in_progress', conclusion: '' })).toBe(true)
     expect(isCheckPending({ name: 'build', status: 'completed', conclusion: 'SUCCESS' })).toBe(false)
+  })
+
+  test('Given 经典 StatusContext 归一化结果 When 判断失败 Then 命中原生 CheckRun 的同一规则', () => {
+    expect(isCheckFailed({ name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE' })).toBe(true)
+    expect(isCheckFailed({ name: 'ci', status: 'COMPLETED', conclusion: 'ERROR' })).toBe(true)
+    expect(isCheckFailed({ name: 'ci', status: 'COMPLETED', conclusion: 'SUCCESS' })).toBe(false)
+    expect(isCheckFailed({ name: 'ci', status: 'PENDING', conclusion: '' })).toBe(false)
+  })
+
+  test('Given 旧快照把 state 写在 status When 判断 Then 失败与通过仍正确', () => {
+    const legacyFailure = { name: 'ci', status: 'FAILURE', conclusion: '' }
+    const legacySuccess = { name: 'deploy', status: 'SUCCESS', conclusion: '' }
+
+    expect(isCheckFailed(legacyFailure)).toBe(true)
+    expect(isCheckSuccessful(legacyFailure)).toBe(false)
+    expect(isCheckSuccessful(legacySuccess)).toBe(true)
+    expect(isCheckSuccessful({ name: 'deploy', status: 'COMPLETED', conclusion: 'SUCCESS' })).toBe(true)
   })
 })

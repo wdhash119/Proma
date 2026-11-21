@@ -684,9 +684,14 @@ export function updateAgentSessionMeta(
   const isBackgroundMetadataOnly = updateKeys.length > 0 && updateKeys.every((key) => (
     key === 'changeRequests' || key === 'pullRequest' || key === 'checkoutHistory'
   ))
-  // 非手动归档操作时，若会话已归档则自动恢复为活跃（仅更新 stoppedByUser 或 starred 不触发解归档）
+  // 非手动归档操作时，若会话已归档则自动恢复为活跃。
+  // 仅更新 stoppedByUser / starred / PR 状态等后台元数据不触发解归档。
   const isStoppedByUserOnly = updateKeys.every((key) => key === 'stoppedByUser')
-  const autoUnarchive = existing.archived && !('archived' in updates) && !isStoppedByUserOnly && !isStarredOnly
+  const autoUnarchive = existing.archived
+    && !('archived' in updates)
+    && !isStoppedByUserOnly
+    && !isStarredOnly
+    && !isBackgroundMetadataOnly
   const updated: AgentSessionMeta = {
     ...existing,
     ...updates,

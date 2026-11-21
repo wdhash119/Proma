@@ -22,6 +22,25 @@ export interface ChatMarkdownBlock {
 
 const markdownProcessor = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
 
+/**
+ * 只去掉块与块之间的空行，不碰任何非空行的前导缩进。
+ *
+ * 缩进代码块依赖行首四个空格；用 trim() 会把它降级成普通段落。
+ */
+function trimBlankLines(input: string): string {
+  return input
+    .replace(/^(?:[ \t]*\r?\n)+/, '')
+    .replace(/(?:\r?\n[ \t]*)+$/, '')
+}
+
+/** 递归查找文档级定义；链接引用与脚注都可能被拆到别的块里。 */
+function hasDocumentLevelDefinition(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false
+  const typed = node as { type?: unknown; children?: unknown }
+  if (typed.type === 'definition' || typed.type === 'footnoteDefinition') return true
+  return Array.isArray(typed.children) && typed.children.some(hasDocumentLevelDefinition)
+}
+
 /** 简单字符串散列，仅用于生成稳定的块 key。 */
 function hashContent(input: string): string {
   let hash = 5381
@@ -41,12 +60,18 @@ export function parseChatMarkdownBlocks(source: string): ChatMarkdownBlock[] {
   if (source.length === 0 || source.trim().length === 0) return []
 
   const tree = markdownProcessor.parse(source)
+  // 引用式链接的正文与 definition 必须由同一篇文档解析；拆块会让 [ref] 退化成字面量。
+  // 这类文档整体作为一个块，仍保留空行裁剪以外的全部源码语义。
+  if (tree.children.some(hasDocumentLevelDefinition)) {
+    const whole = trimBlankLines(source)
+    return whole.length > 0 ? [{ id: '', source: whole, type: 'document' }] : []
+  }
   const blocks: ChatMarkdownBlock[] = []
   for (const node of tree.children) {
     const start = node.position?.start.offset
     const end = node.position?.end.offset
     if (typeof start !== 'number' || typeof end !== 'number') continue
-    const slice = source.slice(start, end).trim()
+    const slice = trimBlankLines(source.slice(start, end))
     if (slice.length === 0) continue
     blocks.push({ id: '', source: slice, type: node.type })
   }
@@ -69,8 +94,9 @@ export function reconcileChatMarkdownBlocks(
   return next.map((block, index) => {
     const previousBlock = previous[index]
     if (previousBlock && previousBlock.id && previousBlock.source === block.source && previousBlock.type === block.type) {
-      // 内容未变（包括已完成的尾块）：直接沿用 key，避免重建代码高亮等组件状态。
-      return { ...block, id: previousBlock.id }
+      // 内容未变（包括已完成的尾块）：直接复用同一个对象，配合 React.memo 的
+      // 浅比较跳过重新解析，避免每个流式 chunk 都让历史块重渲染。
+      return previousBlock
     }
     // 流式尾块的 key 带索引：既保持跨 chunk 稳定，又不会与更早的已完成块冲突。
     if (isStreaming && index === lastIndex) {

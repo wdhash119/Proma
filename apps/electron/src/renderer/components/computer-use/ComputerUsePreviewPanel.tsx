@@ -15,6 +15,7 @@ import type { ComputerUsePreviewState } from '@proma/shared'
 import { agentSessionViewStreamStateAtomFamily, currentAgentSessionIdAtom } from '@/atoms/agent-atoms'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { applyIfSessionCurrent } from '@/lib/session-request-guard'
 
 /** 轮询间隔：与主进程 2 秒的终态保留窗口对齐。 */
 const PREVIEW_POLL_INTERVAL_MS = 2_000
@@ -43,9 +44,13 @@ export function ComputerUsePreviewPanel(): React.ReactElement | null {
   const shouldPoll = running || preview?.status === 'finished'
 
   // 会话切换时丢弃上一会话的画面，避免把旧窗口镜像挂在新会话下。
+  // ref 保存最新会话 ID，供慢请求返回时判断结果是否已经过期。
+  const sessionIdRef = React.useRef(sessionId)
+  sessionIdRef.current = sessionId
   React.useEffect(() => {
     setPreview(null)
     setActionError(null)
+    setPendingAction(null)
   }, [sessionId])
 
   React.useEffect(() => {
@@ -82,27 +87,39 @@ export function ComputerUsePreviewPanel(): React.ReactElement | null {
   const canRetry = preview.status === 'error'
 
   const handleActivate = async (): Promise<void> => {
+    const requestSessionId = sessionId
     setPendingAction('activate')
     setActionError(null)
     try {
-      await window.electronAPI.activateComputerUsePreview(sessionId, preview.id)
+      await window.electronAPI.activateComputerUsePreview(requestSessionId, preview.id)
     } catch (error) {
-      setActionError(readErrorMessage(error))
+      applyIfSessionCurrent(requestSessionId, () => sessionIdRef.current, () => {
+        setActionError(readErrorMessage(error))
+      })
     } finally {
-      setPendingAction(null)
+      applyIfSessionCurrent(requestSessionId, () => sessionIdRef.current, () => {
+        setPendingAction(null)
+      })
     }
   }
 
   const handleRetry = async (): Promise<void> => {
+    const requestSessionId = sessionId
     setPendingAction('retry')
     setActionError(null)
     try {
-      const next = await window.electronAPI.retryComputerUsePreview(sessionId, preview.id)
-      if (next) setPreview(next)
+      const next = await window.electronAPI.retryComputerUsePreview(requestSessionId, preview.id)
+      applyIfSessionCurrent(requestSessionId, () => sessionIdRef.current, () => {
+        if (next) setPreview(next)
+      })
     } catch (error) {
-      setActionError(readErrorMessage(error))
+      applyIfSessionCurrent(requestSessionId, () => sessionIdRef.current, () => {
+        setActionError(readErrorMessage(error))
+      })
     } finally {
-      setPendingAction(null)
+      applyIfSessionCurrent(requestSessionId, () => sessionIdRef.current, () => {
+        setPendingAction(null)
+      })
     }
   }
 

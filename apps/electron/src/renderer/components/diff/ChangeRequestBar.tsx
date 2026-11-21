@@ -10,7 +10,7 @@ import { ChevronDown, CircleDashed, GitPullRequest, Link2, Loader2, RotateCw, X 
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { ChangeRequestBinding, ChangeRequestSnapshot } from '@proma/shared'
-import { isCheckPending } from '@proma/shared'
+import { isCheckFailed, isCheckPending, isCheckSuccessful } from '@proma/shared'
 
 type Tone = 'busy' | 'ok' | 'warn' | 'bad' | 'muted'
 
@@ -35,7 +35,7 @@ export function describeChangeRequest(snapshot: ChangeRequestSnapshot | undefine
   if (!snapshot) return { label: '等待状态', tone: 'muted' }
   if (snapshot.state === 'MERGED') return { label: '已合并', tone: 'ok' }
   if (snapshot.state === 'CLOSED') return { label: '已关闭', tone: 'muted' }
-  if (snapshot.checks.some((check) => check.conclusion.toUpperCase() === 'FAILURE')) {
+  if (snapshot.checks.some(isCheckFailed)) {
     return { label: '检查失败', tone: 'bad' }
   }
   if (snapshot.checks.some(isCheckPending)) return { label: '检查中', tone: 'busy' }
@@ -197,7 +197,7 @@ export function ChangeRequestBar({ sessionId }: ChangeRequestBarProps): React.Re
                         <span className="truncate">{binding.snapshot?.headRefName || binding.owner}</span>
                         {binding.snapshot && binding.snapshot.checks.length > 0 && (
                           <span className="shrink-0 tabular-nums">
-                            {binding.snapshot.checks.filter((check) => check.conclusion.toUpperCase() === 'SUCCESS').length}
+                            {binding.snapshot.checks.filter(isCheckSuccessful).length}
                             /{binding.snapshot.checks.length} 通过
                           </span>
                         )}

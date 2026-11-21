@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 import type { ComputerUseInstallation } from '@proma/shared'
-import { CuaUpdateCheckRunner } from './computer-use-cdn-runtime'
+import { CuaUpdateCheckRunner, CuaUpdateProtocolError, statusAfterCuaCheckFailure } from './computer-use-cdn-runtime'
 import type { CuaUpdateCheckRunnerDependencies } from './computer-use-cdn-runtime'
 import type { CuaCdnManifest } from './computer-use-cdn-update'
 import { LABELS } from './computer-use-cdn-update'
@@ -157,6 +157,37 @@ describe('主动检查', () => {
     expect(harness.saved).toEqual([])
   })
 
+  test('Given 清单降级或版本非法 When 检查 Then 抛出可识别的协议错误', async () => {
+    const downgraded = createRunner({ latest: '0.5.0', manifest: async () => manifestOf('0.4.0') })
+    await expect(downgraded.runner.check()).rejects.toBeInstanceOf(CuaUpdateProtocolError)
+
+    const malformed = createRunner({ manifest: async () => ({ ...manifestOf('0.4.0'), version: 'latest' }) })
+    await expect(malformed.runner.check()).rejects.toBeInstanceOf(CuaUpdateProtocolError)
+  })
+
+  test('Given 协议失败后 When 再次查询缓存结论 Then 保持 error，成功检查后恢复', async () => {
+    let fail = true
+    const harness = createRunner({
+      latest: '0.5.0',
+      manifest: async () => (fail ? manifestOf('0.4.0') : manifestOf('0.6.0')),
+    })
+
+    await expect(harness.runner.check()).rejects.toBeInstanceOf(CuaUpdateProtocolError)
+    expect(await harness.runner.status()).toEqual({
+      status: 'error',
+      currentVersion: '0.3.1',
+      latestVersion: '0.5.0',
+    })
+
+    fail = false
+    expect(await harness.runner.check()).toEqual({
+      status: 'available',
+      currentVersion: '0.3.1',
+      latestVersion: '0.6.0',
+    })
+    expect(harness.saved).toEqual(['0.6.0'])
+  })
+
   test('Given 已有成功结论且本次请求失败 When 检查 Then 保留旧结论', async () => {
     const warn = spyOn(console, 'warn').mockImplementation(() => undefined)
     try {
@@ -221,5 +252,32 @@ describe('主动检查', () => {
     } finally {
       warn.mockRestore()
     }
+  })
+})
+
+describe('检查失败后的结论升级', () => {
+  test('Given 协议错误且缓存仍显示 current When 处理失败 Then 返回 error 而不是 current', async () => {
+    const status = await statusAfterCuaCheckFailure(
+      { status: async () => ({ status: 'current', currentVersion: '0.3.1', latestVersion: '0.3.1' }) },
+      new CuaUpdateProtocolError('Cua CDN 清单出现降级'),
+    )
+
+    expect(status).toEqual({ status: 'error' })
+  })
+
+  test('Given 网络错误 When 处理失败 Then 保留 last-known-good 结论', async () => {
+    const cached = { status: 'available' as const, currentVersion: '0.3.1', latestVersion: '0.4.0' }
+
+    expect(await statusAfterCuaCheckFailure({ status: async () => cached }, new Error('HTTP 502')))
+      .toEqual(cached)
+  })
+
+  test('Given 网络错误且状态读取也失败 When 处理失败 Then 兜底 error', async () => {
+    const status = await statusAfterCuaCheckFailure(
+      { status: async () => { throw new Error('驱动不可读') } },
+      new Error('HTTP 502'),
+    )
+
+    expect(status).toEqual({ status: 'error' })
   })
 })

@@ -20,6 +20,7 @@ import {
   listBindings,
   listBoundSessions,
   mergeBindings,
+  migrateLegacyBindings,
   ownersOfUrl,
   removeBinding,
   restoreBinding,
@@ -28,19 +29,28 @@ import {
 import { ChangeRequestPoller } from './change-request-poller'
 import { isTurnEndEvent, shouldDiscoverAfterTurn, TurnDiscoveryScheduler } from './change-request-turn-discovery'
 import {
-  commandFromToolInput,
   isPullRequestCreateCommand,
   isPullRequestReferenceCommand,
   isPushCommand,
-  isShellToolName,
   ownChangeRequestUrlFromOutput,
   PendingCommandTracker,
+  pullRequestToolUses,
   pushedBranchesFromOutput,
+  referencedChangeRequestUrl,
   textOfToolResult,
 } from './change-request-observer'
-import { changeRequestGitHubService, type GitHubRepository } from './github-change-request-service'
+import { changeRequestGitHubService, type ChangeRequestGitHubService, type GitHubRepository } from './github-change-request-service'
 
 const SCOPE_TTL_MS = 60_000
+
+/** GitHub 读取实现；测试可替换为注入的 gh runner，生产保持单例。 */
+let githubService: ChangeRequestGitHubService = changeRequestGitHubService
+
+/** 仅供测试注入 GitHub 服务，避免访问真实 gh。 */
+export function setChangeRequestGitHubServiceForTesting(service?: ChangeRequestGitHubService): void {
+  githubService = service ?? changeRequestGitHubService
+  scopeCache.clear()
+}
 
 /** 会话所在目录：优先活动 worktree，其次项目根，最后默认检出。 */
 function resolveSessionRepositoryCwd(sessionId: string): string | null {
@@ -72,7 +82,7 @@ function settleUrl(url: string, result: ChangeRequestFetchResult): string[] {
 }
 
 function fetchUrl(url: string): Promise<ChangeRequestFetchResult> {
-  return changeRequestGitHubService.viewUrlFromHome(url).then(
+  return githubService.viewUrlFromHome(url).then(
     (view) => ({ snapshot: view.snapshot }),
     (error) => ({ error: error instanceof Error ? error.message : String(error) }),
   )
@@ -115,8 +125,8 @@ async function sessionRepositoryScope(sessionId: string): Promise<RepositoryScop
 
   let value: RepositoryScope | null = null
   try {
-    const repo = await changeRequestGitHubService.discoverRepository(cwd)
-    const upstream = await changeRequestGitHubService.upstreamRepositoryOf(cwd, repo)
+    const repo = await githubService.discoverRepository(cwd)
+    const upstream = await githubService.upstreamRepositoryOf(cwd, repo)
     const repositories = new Set([repositoryKey(repo)])
     if (upstream) repositories.add(repositoryKey(upstream))
     value = { cwd, repo, upstream, repositories }
@@ -161,10 +171,13 @@ async function discoverSession(sessionId: string): Promise<string | undefined> {
   const scope = await sessionRepositoryScope(sessionId)
   if (!scope) return undefined
   try {
-    const branch = await changeRequestGitHubService.currentBranch(scope.cwd)
+    const branch = await githubService.currentBranch(scope.cwd)
     if (!branch) return undefined
-    const matches = await changeRequestGitHubService.findByHead(scope.cwd, scope.repo, branch)
+    const matches = await githubService.findByHead(scope.cwd, scope.repo, branch)
     if (matches.length === 0) return undefined
+    // 等待 gh 期间用户可能切换了 worktree/仓库；旧 scope 的发现结果必须丢弃，
+    // 否则会把上一个仓库的 PR 写进当前会话。
+    if (resolveSessionRepositoryCwd(sessionId) !== scope.cwd) return undefined
     const accept = scopeFilter(scope, false)
     const urls = matches.map((match) => match.url).filter((url) => accept === undefined || accept(url))
     if (urls.length > 0) {
@@ -212,7 +225,7 @@ export async function handleChangeRequestsAction(input: ChangeRequestsActionInpu
     }
     case 'track': {
       const url = normalizeRequestedUrl(input.url)
-      const view = await changeRequestGitHubService.viewUrlFromHome(url)
+      const view = await githubService.viewUrlFromHome(url)
       trackBinding(session.id, view.url, 'tracked')
       applyBindingResult(session.id, view.url, { snapshot: view.snapshot })
       poller.refreshUrl(view.url)
@@ -257,11 +270,11 @@ function observePushedBranches(sessionId: string, output: string): void {
   void (async () => {
     const scope = await sessionRepositoryScope(sessionId)
     for (const pushedRef of pushed) {
-      const repository = changeRequestGitHubService.repositoryFromRemote(pushedRef.remote) ?? scope?.repo ?? null
+      const repository = githubService.repositoryFromRemote(pushedRef.remote) ?? scope?.repo ?? null
       if (!repository) continue
       if (scope && !scope.repositories.has(repositoryKey(repository))) continue
 
-      const matches = await changeRequestGitHubService
+      const matches = await githubService
         .findByHead(scope?.cwd ?? homedir(), repository, pushedRef.branch)
         .catch(() => [])
       if (matches.length === 0) continue
@@ -300,19 +313,14 @@ export function observeAgentStreamPayload(
     const urls: string[] = []
     for (const block of content) {
       if (!block || typeof block !== 'object') continue
-      const typed = block as { type?: string; name?: string; id?: string; input?: unknown; text?: string }
+      const typed = block as { type?: string; text?: string }
       if (typed.type === 'text' && typeof typed.text === 'string') {
         urls.push(...extractChangeRequestUrls(typed.text))
-        continue
       }
-      if (typed.type !== 'tool_use') continue
-      const name = typeof typed.name === 'string' ? typed.name : ''
-      if (!isShellToolName(name)) continue
-      const command = commandFromToolInput(typed.input)
-      if (!command || typeof typed.id !== 'string') continue
-      if (isPullRequestCreateCommand(command) || isPushCommand(command)) {
-        pendingCommands.remember(typed.id, command)
-      }
+    }
+    // 创建、推送与引用命令都登记：引用类命令的链接只会出现在它的 tool_result 里。
+    for (const toolUse of pullRequestToolUses(content)) {
+      pendingCommands.remember(toolUse.id, toolUse.command)
     }
     if (urls.length > 0) void applyObservedBindings(sessionId, urls, 'referenced')
     return
@@ -339,8 +347,8 @@ export function observeAgentStreamPayload(
       continue
     }
     if (isPullRequestReferenceCommand(command)) {
-      const own = ownChangeRequestUrlFromOutput(output)
-      if (own) void applyObservedBindings(sessionId, [own], 'referenced')
+      const url = referencedChangeRequestUrl(command, output)
+      if (url) void applyObservedBindings(sessionId, [url], 'referenced')
       continue
     }
     if (isPushCommand(command)) observePushedBranches(sessionId, output)
@@ -359,7 +367,7 @@ function defaultTurnDiscovery(sessionId: string): void {
     ? getAgentWorkspace(session.workspaceId)?.projectRootPath ?? null
     : null
 
-  void changeRequestGitHubService.repositoryRoot(cwd ?? homedir())
+  void githubService.repositoryRoot(cwd ?? homedir())
     .then((repositoryRoot) => {
       if (!shouldDiscoverAfterTurn({ hasBindings, repositoryRoot, projectRoot })) return
       void discoverSession(sessionId).then(() => syncPoller())
@@ -378,9 +386,11 @@ export function scheduleTurnDiscovery(sessionId: string): void {
 
 // ===== 生命周期 =====
 
-/** 应用启动时同步一次绑定，并让轮询器开始工作。 */
+/** 应用启动时迁移旧版单条绑定，再同步一次绑定并让轮询器开始工作。 */
 export function initChangeRequestService(): void {
   try {
+    // 旧版只有 pullRequest 字段的会话也必须进入轮询集，不能等用户打开会话才懒迁移。
+    migrateLegacyBindings()
     syncPoller()
     // 启动即刷新一次，避免显示上次运行留下的过期状态。
     poller.refresh()

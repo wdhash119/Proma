@@ -1,4 +1,5 @@
-import type { AgentSessionMeta, AgentStreamCompletePayload } from '@proma/shared'
+import type { AgentSessionMeta, AgentStreamCompletePayload, AutomationResultNotifyPolicy } from '@proma/shared'
+import { shouldNotifyByPolicy } from '@proma/shared'
 import type { TabItem } from '@/atoms/tab-atoms'
 import { isDelegationObservationVisible } from '@/lib/agent-session-list'
 
@@ -19,12 +20,26 @@ export interface AgentCompletionMarkers {
 
 export interface AgentCompletionNotificationInput {
   completion: AgentStreamCompletePayload
-  session?: Pick<AgentSessionMeta, 'sourceDelegationId' | 'parentSessionId'>
+  session?: Pick<AgentSessionMeta, 'sourceDelegationId' | 'parentSessionId' | 'sourceAutomationId'>
 }
 
-export interface NotifyAgentCompletionInput extends AgentCompletionNotificationInput {
+export interface CompletionNotificationDecisionInput extends AgentCompletionNotificationInput {
   hasStreamError: boolean
-  notify: () => void
+  /** 本轮仍有后台任务在飞行：完成提醒要等真正结束。 */
+  backgroundTasksPending: boolean
+  /** 完成时用户是否确实没有查看该会话（doc 焦点 + 激活 Tab 的综合结论）。 */
+  unviewed: boolean
+  notificationsEnabled: boolean
+  soundEnabled: boolean
+  /** 来源定时任务的结果提醒策略；非定时任务不传，按 always 处理。 */
+  notifyPolicy?: AutomationResultNotifyPolicy
+}
+
+export interface CompletionNotificationDecision {
+  /** 是否发送桌面通知（系统通知自身仍按窗口焦点决定是否弹出）。 */
+  notify: boolean
+  /** 是否播放完成提示音；与桌面通知共用同一次发送，避免双响。 */
+  sound: boolean
 }
 
 /** 仅顶层 Agent 会话完成属于用户级任务完成提醒边界 */
@@ -102,17 +117,26 @@ export function getDelegatedCompletionAttention({
     : null
 }
 
-/** 仅在真正成功且无需等待后台任务时调用完成通知 callback */
-export function notifyAgentCompletion({
-  completion,
-  session,
-  hasStreamError,
-  notify,
-}: NotifyAgentCompletionInput): void {
-  if (!completion.backgroundTasksPending &&
-    isSuccessfulAgentCompletion(completion, hasStreamError) &&
-    shouldNotifyAgentCompletion({ completion, session })) {
-    notify()
+/**
+ * 单一完成提醒入口。
+ *
+ * 失败、用户停止、委派子会话、已查看的完成与仍有后台任务的轮次都保持安静；
+ * 定时任务额外受 notifyPolicy 约束。返回的 notify/sound 由调用方在同一次
+ * 桌面通知发送中使用，保证成功未查看时只响一次。
+ */
+export function decideCompletionNotification(
+  input: CompletionNotificationDecisionInput,
+): CompletionNotificationDecision {
+  const silent: CompletionNotificationDecision = { notify: false, sound: false }
+  if (input.backgroundTasksPending) return silent
+  if (!input.unviewed) return silent
+  if (!isSuccessfulAgentCompletion(input.completion, input.hasStreamError)) return silent
+  if (!shouldNotifyAgentCompletion({ completion: input.completion, session: input.session })) return silent
+  // 定时任务额外受结果提醒策略约束；走到这里只可能是成功结果。
+  if (input.session?.sourceAutomationId && !shouldNotifyByPolicy(input.notifyPolicy, 'success')) return silent
+  return {
+    notify: input.notificationsEnabled,
+    sound: input.notificationsEnabled && input.soundEnabled,
   }
 }
 

@@ -96,6 +96,8 @@ function writeAgentSessionsIndex(sessions: Array<{
   }>
   forkSourceSdkSessionId?: string
   resumeAtMessageUuid?: string
+  archived?: boolean
+  changeRequests?: Array<Record<string, unknown>>
 }>): void {
   const dir = join(tempHome, '.proma')
   mkdirSync(dir, { recursive: true })
@@ -671,5 +673,56 @@ describe('Agent 会话删除墓碑', () => {
 
     expect(manager.getAgentSessionMeta(id)).toBeUndefined()
     expect(existsSync(join(tempHome, '.proma', 'agent-sessions', `${id}.jsonl`))).toBe(false)
+  })
+})
+
+describe('后台元数据不改变归档态', () => {
+  test('Given 已归档会话 When 仅写入 PR 状态或检出日志 Then 保持归档且不刷新排序时间', () => {
+    writeAgentSessionsIndex([{
+      id: 'archived-background-meta',
+      title: '已归档会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 100,
+      agentRuntime: 'pi',
+      archived: true,
+    }])
+
+    const afterChecks = manager.updateAgentSessionMeta('archived-background-meta', {
+      changeRequests: [{
+        url: 'https://github.com/acme/app/pull/1',
+        host: 'github.com',
+        owner: 'acme',
+        repo: 'app',
+        number: 1,
+        source: 'tracked',
+        createdAt: 1,
+      }],
+    })
+    expect(afterChecks.archived).toBe(true)
+    expect(afterChecks.updatedAt).toBe(100)
+
+    const afterCheckout = manager.updateAgentSessionMeta('archived-background-meta', {
+      checkoutHistory: [],
+    })
+    expect(afterCheckout.archived).toBe(true)
+    expect(afterCheckout.updatedAt).toBe(100)
+  })
+
+  test('Given 已归档会话 When 用户正常更新标题 Then 仍自动恢复为活跃', () => {
+    writeAgentSessionsIndex([{
+      id: 'archived-normal-update',
+      title: '已归档会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 100,
+      agentRuntime: 'pi',
+      archived: true,
+    }])
+
+    const updated = manager.updateAgentSessionMeta('archived-normal-update', { title: '新的标题' })
+
+    expect(updated.archived).toBe(false)
+    expect(updated.updatedAt).toBeGreaterThan(100)
   })
 })

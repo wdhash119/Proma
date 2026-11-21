@@ -99,14 +99,34 @@ function parseRemoteTarget(target: string): GitHubRepository | null {
   return scpLike ? parseGitHubRemote(`git@${scpLike[1]}:${scpLike[2]}`) : null
 }
 
-function mapChecks(rollup: unknown): ChangeRequestCheck[] {
+/**
+ * 把 `statusCheckRollup` 归一化为统一的 check 模型。
+ *
+ * GitHub 混用两种结构：
+ * - CheckRun：带 `status`（QUEUED/IN_PROGRESS/COMPLETED）与 `conclusion`；
+ * - 经典 StatusContext：只带 `state`（PENDING/SUCCESS/FAILURE/ERROR）。
+ * 后者必须映射成相同的 status/conclusion 语义，否则 UI 按 conclusion 判断会错显。
+ */
+export function normalizeStatusCheckRollup(rollup: unknown): ChangeRequestCheck[] {
   if (!Array.isArray(rollup)) return []
   return rollup.map((item) => {
     const check = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+    const name = String(check.name ?? check.context ?? '检查')
+    const status = typeof check.status === 'string' ? check.status : ''
+    if (status) {
+      return {
+        name,
+        status,
+        conclusion: typeof check.conclusion === 'string' ? check.conclusion : '',
+      }
+    }
+    // 经典 StatusContext：state 是终态或进行中态，没有独立的 status/conclusion。
+    const state = typeof check.state === 'string' ? check.state.toUpperCase() : ''
+    const pending = state === '' || state === 'PENDING' || state === 'EXPECTED'
     return {
-      name: String(check.name ?? check.context ?? '检查'),
-      status: String(check.status ?? check.state ?? ''),
-      conclusion: String(check.conclusion ?? ''),
+      name,
+      status: pending ? 'PENDING' : 'COMPLETED',
+      conclusion: pending ? '' : state === 'SUCCESS' ? 'SUCCESS' : state,
     }
   })
 }
@@ -245,7 +265,7 @@ export class ChangeRequestGitHubService {
         baseRefName: typeof parsed.baseRefName === 'string' ? parsed.baseRefName : '',
         reviewDecision: typeof parsed.reviewDecision === 'string' ? parsed.reviewDecision : '',
         mergeable: String(parsed.mergeable ?? 'UNKNOWN').toUpperCase(),
-        checks: mapChecks(parsed.statusCheckRollup),
+        checks: normalizeStatusCheckRollup(parsed.statusCheckRollup),
         fetchedAt: Date.now(),
       },
       url: normalized,

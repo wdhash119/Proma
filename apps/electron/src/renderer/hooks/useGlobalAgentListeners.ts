@@ -58,8 +58,8 @@ import {
   notificationSoundEnabledAtom,
   notificationSoundsAtom,
   sendDesktopNotification,
-  playNotificationSoundForType,
 } from '@/atoms/notifications'
+import { automationsAtom } from '@/atoms/automation-atoms'
 import { appModeAtom } from '@/atoms/app-mode'
 import { tabsAtom, activeTabIdAtom, activeSessionIdAtom, openTab, updateTabTitle } from '@/atoms/tab-atoms'
 import type { AgentStreamState } from '@/atoms/agent-atoms'
@@ -85,11 +85,11 @@ import {
 } from '@/lib/external-agent-run'
 import { upsertAgentSession, mergeFetchedAgentSessions, selectDelegatedSession } from '@/lib/agent-session-list'
 import {
+  decideCompletionNotification,
   getAgentCompletionMarkers,
   getDelegatedCompletionAttention,
   markSessionCompletionUnviewed,
   markSessionCompletionViewed,
-  notifyAgentCompletion,
 } from '@/lib/agent-completion-presence'
 import { detectIsWindows } from '@/lib/platform'
 import { arePathsEqual, getInactiveSessionFileChangePaths, getSessionFileChangeKind, getOwnedSessionWatcherPaths, removeSessionFileChange, upsertSessionFileChange, type SessionFileChange } from '@/lib/session-file-changes'
@@ -1599,31 +1599,8 @@ export function useGlobalAgentListeners(): void {
           store.set(agentSessionsAtom, (prev) => upsertAgentSession(prev, data.session!))
         }
 
-        // 发送桌面通知（仅真正成功完成时播放提示音，错误/中断/异常完成不伪装成完成）
         const completionSession = data.session ?? store.get(agentSessionsAtom)
           .find((session) => session.id === data.sessionId)
-        const enabled = store.get(notificationsEnabledAtom)
-        const soundEnabled = store.get(notificationSoundEnabledAtom)
-        const sounds = store.get(notificationSoundsAtom)
-        const sessionTitle = getSessionTitle(data.sessionId)
-        notifyAgentCompletion({
-          completion: data,
-          session: completionSession,
-          hasStreamError,
-          notify: () => {
-            sendDesktopNotification(
-              'Agent 任务完成',
-              `[${sessionTitle}] 任务已完成`,
-              enabled,
-              {
-                playSound: enabled && soundEnabled,
-                soundType: 'taskComplete',
-                sounds,
-                onNavigate: makeNavigateToSession(data.sessionId, sessionTitle),
-              }
-            )
-          },
-        })
 
         // STREAM_COMPLETE 表示后端已完全结束 — 立即标记 running: false
         // 同时将所有未完成的工具活动标记为已完成，防止 subagent spinner 继续转动
@@ -1716,10 +1693,40 @@ export function useGlobalAgentListeners(): void {
           store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => (
             markSessionCompletionUnviewed(prev, data.sessionId)
           ))
-          // 灵动岛退役后，后台完成提示音由渲染进程直接播放，保持“完成但未被查看”才有声音。
-          if (store.get(notificationsEnabledAtom) && store.get(notificationSoundEnabledAtom)) {
-            void playNotificationSoundForType('taskComplete', store.get(notificationSoundsAtom))
-          }
+        }
+
+        // 单一完成提醒入口：桌面通知与提示音共用一次发送，统一施加成功状态、
+        // 顶层会话与定时任务 notifyPolicy；失败/停止/已查看保持安静。
+        const enabled = store.get(notificationsEnabledAtom)
+        const soundEnabled = store.get(notificationSoundEnabledAtom)
+        const sounds = store.get(notificationSoundsAtom)
+        const sourceAutomationId = completionSession?.sourceAutomationId
+        const automation = sourceAutomationId
+          ? store.get(automationsAtom).find((item) => item.id === sourceAutomationId)
+          : undefined
+        const notificationDecision = decideCompletionNotification({
+          completion: data,
+          session: completionSession,
+          hasStreamError,
+          backgroundTasksPending,
+          unviewed: completionMarkers.markUnviewedCompleted,
+          notificationsEnabled: enabled,
+          soundEnabled,
+          notifyPolicy: automation?.notifyPolicy,
+        })
+        if (notificationDecision.notify) {
+          const sessionTitle = getSessionTitle(data.sessionId)
+          sendDesktopNotification(
+            'Agent 任务完成',
+            `[${sessionTitle}] 任务已完成`,
+            enabled,
+            {
+              playSound: notificationDecision.sound,
+              soundType: 'taskComplete',
+              sounds,
+              onNavigate: makeNavigateToSession(data.sessionId, sessionTitle),
+            }
+          )
         }
 
         // 对齐本次会话的主动打断状态，无需借助全量列表刷新重建整个 Set。

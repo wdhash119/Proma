@@ -18,11 +18,23 @@ import type { ComputerUseInstallation, CuaUpdateStatus } from '@proma/shared'
 import { cuaAssetLabel, CuaCdnCheckSchedule, fetchCuaCdnManifest } from './computer-use-cdn-update'
 import type { CuaCdnFetcher, CuaCdnManifest } from './computer-use-cdn-update'
 import { getComputerUseInstallationStatus } from './computer-use-installation'
+import { parseCuaDriverVersion } from './computer-use-version'
 import { writeTextFileAtomic } from './safe-file'
 import { isNewerVersion } from './updater/version'
 
-/** 本地版本输出格式：`cua-driver 0.3.1`。 */
-const INSTALLED_VERSION_PATTERN = /^cua-driver\s+([^\s]+)$/i
+/**
+ * 清单协议错误（版本不可解析、版本降级）。
+ *
+ * 这类失败说明 CDN 返回的内容本身有问题，不能被当作网络抖动退回缓存结论，
+ * 否则用户会在清单已损坏时仍看到「已是最新」。
+ */
+export class CuaUpdateProtocolError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CuaUpdateProtocolError'
+  }
+}
+
 /** setTimeout 能接受的最大延迟（约 24.8 天）。 */
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 /** 调度时间落在过去时的重试间隔，避免忙等。 */
@@ -52,6 +64,8 @@ export class CuaUpdateCheckRunner {
   private readonly deps: CuaUpdateCheckRunnerDependencies
   private latest: string | undefined
   private failed = false
+  /** 最近一次检查是否因清单协议问题失败；在成功检查前不允许回退到缓存的版本结论。 */
+  private protocolFailed = false
 
   constructor(deps: CuaUpdateCheckRunnerDependencies) {
     this.deps = deps
@@ -73,10 +87,14 @@ export class CuaUpdateCheckRunner {
     const installation = await this.deps.installation()
     if (installation.status !== 'installed' || !installation.version) return { status: 'unknown' }
 
-    const currentVersion = INSTALLED_VERSION_PATTERN.exec(installation.version)?.[1]
-    if (!currentVersion || !valid(currentVersion)) return { status: 'error' }
+    const currentVersion = parseCuaDriverVersion(installation.version)
+    if (!currentVersion) return { status: 'error' }
 
     if (!this.latest) return { status: this.failed ? 'error' : 'unknown', currentVersion }
+    if (this.protocolFailed) {
+      // 清单协议错误不能被缓存的上一次结论掩盖；等下一次成功检查再恢复。
+      return { status: 'error', currentVersion, latestVersion: this.latest }
+    }
     return {
       status: isNewerVersion(this.latest, currentVersion) ? 'available' : 'current',
       currentVersion,
@@ -110,11 +128,13 @@ export class CuaUpdateCheckRunner {
 
     if (!valid(manifest.version)) {
       this.failed = true
-      throw new Error('Cua CDN 版本无法解析')
+      this.protocolFailed = true
+      throw new CuaUpdateProtocolError('Cua CDN 版本无法解析')
     }
     if (this.latest && isNewerVersion(this.latest, manifest.version)) {
       this.failed = true
-      throw new Error('Cua CDN 清单出现降级')
+      this.protocolFailed = true
+      throw new CuaUpdateProtocolError('Cua CDN 清单出现降级')
     }
 
     let persisted = true
@@ -130,6 +150,7 @@ export class CuaUpdateCheckRunner {
 
     this.latest = manifest.version
     this.failed = !persisted
+    this.protocolFailed = false
     return this.status()
   }
 }
@@ -148,15 +169,35 @@ export async function getCuaUpdateStatus(): Promise<CuaUpdateStatus> {
   return activeRunner ? activeRunner.status() : { status: 'unknown' }
 }
 
+/** 只需要读取结论的来源；测试可注入最小实现。 */
+export interface CuaUpdateStatusSource {
+  status: () => Promise<CuaUpdateStatus>
+}
+
+/**
+ * 一次检查失败后的结论。
+ *
+ * - 协议错误（版本无法解析、清单降级）：直接返回 error，绝不能退回上一次的
+ *   current/available，否则会把损坏的清单伪装成正常结果；
+ * - 网络错误：沿用缓存结论（runner 内部已有 last-known-good），连缓存都读不到时兜底 error。
+ */
+export async function statusAfterCuaCheckFailure(
+  source: CuaUpdateStatusSource,
+  error: unknown,
+): Promise<CuaUpdateStatus> {
+  if (error instanceof CuaUpdateProtocolError) return { status: 'error' }
+  return source.status().catch(() => ({ status: 'error' }))
+}
+
 /** 触发一次检查，并把结论通知给 renderer。 */
 export async function refreshCuaUpdateStatus(): Promise<CuaUpdateStatus> {
   if (!activeRunner) return { status: 'unknown' }
   if (pendingCheck) return pendingCheck
 
   const runner = activeRunner
-  const task = runner.check().catch(async (): Promise<CuaUpdateStatus> => {
-    return runner.status().catch(() => ({ status: 'error' }))
-  })
+  const task = runner.check().catch((error: unknown): Promise<CuaUpdateStatus> => (
+    statusAfterCuaCheckFailure(runner, error)
+  ))
   pendingCheck = task
   try {
     const status = await task

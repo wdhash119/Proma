@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ChangeRequestGitHubService, parseGitHubRemote } from './github-change-request-service'
+import { ChangeRequestGitHubService, normalizeStatusCheckRollup, parseGitHubRemote } from './github-change-request-service'
 
 const dirs: string[] = []
 
@@ -41,7 +41,55 @@ describe('remote 解析', () => {
   })
 })
 
+describe('检查状态归一化', () => {
+  test('Given CheckRun 与经典 StatusContext 混排 When 归一化 Then 两种结构映射到同一语义', () => {
+    expect(normalizeStatusCheckRollup([
+      { name: 'build', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { context: 'ci', state: 'FAILURE' },
+      { context: 'deploy', state: 'SUCCESS' },
+      { context: 'scan', state: 'PENDING' },
+      { context: 'unknown', state: 'ERROR' },
+    ])).toEqual([
+      { name: 'build', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE' },
+      { name: 'deploy', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'scan', status: 'PENDING', conclusion: '' },
+      { name: 'unknown', status: 'COMPLETED', conclusion: 'ERROR' },
+    ])
+  })
+
+  test('Given 非数组或空项 When 归一化 Then 返回空 / 兜底名称', () => {
+    expect(normalizeStatusCheckRollup(undefined)).toEqual([])
+    expect(normalizeStatusCheckRollup([null])).toEqual([{ name: '检查', status: 'PENDING', conclusion: '' }])
+  })
+})
+
 describe('gh 调用封装', () => {
+  test('Given 经典 StatusContext 的 PR When viewUrl Then 失败与成功都写入 conclusion', async () => {
+    const service = new ChangeRequestGitHubService(async () => JSON.stringify({
+      number: 13,
+      url: 'https://github.com/a/b/pull/13',
+      title: '经典 CI',
+      state: 'OPEN',
+      isDraft: false,
+      headRefName: 'fix/ci',
+      baseRefName: 'main',
+      reviewDecision: '',
+      mergeable: 'MERGEABLE',
+      statusCheckRollup: [
+        { context: 'ci', state: 'FAILURE' },
+        { context: 'deploy', state: 'SUCCESS' },
+      ],
+    }))
+
+    const view = await service.viewUrl('/tmp', 'https://github.com/a/b/pull/13')
+
+    expect(view.snapshot.checks).toEqual([
+      { name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE' },
+      { name: 'deploy', status: 'COMPLETED', conclusion: 'SUCCESS' },
+    ])
+  })
+
   test('Given 合法 PR When viewUrl Then 映射状态、检查与合并性', async () => {
     const calls: string[][] = []
     const service = new ChangeRequestGitHubService(async (program, args) => {

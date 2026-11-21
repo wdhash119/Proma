@@ -155,6 +155,20 @@ export interface Automation extends AutomationActiveWindow {
   runHistory: AutomationRun[]
 }
 
+/**
+ * 结果提醒策略：成功结果默认也会通知，用户可以把单个任务设为「仅失败提醒」或「完全安静」。
+ *
+ * 主进程外部通知与渲染端桌面通知/提示音共用同一判定，避免两边规则漂移。
+ */
+export function shouldNotifyByPolicy(
+  policy: AutomationResultNotifyPolicy | undefined,
+  status: AutomationRun['status'],
+): boolean {
+  if (policy === 'never') return false
+  if (policy === 'failures-only') return status === 'error'
+  return true
+}
+
 /** 运行历史最大保留条数（防止 json 无限膨胀） */
 export const AUTOMATION_MAX_HISTORY = 20
 

@@ -13,6 +13,7 @@ import type {
   ComputerUsePlatform,
 } from '@proma/shared'
 import { ComputerUseDriverError, computerUseDriverPath } from './computer-use-driver'
+import { parseCuaDriverVersion } from './computer-use-version'
 
 /** 平台归类，便于 UI 直接展示文案。 */
 export type ComputerUseInstallationPlatform = ComputerUsePlatform
@@ -29,8 +30,6 @@ export type ComputerUseInstallationStatus = ComputerUseInstallationState
 /** 检测结果：与 shared 层的 ComputerUseInstallation 完全一致，可直接过 IPC。 */
 export type ComputerUseInstallationResult = ComputerUseInstallation
 
-/** 版本输出格式：`cua-driver 0.1.2 ...`。 */
-const DRIVER_VERSION_PATTERN = /^cua-driver\s+\d+\.\d+\.\d+[^\r\n]*$/i
 /** 版本字符串上限，防止异常输出进入 UI。 */
 const DRIVER_VERSION_MAX_LENGTH = 120
 
@@ -69,7 +68,7 @@ export async function detectComputerUseInstallation(
 
   try {
     const version = (await dependencies.readVersion(driverPath)).trim()
-    if (version.length > DRIVER_VERSION_MAX_LENGTH || !DRIVER_VERSION_PATTERN.test(version)) {
+    if (version.length > DRIVER_VERSION_MAX_LENGTH || parseCuaDriverVersion(version) === null) {
       return { platform, status: 'needs_attention', driverPath }
     }
     return { platform, status: 'installed', driverPath, version }

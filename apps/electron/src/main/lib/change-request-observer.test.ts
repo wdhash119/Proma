@@ -8,7 +8,9 @@ import {
   isShellToolName,
   ownChangeRequestUrlFromOutput,
   PendingCommandTracker,
+  pullRequestToolUses,
   pushedBranchesFromOutput,
+  referencedChangeRequestUrl,
   textOfToolResult,
 } from './change-request-observer'
 
@@ -105,6 +107,46 @@ describe('从 gh pr create 输出取链接', () => {
 
   test('Given 超大输出 When 解析 Then 直接跳过', () => {
     expect(ownChangeRequestUrlFromOutput('x'.repeat(600 * 1024))).toBeNull()
+  })
+})
+
+describe('引用命令的完整观察链路', () => {
+  test('Given gh pr view 的 tool_use 与带链接的 tool_result When 走完整链路 Then 得到 referenced 链接', () => {
+    const content = [
+      { type: 'tool_use', name: 'Bash', id: 'tool-view', input: { command: 'gh pr view 7' } },
+    ]
+    const uses = pullRequestToolUses(content)
+    expect(uses).toEqual([{ id: 'tool-view', command: 'gh pr view 7' }])
+
+    const tracker = new PendingCommandTracker()
+    for (const use of uses) tracker.remember(use.id, use.command)
+    const command = tracker.take('tool-view')
+
+    expect(command).toBe('gh pr view 7')
+    expect(referencedChangeRequestUrl(command!, 'https://github.com/acme/app/pull/7\n'))
+      .toBe('https://github.com/acme/app/pull/7')
+  })
+
+  test('Given gh pr edit/checkout 的 tool_use When 收集 Then 同样登记', () => {
+    const uses = pullRequestToolUses([
+      { type: 'tool_use', name: 'Bash', id: 'a', input: { command: 'gh pr edit 3 --add-label bug' } },
+      { type: 'tool_use', name: 'Bash', id: 'b', input: { command: 'gh pr checkout 4' } },
+      { type: 'tool_use', name: 'Read', id: 'c', input: { command: 'gh pr view 5' } },
+      { type: 'text', text: 'gh pr view 6' },
+    ])
+
+    expect(uses.map((use) => use.id)).toEqual(['a', 'b'])
+  })
+
+  test('Given 引用命令 When 取链接 Then 优先输出独立链接，其次命令参数，不扫描正文段落', () => {
+    expect(referencedChangeRequestUrl('gh pr view --json url', '{"url":"https://github.com/o/r/pull/9"}'))
+      .toBe('https://github.com/o/r/pull/9')
+    expect(referencedChangeRequestUrl('gh pr view https://github.com/o/r/pull/11', 'Switched to branch feat'))
+      .toBe('https://github.com/o/r/pull/11')
+    expect(referencedChangeRequestUrl(
+      'gh pr view 12',
+      '标题里提到 https://github.com/o/r/pull/99 但这不是当前 PR',
+    )).toBeNull()
   })
 })
 

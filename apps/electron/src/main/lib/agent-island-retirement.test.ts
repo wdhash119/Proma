@@ -65,10 +65,12 @@ describe('Agent 灵动岛退役', () => {
     expect(builder).toContain('eventkit/macos-eventkit.node')
   })
 
-  test('Given 后台完成 When 检查 Then 提示音改由渲染进程播放', () => {
+  test('Given 后台完成 When 检查 Then 提示音改由渲染进程的单一提醒入口统一门控', () => {
     const listeners = readRepoFile('apps/electron/src/renderer/hooks/useGlobalAgentListeners.ts')
 
-    expect(listeners).toContain("playNotificationSoundForType('taskComplete'")
-    expect(listeners).toContain('store.get(notificationsEnabledAtom) && store.get(notificationSoundEnabledAtom)')
+    // 声音不再绕过成功状态/策略单独播放，而是与桌面通知共用同一份决策。
+    expect(listeners).toContain('decideCompletionNotification(')
+    expect(listeners).toContain('playSound: notificationDecision.sound')
+    expect(listeners).not.toContain('playNotificationSoundForType')
   })
 })

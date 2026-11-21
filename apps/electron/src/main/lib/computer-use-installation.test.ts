@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { CuaUpdateCheckRunner } from './computer-use-cdn-runtime'
 import { ComputerUseDriverError } from './computer-use-driver'
 import { detectComputerUseInstallation } from './computer-use-installation'
 
@@ -63,6 +64,30 @@ describe('安装状态检测', () => {
     })
 
     expect(result.status).toBe('needs_attention')
+  })
+
+  test('Given 安装检测识别了带 build 的版本 When 更新检查读取同一输出 Then 结论为 current 而非 error', async () => {
+    const installation = await detectComputerUseInstallation({
+      platform: 'darwin',
+      resolvePath: () => '/Users/devix/.local/bin/cua-driver',
+      readVersion: async () => 'cua-driver 0.3.1 (build 9f2c)\n',
+    })
+    expect(installation.status).toBe('installed')
+
+    const runner = new CuaUpdateCheckRunner({
+      installation: async () => installation,
+      manifest: async () => ({ schemaVersion: 1, version: '0.3.1', assets: [] }),
+      saveLatest: () => undefined,
+      latest: '0.3.1',
+      platform: 'darwin',
+      arch: 'arm64',
+    })
+
+    expect(await runner.status()).toEqual({
+      status: 'current',
+      currentVersion: '0.3.1',
+      latestVersion: '0.3.1',
+    })
   })
 
   test('Given 路径解析抛出非 driver_not_found 错误 When 检测 Then 继续向上抛出', async () => {

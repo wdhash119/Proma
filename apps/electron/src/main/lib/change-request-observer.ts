@@ -55,6 +55,64 @@ export function isPushCommand(command: string | null): boolean {
   return /\bgit(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*\s+push\b/.test(flattenCommand(command))
 }
 
+export interface PullRequestToolUse {
+  id: string
+  command: string
+}
+
+/**
+ * 从 assistant 的一条消息内容里挑出需要等待结果的 PR 相关命令。
+ *
+ * 创建、推送与引用（view/edit/checkout）都要登记：引用命令的 tool_result
+ * 里才带着它真正读取的 PR 链接，不登记就永远拿不到对应结果。
+ */
+export function pullRequestToolUses(content: unknown): PullRequestToolUse[] {
+  if (!Array.isArray(content)) return []
+  const uses: PullRequestToolUse[] = []
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue
+    const typed = block as { type?: string; name?: string; id?: string; input?: unknown }
+    if (typed.type !== 'tool_use') continue
+    const name = typeof typed.name === 'string' ? typed.name : ''
+    if (!isShellToolName(name)) continue
+    const command = commandFromToolInput(typed.input)
+    if (!command || typeof typed.id !== 'string') continue
+    if (
+      isPullRequestCreateCommand(command)
+      || isPushCommand(command)
+      || isPullRequestReferenceCommand(command)
+    ) {
+      uses.push({ id: typed.id, command })
+    }
+  }
+  return uses
+}
+
+/**
+ * 引用类命令对应的 PR 链接。
+ *
+ * 优先取输出里独立成行的链接与 `url:`/JSON 字段；输出没有时再回退到命令行参数里
+ * 直接给出的链接。刻意不扫描正文段落，避免把描述里的无关 PR 绑进会话。
+ */
+export function referencedChangeRequestUrl(command: string, output: string): string | null {
+  const own = ownChangeRequestUrlFromOutput(output)
+  if (own) return own
+  for (const line of output.split(/\r?\n/)) {
+    const normalized = normalizeChangeRequestUrl(line.trim())
+    if (normalized) return normalized
+  }
+  for (const candidate of extractUrlsFromCommand(command)) {
+    const normalized = normalizeChangeRequestUrl(candidate)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+/** 从命令文本里取第一个 PR 链接（`gh pr view <url>` 这类写法）。 */
+function extractUrlsFromCommand(command: string): string[] {
+  return command.match(/https?:\/\/[^\s"'<>`)\]]+/gi) ?? []
+}
+
 /** 从 `gh pr create` 输出里取它自己创建的链接（优先 `url:` 行与 JSON 字段）。 */
 export function ownChangeRequestUrlFromOutput(text: string): string | null {
   if (!text || text.length > MAX_OUTPUT_LENGTH) return null

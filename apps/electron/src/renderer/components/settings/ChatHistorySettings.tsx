@@ -160,7 +160,7 @@ export function ChatHistorySettings(): React.ReactElement {
     <div className="space-y-6">
       <SettingsSection
         title="历史 Chat"
-        description="Chat 模式已退役，所有对话统一在 Agent 中进行。历史对话可以搜索、筛选归档状态，或逐条交给 Agent 继续。"
+        description="历史对话可以搜索、筛选归档状态，或逐条交给 Agent 继续。"
       >
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[220px] flex-1">

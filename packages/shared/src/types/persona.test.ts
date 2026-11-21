@@ -65,11 +65,37 @@ describe('人设配置归一化', () => {
     expect(config.defaultPersonaId).toBe(BUILTIN_DEFAULT_PERSONA_ID)
   })
 
+  test('Given 默认助手种子 When 检查 Then 正文为空且描述指向问答基线', () => {
+    const builtin = BUILTIN_PERSONAS.find((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID)
+    expect(builtin?.body).toBe('')
+    expect(builtin?.primerTurns).toBeUndefined()
+    expect(builtin?.description).toContain('侧栏问答使用内置基线')
+  })
+
   test('Given 文件中残留旧内置内容 When 归一化 Then 内置内容始终与源码同步', () => {
-    const staleBuiltin = { ...BUILTIN_PERSONAS[0]!, body: '旧版内容' }
+    const staleBuiltin = { ...BUILTIN_PERSONAS[0]!, body: '旧版基线正文' }
     const config = normalizePersonaConfig({ personas: [staleBuiltin] })
     const builtin = config.personas.find((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID)
     expect(builtin?.body).toBe(BUILTIN_PERSONAS[0]!.body)
+    expect(config.personas.filter((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID).length).toBe(1)
+  })
+
+  test('Given raw 中持久化的旧内置正文 When 归一化 Then 丢弃旧正文，默认助手正文为空', () => {
+    const config = normalizePersonaConfig({
+      personas: [
+        {
+          id: BUILTIN_DEFAULT_PERSONA_ID,
+          name: 'Proma 默认助手',
+          description: '旧描述',
+          body: '你首先是某个大模型，这我们当然知道……',
+          builtin: true,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+    })
+    const builtin = config.personas.find((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID)
+    expect(builtin?.body).toBe('')
     expect(config.personas.filter((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID).length).toBe(1)
   })
 

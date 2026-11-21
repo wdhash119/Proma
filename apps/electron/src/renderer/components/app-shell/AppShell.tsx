@@ -64,7 +64,8 @@ function getRightPanelMinWidth(isTodoTab: boolean, isExpandedWorkspace: boolean)
       : MIN_RIGHT_PANEL_WIDTH
 }
 
-const MIN_LEFT_SIDEBAR_WIDTH = 240
+// 260px 是「新建任务」文字单行完整显示的下限（含搜索、折叠按钮的内联操作行）。
+const MIN_LEFT_SIDEBAR_WIDTH = 260
 const MAX_LEFT_SIDEBAR_WIDTH = 420
 
 function clampLeftSidebarWidth(width: number): number {

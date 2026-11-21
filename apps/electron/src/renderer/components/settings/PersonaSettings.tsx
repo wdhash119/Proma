@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { SettingsSection, SettingsCard } from './primitives'
 import { personaConfigAtom, defaultPersonaIdAtom } from '@/atoms/persona-atoms'
 import { usePersonaConfig } from '@/hooks/usePersonaConfig'
-import { MAX_PRIMER_TURNS } from '@proma/shared'
+import { BUILTIN_DEFAULT_PERSONA_ID, MAX_PRIMER_TURNS } from '@proma/shared'
 import type { Persona, PersonaPrimerTurn, PersonaUpdateInput } from '@proma/shared'
 
 /** 防抖保存延迟 (ms) */
@@ -193,6 +193,8 @@ export function PersonaSettings(): React.ReactElement {
   }
 
   const isReadonly = selectedPersona?.builtin === true
+  /** 默认助手不存正文：编辑区换成只读说明，避免误以为人设里有一段提示词。 */
+  const isBaselinePersona = selectedPersona?.id === BUILTIN_DEFAULT_PERSONA_ID
 
   const updatePrimer = (next: PersonaPrimerTurn[]): void => {
     setEditPrimer(next)
@@ -248,7 +250,7 @@ export function PersonaSettings(): React.ReactElement {
                     <span className="text-xs text-muted-foreground shrink-0">内置 · 只读</span>
                   )}
                   <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                    约 {estimateTokens(editBody)} tokens
+                    {isBaselinePersona ? '问答基线' : `约 ${estimateTokens(editBody)} tokens`}
                   </span>
                 </div>
 
@@ -283,95 +285,104 @@ export function PersonaSettings(): React.ReactElement {
 
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1.5 block">人设正文（Markdown）</label>
-                  <Textarea
-                    value={editBody}
-                    onChange={(e) => {
-                      setEditBody(e.target.value)
-                      scheduleSave({ body: e.target.value })
-                    }}
-                    readOnly={isReadonly}
-                    className={cn(
-                      'min-h-[280px] resize-y font-mono text-xs leading-relaxed',
-                      isReadonly && 'opacity-60 cursor-not-allowed'
-                    )}
-                    placeholder="定义角色、语气与协作风格，例如：你是一名严谨的工程协作者……"
-                  />
-                </div>
-
-                {/* 示范对话编辑器 */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm font-medium text-foreground">
-                      示范对话（可选，≤{MAX_PRIMER_TURNS} 轮）
-                    </label>
-                    {!isReadonly && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={editPrimer.length >= MAX_PRIMER_TURNS}
-                        onClick={() => updatePrimer([...editPrimer, { role: 'user', content: '' }, { role: 'assistant', content: '' }])}
-                      >
-                        <Plus className="size-3.5 mr-1" />
-                        添加一对
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    注入在系统提示词之后、真实历史之前的静态示范轮，让模型提前看到期望的应答风格；留空的轮次会被忽略。
-                  </p>
-                  {editPrimer.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                      暂无示范对话
+                  {isBaselinePersona ? (
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
+                      <p>默认人设不注入额外提示词：Agent 使用产品系统提示词，侧栏问答使用内置基线。此人设没有可编辑的正文与示范对话。</p>
+                      <p className="mt-2">如需自定义风格，请新建人设后在会话中选择使用。</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {editPrimer.map((turn, index) => (
-                        <div key={index} className="flex items-start gap-2">
-                          <Select
-                            value={turn.role}
-                            disabled={isReadonly}
-                            onValueChange={(value) => {
-                              const next = [...editPrimer]
-                              next[index] = { ...turn, role: value as PersonaPrimerTurn['role'] }
-                              updatePrimer(next)
-                            }}
-                          >
-                            <SelectTrigger className="w-28 h-8 text-xs shrink-0">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="user">用户</SelectItem>
-                              <SelectItem value="assistant">助手</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Textarea
-                            value={turn.content}
-                            readOnly={isReadonly}
-                            onChange={(e) => {
-                              const next = [...editPrimer]
-                              next[index] = { ...turn, content: e.target.value }
-                              updatePrimer(next)
-                            }}
-                            className={cn('min-h-16 resize-y text-xs', isReadonly && 'opacity-60 cursor-not-allowed')}
-                            placeholder={turn.role === 'user' ? '示范用户输入' : '示范助手应答'}
-                          />
-                          {!isReadonly && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                              onClick={() => updatePrimer(editPrimer.filter((_, i) => i !== index))}
-                              title="删除该轮"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <Textarea
+                      value={editBody}
+                      onChange={(e) => {
+                        setEditBody(e.target.value)
+                        scheduleSave({ body: e.target.value })
+                      }}
+                      readOnly={isReadonly}
+                      className={cn(
+                        'min-h-[280px] resize-y font-mono text-xs leading-relaxed',
+                        isReadonly && 'opacity-60 cursor-not-allowed'
+                      )}
+                      placeholder="定义角色、语气与协作风格，例如：你是一名严谨的工程协作者……"
+                    />
                   )}
                 </div>
+
+                {/* 示范对话编辑器（默认助手没有示范对话，整块隐藏） */}
+                {!isBaselinePersona && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-foreground">
+                        示范对话（可选，≤{MAX_PRIMER_TURNS} 轮）
+                      </label>
+                      {!isReadonly && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={editPrimer.length >= MAX_PRIMER_TURNS}
+                          onClick={() => updatePrimer([...editPrimer, { role: 'user', content: '' }, { role: 'assistant', content: '' }])}
+                        >
+                          <Plus className="size-3.5 mr-1" />
+                          添加一对
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      注入在系统提示词之后、真实历史之前的静态示范轮，让模型提前看到期望的应答风格；留空的轮次会被忽略。
+                    </p>
+                    {editPrimer.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                        暂无示范对话
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {editPrimer.map((turn, index) => (
+                          <div key={index} className="flex items-start gap-2">
+                            <Select
+                              value={turn.role}
+                              disabled={isReadonly}
+                              onValueChange={(value) => {
+                                const next = [...editPrimer]
+                                next[index] = { ...turn, role: value as PersonaPrimerTurn['role'] }
+                                updatePrimer(next)
+                              }}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs shrink-0">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="user">用户</SelectItem>
+                                <SelectItem value="assistant">助手</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Textarea
+                              value={turn.content}
+                              readOnly={isReadonly}
+                              onChange={(e) => {
+                                const next = [...editPrimer]
+                                next[index] = { ...turn, content: e.target.value }
+                                updatePrimer(next)
+                              }}
+                              className={cn('min-h-16 resize-y text-xs', isReadonly && 'opacity-60 cursor-not-allowed')}
+                              placeholder={turn.role === 'user' ? '示范用户输入' : '示范助手应答'}
+                            />
+                            {!isReadonly && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => updatePrimer(editPrimer.filter((_, i) => i !== index))}
+                                title="删除该轮"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 操作行 */}
                 <div className="flex items-center gap-2 pt-1">

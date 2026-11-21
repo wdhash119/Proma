@@ -2,7 +2,7 @@
  * LeftSidebar - 左侧导航栏
  *
  * 包含：
- * - Chat/Agent 模式切换器
+ * - 会话列表与项目入口
  * - 导航菜单项（点击切换主内容区视图）
  * - 置顶对话区域（可展开/收起）
  * - 对话列表（新对话按钮 + 右键菜单 + 按 updatedAt 降序排列）
@@ -3067,7 +3067,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         !noTransition && 'transition-[width] duration-300',
         'bg-[hsl(var(--sidebar-surface))]'
       )}
-      style={{ width: width ?? 300, minWidth: 200, flexShrink: 0 }}
+      style={{ width: width ?? 300, minWidth: 260, flexShrink: 0 }}
     >
       <SidebarWindowDragStrip
         height={isMac ? SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac : SIDEBAR_DRAG_STRIP_HEIGHT.expanded}
@@ -3087,14 +3087,17 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               className="group flex h-9 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 text-[13px] text-[hsl(var(--sidebar-primary-foreground))] transition-[background-color,color,transform] hover:bg-foreground/[0.055] hover:text-[hsl(var(--sidebar-primary-foreground))] active:scale-[0.96] titlebar-no-drag"
             >
               <CirclePlus size={16} className="shrink-0" />
-              <span>新建任务</span>
-              <span className="ml-auto flex shrink-0 items-center opacity-70 group-hover:opacity-100">
-                <ShortcutKeycaps
-                  shortcutId="new-session"
-                  keycapClassName="h-5 min-w-5 px-1 text-[11px]"
-                  separatorClassName="text-[10px]"
-                />
-              </span>
+              <span className="whitespace-nowrap">新建任务</span>
+              {/* 内联键帽只在宽度足够时显示，窄侧栏优先保证文字单行完整。 */}
+              {(width ?? 300) >= 280 && (
+                <span className="ml-auto flex shrink-0 items-center opacity-70 group-hover:opacity-100">
+                  <ShortcutKeycaps
+                    shortcutId="new-session"
+                    keycapClassName="h-5 min-w-5 px-1 text-[11px]"
+                    separatorClassName="text-[10px]"
+                  />
+                </span>
+              )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">

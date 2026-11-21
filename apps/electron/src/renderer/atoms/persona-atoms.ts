@@ -8,7 +8,7 @@
 
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
-import { BUILTIN_DEFAULT_PERSONA_ID, normalizePersonaConfig } from '@proma/shared'
+import { BUILTIN_DEFAULT_PERSONA_ID, QA_BASELINE_SYSTEM_PROMPT, normalizePersonaConfig } from '@proma/shared'
 import type { PersonaConfig, Persona } from '@proma/shared'
 
 /** 完整人设配置（从主进程加载；初始值为内置种子） */
@@ -33,12 +33,19 @@ export const defaultPersonaIdAtom = atom<string>(
 /** 每个问答会话选中的人设 ID（分屏时独立） */
 export const conversationPersonaIdAtom = atom<Map<string, string>>(new Map())
 
-/** 根据 personaId 解析问答 systemMessage（纯函数；空正文返回 undefined） */
+/**
+ * 根据 personaId 解析问答 systemMessage（纯函数）。
+ *
+ * 默认助手人设正文为空，问答回到内置基线（QA_BASELINE_SYSTEM_PROMPT）；
+ * 其他人设用自身正文，空正文（含人设不存在）返回 undefined。
+ */
 export function resolvePersonaSystemMessage(
   personaId: string,
   config: PersonaConfig,
 ): string | undefined {
   const persona = config.personas.find((item) => item.id === personaId)
-  const body = persona?.body.trim()
+  if (!persona) return undefined
+  if (persona.id === BUILTIN_DEFAULT_PERSONA_ID) return QA_BASELINE_SYSTEM_PROMPT
+  const body = persona.body.trim()
   return body || undefined
 }

@@ -222,7 +222,7 @@ export async function sendMessage(
         : 'ChatGPT 订阅（Codex OAuth）'
     webContents.send(CHAT_IPC_CHANNELS.STREAM_ERROR, {
       conversationId,
-      error: `Chat 模式暂不支持 ${providerName}，请切换到 Agent 模式使用。`,
+      error: `侧栏问答暂不支持 ${providerName}，请在 Agent 会话中使用。`,
     })
     return false
   }

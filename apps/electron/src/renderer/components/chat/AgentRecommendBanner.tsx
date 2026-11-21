@@ -1,15 +1,15 @@
 /**
- * AgentRecommendBanner — Agent 模式推荐横幅
+ * AgentRecommendBanner — Agent 会话推荐横幅
  *
- * 当 AI 通过 suggest_agent_mode 工具推荐切换到 Agent 模式时，
+ * 当 AI 通过 suggest_agent_mode 工具推荐创建 Agent 会话继续时，
  * 在 ChatInput 上方展示推荐横幅（与 AskUserBanner 同风格同位置）。
- * 用户可点击"切换到 Agent 模式"按钮迁移，或点击 × 关闭。
+ * 用户可点击"交给 Agent 继续"按钮迁移，或点击 × 关闭。
  *
  * 迁移流程：
  * 1. 清除推荐状态（先清再切换，避免 ChatView 副作用）
  * 2. 创建 Agent 会话（绑定默认工作区）
  * 3. 将 Chat 对话历史复制到新 Agent 会话
- * 4. 切换到默认工作区 + Agent 模式
+ * 4. 切换到默认工作区并打开 Agent 会话
  * 5. 在 Agent 输入区显示建议提示（prompt suggestion）
  */
 
@@ -84,7 +84,7 @@ export function AgentRecommendBanner(): React.ReactElement | null {
         }).catch(console.error)
       }
 
-      // 5. 切换模式
+      // 5. 打开 Agent 会话
       store.set(appModeAtom, 'agent')
       store.set(activeViewAtom, 'conversations')
 
@@ -108,12 +108,12 @@ export function AgentRecommendBanner(): React.ReactElement | null {
       })
 
       // 8. 通知用户
-      toast.success('已切换到 Agent 模式', {
+      toast.success('已交给 Agent 继续', {
         description: '对话历史已迁移到新的 Agent 会话',
       })
     } catch (error) {
       console.error('[AgentRecommendBanner] 迁移失败:', error)
-      toast.error('切换到 Agent 模式失败')
+      toast.error('交给 Agent 失败')
     } finally {
       setMigrating(false)
     }
@@ -126,7 +126,7 @@ export function AgentRecommendBanner(): React.ReactElement | null {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">推荐使用 Agent 模式</span>
+            <span className="text-sm font-medium text-foreground">推荐使用 Agent 会话</span>
           </div>
           <button
             type="button"
@@ -154,7 +154,7 @@ export function AgentRecommendBanner(): React.ReactElement | null {
           disabled={migrating}
           className="h-7 px-3 text-xs"
         >
-          {migrating ? '切换中...' : '切换到 Agent 模式'}
+          {migrating ? '迁移中...' : '交给 Agent 继续'}
           {!migrating && <ArrowRight className="size-3 ml-1" />}
         </Button>
       </div>

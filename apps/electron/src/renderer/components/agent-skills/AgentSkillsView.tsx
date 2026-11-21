@@ -517,7 +517,7 @@ export function AgentSkillsView({
         </div>
         <div className="text-[15px] font-medium text-foreground/80">未选择项目</div>
         <div className="max-w-sm text-[13px] text-foreground/50">
-          请先在 Agent 模式下选择或创建一个项目，再来管理它的 Skills 与 MCP。
+          请先选择或创建一个项目，再来管理它的 Skills 与 MCP。
         </div>
       </div>
     )
@@ -914,7 +914,7 @@ function SkillsTab({
   onUpdate,
 }: SkillsTabProps): React.ReactElement {
   if (total === 0) {
-    return <EmptyState icon={<Blocks className="size-8 text-foreground/30" />} title="暂无 Skill" hint="可以在 Agent 模式下让 Proma 帮你联网查找并安装 Skill，或从其他项目导入。" />
+    return <EmptyState icon={<Blocks className="size-8 text-foreground/30" />} title="暂无 Skill" hint="可以让 Proma 帮你联网查找并安装 Skill，或从其他项目导入。" />
   }
   if (customSkills.length === 0 && builtinSkills.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 Skill" hint="试试更换搜索关键词。" />

@@ -1,7 +1,7 @@
 /**
- * Agent 模式推荐工具模块（Chat 模式）
+ * Agent 会话推荐工具模块（侧栏问答）
  *
- * 智能识别适合 Agent 模式的任务，推荐用户切换。
+ * 智能识别适合 Agent 的任务，推荐用户创建 Agent 会话继续。
  * 工具本身不执行切换，只产出推荐数据（reason + suggestedPrompt），
  * 由渲染进程的 AgentRecommendBanner 负责展示和执行迁移。
  */
@@ -13,8 +13,8 @@ import type { ChatToolMeta } from '@proma/shared'
 
 export const AGENT_RECOMMEND_TOOL_META: ChatToolMeta = {
   id: 'agent-mode-recommend',
-  name: 'Agent 模式推荐',
-  description: '智能识别适合 Agent 模式的任务，推荐用户切换',
+  name: 'Agent 会话推荐',
+  description: '智能识别适合 Agent 的任务，推荐用户创建 Agent 会话继续',
   params: [
     { name: 'reason', type: 'string', description: '推荐理由', required: true },
     { name: 'suggestedPrompt', type: 'string', description: '建议的 Agent 初始提示词', required: true },
@@ -24,11 +24,11 @@ export const AGENT_RECOMMEND_TOOL_META: ChatToolMeta = {
   executorType: 'builtin',
   systemPromptAppend: `
 <agent_mode_recommendation>
-你有能力推荐用户切换到 Agent 模式。**请积极主动地识别适合 Agent 模式的任务**，在回复用户之前先调用 suggest_agent_mode 工具。
+你有能力推荐用户创建 Agent 会话继续任务。**请积极主动地识别适合 Agent 的任务**，在回复用户之前先调用 suggest_agent_mode 工具。
 
-## Agent 模式的能力
+## Agent 的能力
 
-Agent 模式拥有以下 Chat 模式不具备的能力：
+Agent 拥有以下侧栏问答不具备的能力：
 - **文件读写**：直接浏览、创建、编辑用户本地文件和项目代码
 - **命令行操作**：执行 shell 命令、运行测试、安装依赖、构建项目
 - **MCP 服务器**：连接数据库、调用外部 API、获取实时数据
@@ -38,7 +38,7 @@ Agent 模式拥有以下 Chat 模式不具备的能力：
 
 ## 推荐判断基准
 
-当用户的任务符合以下**任一**场景时，就应该推荐切换：
+当用户的任务符合以下**任一**场景时，就应该推荐创建 Agent 会话：
 
 1. **研究调研类任务**：产品调研、技术选型、竞品分析、行业报告、市场分析等需要系统化搜集和整理信息的任务
 2. **内容创作与输出**：撰写长文档、报告、方案、教程等需要结构化输出的任务
@@ -63,7 +63,7 @@ Agent 模式拥有以下 Chat 模式不具备的能力：
 
 ## 推荐要求
 
-- **reason 必须具体说明 Agent 模式如何帮助用户更好地实现他们的目标**。结合用户的具体任务描述 Agent 会怎样做。例如："你想做桌面端 AI 产品调研，Agent 模式可以通过 MCP 和 Skills 系统化地搜集各产品信息、自动整理对比分析，并输出结构化的调研报告文档。"
+- **reason 必须具体说明 Agent 如何帮助用户更好地实现他们的目标**。结合用户的具体任务描述 Agent 会怎样做。例如："你想做桌面端 AI 产品调研，Agent 可以通过 MCP 和 Skills 系统化地搜集各产品信息、自动整理对比分析，并输出结构化的调研报告文档。"
 - suggestedPrompt 应概括用户的核心任务需求，作为 Agent 会话的起始提示
 - 每轮对话最多推荐一次，避免反复打扰
 </agent_mode_recommendation>`,

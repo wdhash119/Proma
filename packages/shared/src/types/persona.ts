@@ -2,7 +2,7 @@
  * 人设（Persona）类型与工具
  *
  * 人设是会话级的角色/风格覆盖层：一段 Markdown 正文（body）+ 可选的静态示范对话
- * （primerTurns）。Agent 模式把人设正文注入系统提示词、示范轮注入请求上下文；
+ * （primerTurns）。Agent 把人设正文注入系统提示词、示范轮注入请求上下文；
  * 侧栏「问答」把人设正文作为 systemMessage。
  *
  * 设计参考 pi-app 的人设管理（master-detail 库 + 会话选择器 + Markdown 导入导出），
@@ -78,17 +78,17 @@ export interface PersonaExportResult {
   message?: string
 }
 
-/** 默认助手人设 ID：Q&A 的基线 systemMessage；Agent 已有产品提示词，该人设不额外注入 */
+/** 默认助手人设 ID：Agent 不注入该人设；侧栏问答使用 QA_BASELINE_SYSTEM_PROMPT 作为基线 */
 export const BUILTIN_DEFAULT_PERSONA_ID = 'builtin-default'
 
 /** 示范对话上限 */
 export const MAX_PRIMER_TURNS = 8
 
 /**
- * 默认助手正文：沿用旧版内置系统提示词，保证侧栏问答迁移后行为不变。
- * Agent 模式不注入该人设（产品提示词已覆盖其职责）。
+ * 侧栏问答的内置基线 systemMessage；不是人设内容，不出现在人设编辑器。
+ * 沿用旧版内置系统提示词，保证问答迁移后行为不变。
  */
-const BUILTIN_DEFAULT_BODY = `你首先是某个大模型，这我们当然知道，你现在的任务是作为 Proma AI 助手，来帮助我解决实际问题。 
+export const QA_BASELINE_SYSTEM_PROMPT = `你首先是某个大模型，这我们当然知道，你现在的任务是作为 Proma AI 助手，来帮助我解决实际问题。 
 
 你需要在以下一些方面上保持关注：
 
@@ -176,8 +176,8 @@ export const BUILTIN_PERSONAS: readonly Persona[] = [
   {
     id: BUILTIN_DEFAULT_PERSONA_ID,
     name: 'Proma 默认助手',
-    description: '问答基线人设：渐进引导、主动提问、知识内核提示。Agent 模式不额外注入。',
-    body: BUILTIN_DEFAULT_BODY,
+    description: '默认人设：不注入额外提示词。Agent 使用产品系统提示词，侧栏问答使用内置基线。',
+    body: '',
     builtin: true,
     order: 0,
     createdAt: 0,

@@ -433,9 +433,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         title: 'Agent 是唯一主入口',
         paragraphs: [
           <>Proma 现在只有 <b className="font-medium text-neutral-900">Agent</b> 一个主入口，所有对话都在 Agent 中进行。</>,
-          <>
-            <b className="font-medium text-neutral-900">Chat 模式已退役</b>：历史对话仍然保留，可在「设置 → 历史 Chat」中检索，并逐条交给 Agent 继续。
-          </>,
+          <>历史对话仍然保留，可在「设置 → 历史 Chat」中检索，并逐条交给 Agent 继续。</>,
           <>
             Agent 能自主规划做调研、操作电脑、写代码、PPT 和文档，为你的想法赋形；简单的概念提问也直接在 Agent 里问即可。
           </>,

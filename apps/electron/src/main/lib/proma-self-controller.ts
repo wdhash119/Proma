@@ -633,7 +633,15 @@ export class PromaSelfController {
   async screenshot(sessionId: string, signal?: AbortSignal): Promise<{ mimeType: string; base64: string }> {
     return this.run(sessionId, signal, async (window, operationSignal) => {
       throwIfBrowserOperationAborted(operationSignal)
-      const image = await window.webContents.capturePage()
+      let image: Electron.NativeImage
+      try {
+        image = await window.webContents.capturePage()
+      } catch (error) {
+        // 无显示会话、远程桌面或 GPU 合成不可用时 Chromium 会抛 UnknownVizError 之类的内部错误。
+        // 这里转成可读提示，避免把内部错误名暴露给用户和模型。
+        console.warn('[Proma 自操作] 窗口截图失败:', error)
+        throw new Error('当前环境无法截取 Proma 窗口画面（可能处于无显示或远程会话），请改用 PromaObserve 读取界面结构。')
+      }
       if (image.isEmpty()) throw new Error('Proma 窗口截图为空，请恢复窗口后重试或改用 PromaObserve。')
       const { width, height } = image.getSize()
       if (width <= 0 || height <= 0) throw new Error('Proma 窗口截图尺寸无效，请恢复窗口后重试。')

@@ -3,9 +3,12 @@ import {
   BUILTIN_DEFAULT_PERSONA_ID,
   BUILTIN_PERSONAS,
   MAX_PRIMER_TURNS,
+  QA_BASELINE_SYSTEM_PROMPT,
   buildPersonaPromptSection,
+  buildQaSystemMessage,
   normalizePersonaConfig,
   normalizePrimerTurns,
+  normalizeQaInjection,
   parsePersonaMarkdown,
   resolveSessionPersona,
   sanitizePersonaId,
@@ -123,6 +126,90 @@ describe('Agent 人设注入段', () => {
   test('Given 空正文人设 When 构建注入段 Then 不注入', () => {
     expect(buildPersonaPromptSection(makePersona({ body: '   ' }))).toBeUndefined()
     expect(buildPersonaPromptSection(undefined)).toBeUndefined()
+  })
+})
+
+describe('问答 systemMessage 构建', () => {
+  test('Given 人设不存在 When 构建 Then 返回 undefined', () => {
+    expect(buildQaSystemMessage(undefined)).toBeUndefined()
+  })
+
+  test('Given 默认助手 When 构建 Then 返回内置基线', () => {
+    const config = normalizePersonaConfig(undefined)
+    const builtin = config.personas.find((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID)
+    expect(buildQaSystemMessage(builtin)).toBe(QA_BASELINE_SYSTEM_PROMPT)
+  })
+
+  test('Given append 人设 When 构建 Then 基线后接人设段（含名称正文与契约优先）', () => {
+    const message = buildQaSystemMessage(makePersona({ name: '工程核', body: '证据优先。', qaInjection: 'append' }))
+    expect(message?.startsWith(QA_BASELINE_SYSTEM_PROMPT)).toBe(true)
+    expect(message).toContain('## 人设：工程核')
+    expect(message).toContain('证据优先。')
+    expect(message).toContain('安全契约')
+    expect(message).toBe(`${QA_BASELINE_SYSTEM_PROMPT}\n\n${buildPersonaPromptSection(makePersona({ name: '工程核', body: '证据优先。', qaInjection: 'append' }))}`)
+  })
+
+  test('Given replace 人设 When 构建 Then 仅用正文（不拼接基线）', () => {
+    const message = buildQaSystemMessage(makePersona({ body: '  完整自定义提示词。  ', qaInjection: 'replace' }))
+    expect(message).toBe('完整自定义提示词。')
+    expect(message).not.toContain(QA_BASELINE_SYSTEM_PROMPT)
+  })
+
+  test('Given 空正文 append 人设 When 构建 Then 回落内置基线', () => {
+    expect(buildQaSystemMessage(makePersona({ body: '   ', qaInjection: 'append' }))).toBe(QA_BASELINE_SYSTEM_PROMPT)
+  })
+
+  test('Given 空正文 replace 人设 When 构建 Then 返回 undefined', () => {
+    expect(buildQaSystemMessage(makePersona({ body: '   ', qaInjection: 'replace' }))).toBeUndefined()
+  })
+})
+
+describe('问答注入模式归一化', () => {
+  test('Given 缺失注入模式 When 归一化人设配置 Then 用户人设与内置种子都为 append', () => {
+    const config = normalizePersonaConfig({ personas: [makePersona()] })
+    expect(config.personas.find((p) => p.id === 'custom-1')?.qaInjection).toBe('append')
+    expect(config.personas.find((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID)?.qaInjection).toBe('append')
+    expect(config.personas.find((p) => p.id === 'builtin-engineer')?.qaInjection).toBe('append')
+  })
+
+  test('Given 非法注入模式 When 归一化 Then 回退 append', () => {
+    expect(normalizeQaInjection('bogus')).toBe('append')
+    expect(normalizeQaInjection(undefined)).toBe('append')
+    expect(normalizeQaInjection(42)).toBe('append')
+    expect(normalizeQaInjection(null)).toBe('append')
+  })
+
+  test('Given 显式 replace When 归一化 Then 保留 replace', () => {
+    expect(normalizeQaInjection('replace')).toBe('replace')
+    const config = normalizePersonaConfig({ personas: [makePersona({ qaInjection: 'replace' })] })
+    expect(config.personas.find((p) => p.id === 'custom-1')?.qaInjection).toBe('replace')
+  })
+
+  test('Given 已迁移的存量人设缺字段 When 归一化 Then 回补 replace', () => {
+    const config = normalizePersonaConfig({
+      personas: [makePersona({ id: 'migrated-legacy' })],
+      migratedFromSystemPrompts: true,
+    })
+    expect(config.personas.find((p) => p.id === 'migrated-legacy')?.qaInjection).toBe('replace')
+  })
+
+  test('Given 无迁移标记或非 migrated 前缀 When 归一化 Then 仍为 append（不误判为存量）', () => {
+    const noFlag = normalizePersonaConfig({ personas: [makePersona({ id: 'migrated-legacy' })] })
+    expect(noFlag.personas.find((p) => p.id === 'migrated-legacy')?.qaInjection).toBe('append')
+
+    const normalId = normalizePersonaConfig({
+      personas: [makePersona({ id: 'custom-migrated' })],
+      migratedFromSystemPrompts: true,
+    })
+    expect(normalId.personas.find((p) => p.id === 'custom-migrated')?.qaInjection).toBe('append')
+  })
+
+  test('Given 迁移人设已有显式 append When 归一化 Then 尊重显式值', () => {
+    const config = normalizePersonaConfig({
+      personas: [makePersona({ id: 'migrated-legacy', qaInjection: 'append' })],
+      migratedFromSystemPrompts: true,
+    })
+    expect(config.personas.find((p) => p.id === 'migrated-legacy')?.qaInjection).toBe('append')
   })
 })
 

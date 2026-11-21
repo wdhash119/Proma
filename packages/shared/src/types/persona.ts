@@ -17,6 +17,18 @@ export interface PersonaPrimerTurn {
   content: string
 }
 
+/**
+ * 问答注入模式。
+ *
+ * - append：内置基线 + 人设段（与 Agent 侧一致，人设定义角色与风格）；新建人设默认。
+ * - replace：仅人设正文作为完整 systemMessage（替换基线，正文需自带完整角色与协作约束）；
+ *   从旧系统提示词迁移来的人设默认，保留原作者的整体替换意图。
+ */
+export type PersonaQaInjection = 'append' | 'replace'
+
+/** 问答注入模式的缺省值（新建人设与非法值回退都用它） */
+export const DEFAULT_QA_INJECTION: PersonaQaInjection = 'append'
+
 /** 人设 */
 export interface Persona {
   /** 唯一标识（小写字母数字与 -_，≤64 字符） */
@@ -29,6 +41,8 @@ export interface Persona {
   body: string
   /** 静态示范对话（可选，≤8 轮） */
   primerTurns?: PersonaPrimerTurn[]
+  /** 问答注入模式（缺省按 append 处理；仅侧栏问答使用，不影响 Agent） */
+  qaInjection?: PersonaQaInjection
   /** 是否内置（只读，不可编辑/删除） */
   builtin?: boolean
   /** 排序权重（小在前） */
@@ -55,6 +69,8 @@ export interface PersonaCreateInput {
   description?: string
   body: string
   primerTurns?: PersonaPrimerTurn[]
+  /** 问答注入模式（缺省 append） */
+  qaInjection?: PersonaQaInjection
 }
 
 /** 更新人设输入（内置人设不可更新） */
@@ -63,6 +79,8 @@ export interface PersonaUpdateInput {
   description?: string
   body?: string
   primerTurns?: PersonaPrimerTurn[]
+  /** 问答注入模式（仅接受 'append' / 'replace'） */
+  qaInjection?: PersonaQaInjection
 }
 
 /** Markdown 导入结果 */
@@ -83,6 +101,24 @@ export const BUILTIN_DEFAULT_PERSONA_ID = 'builtin-default'
 
 /** 示范对话上限 */
 export const MAX_PRIMER_TURNS = 8
+
+/**
+ * 规范化问答注入模式。
+ *
+ * 仅 'replace' 与 'append' 是合法值；缺失时按 backfillReplace 决定是否回补 'replace'
+ * （存量迁移人设保留旧的整体替换语义），其余非法值一律回退 append。
+ */
+export function normalizeQaInjection(
+  value: unknown,
+  options: { backfillReplace?: boolean } = {},
+): PersonaQaInjection {
+  if (value === 'replace') return 'replace'
+  if (value === 'append') return 'append'
+  if (value === undefined || value === null) {
+    return options.backfillReplace ? 'replace' : DEFAULT_QA_INJECTION
+  }
+  return DEFAULT_QA_INJECTION
+}
 
 /**
  * 侧栏问答的内置基线 systemMessage；不是人设内容，不出现在人设编辑器。
@@ -241,16 +277,23 @@ export function normalizePrimerTurns(turns: PersonaPrimerTurn[] | undefined): Pe
  * 排序按 order 再按创建时间；defaultPersonaId 失效时回退默认助手。
  */
 export function normalizePersonaConfig(raw: Partial<PersonaConfig> | undefined): PersonaConfig {
+  const migratedFromSystemPrompts = raw?.migratedFromSystemPrompts === true
   const userPersonas = (raw?.personas ?? []).filter((persona) =>
     persona && typeof persona.id === 'string' && !persona.builtin && !BUILTIN_PERSONAS.some((seed) => seed.id === persona.id))
   const personas: Persona[] = [
-    ...BUILTIN_PERSONAS.map((seed) => ({ ...seed })),
+    // 内置种子没有注入模式字段：统一按缺省 append 补齐，保证读取后字段完整
+    ...BUILTIN_PERSONAS.map((seed) => ({ ...seed, qaInjection: DEFAULT_QA_INJECTION })),
     ...userPersonas.map((persona) => ({
       ...persona,
       name: persona.name?.trim() || persona.id,
       description: persona.description ?? '',
       body: persona.body ?? '',
       primerTurns: normalizePrimerTurns(persona.primerTurns),
+      // 存量迁移人设（migrated- 前缀 + 已写入迁移标记）当时整体替换了 systemMessage，
+      // 读取时补 'replace'，不重跑迁移
+      qaInjection: normalizeQaInjection(persona.qaInjection, {
+        backfillReplace: migratedFromSystemPrompts && persona.id.startsWith('migrated-'),
+      }),
       createdAt: persona.createdAt ?? 0,
       updatedAt: persona.updatedAt ?? 0,
     })),
@@ -288,6 +331,23 @@ export function buildPersonaPromptSection(persona: Persona | undefined): string 
 以下人设定义本次会话的角色、语气与协作风格；与工具使用和安全契约冲突时，以后者为准。
 
 ${body}`
+}
+
+/**
+ * 构建侧栏问答的 systemMessage。
+ *
+ * - 人设不存在 → undefined（调用方回到服务端默认）；
+ * - 默认助手 → 问答内置基线；
+ * - append（缺省）→ 基线 + 人设段，空正文回落基线；
+ * - replace → 仅人设正文，空正文返回 undefined。
+ */
+export function buildQaSystemMessage(persona: Persona | undefined): string | undefined {
+  if (!persona) return undefined
+  if (persona.id === BUILTIN_DEFAULT_PERSONA_ID) return QA_BASELINE_SYSTEM_PROMPT
+  const body = persona.body.trim()
+  if (persona.qaInjection === 'replace') return body || undefined
+  const section = buildPersonaPromptSection(persona)
+  return section ? `${QA_BASELINE_SYSTEM_PROMPT}\n\n${section}` : QA_BASELINE_SYSTEM_PROMPT
 }
 
 // ===== Markdown 导入导出（与 pi-app 人设文件格式兼容） =====

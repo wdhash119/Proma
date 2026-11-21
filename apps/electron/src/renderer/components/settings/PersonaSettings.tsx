@@ -4,6 +4,7 @@
  * 参考 pi-app 人设管理的 master-detail 形态：
  * 左侧人设库列表（默认/内置徽章 + token 估算），右侧编辑器（名称/说明/正文/示范对话）。
  * 人设供 Agent 系统提示词注入与侧栏问答 systemMessage 共用；默认人设用于新会话。
+ * 自定义人设可单独选择问答注入方式（append 叠加基线 / replace 整体替换），不影响 Agent。
  * 内置人设只读；自定义人设防抖自动保存；支持 Markdown 导入导出（pi-app 格式兼容）。
  */
 
@@ -25,11 +26,23 @@ import { cn } from '@/lib/utils'
 import { SettingsSection, SettingsCard } from './primitives'
 import { personaConfigAtom, defaultPersonaIdAtom } from '@/atoms/persona-atoms'
 import { usePersonaConfig } from '@/hooks/usePersonaConfig'
-import { BUILTIN_DEFAULT_PERSONA_ID, MAX_PRIMER_TURNS } from '@proma/shared'
-import type { Persona, PersonaPrimerTurn, PersonaUpdateInput } from '@proma/shared'
+import { BUILTIN_DEFAULT_PERSONA_ID, DEFAULT_QA_INJECTION, MAX_PRIMER_TURNS } from '@proma/shared'
+import type { Persona, PersonaPrimerTurn, PersonaQaInjection, PersonaUpdateInput } from '@proma/shared'
 
 /** 防抖保存延迟 (ms) */
 const DEBOUNCE_DELAY = 500
+
+/** 问答注入模式选项文案（顺序即下拉顺序） */
+const QA_INJECTION_OPTIONS: Array<{ value: PersonaQaInjection; label: string }> = [
+  { value: 'append', label: '叠加在内置基线之上' },
+  { value: 'replace', label: '作为完整系统提示词' },
+]
+
+/** 每种注入模式的说明；正文需自带完整约束时才适合 replace */
+const QA_INJECTION_HINTS: Record<PersonaQaInjection, string> = {
+  append: '与 Agent 一致：基线保留，人设定义角色与风格。',
+  replace: '替换内置基线；正文需自带完整角色与协作约束。',
+}
 
 /** 粗估 token 数（中文约 1.6 字符/token，英文约 4 字符/token，取折中） */
 function estimateTokens(text: string): number {
@@ -46,6 +59,8 @@ export function PersonaSettings(): React.ReactElement {
   const [editDescription, setEditDescription] = React.useState('')
   const [editBody, setEditBody] = React.useState('')
   const [editPrimer, setEditPrimer] = React.useState<PersonaPrimerTurn[]>([])
+  /** 问答注入模式（仅侧栏问答生效；内置默认助手不展示该选项） */
+  const [editQaInjection, setEditQaInjection] = React.useState<PersonaQaInjection>(DEFAULT_QA_INJECTION)
   const [hoveredId, setHoveredId] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   /** Proma 默认系统提示词只读预览（仅默认助手选中时加载） */
@@ -69,6 +84,7 @@ export function PersonaSettings(): React.ReactElement {
       setEditDescription(selectedPersona.description)
       setEditBody(selectedPersona.body)
       setEditPrimer(selectedPersona.primerTurns ?? [])
+      setEditQaInjection(selectedPersona.qaInjection ?? DEFAULT_QA_INJECTION)
     }
   }, [selectedPersona])
 
@@ -234,6 +250,12 @@ export function PersonaSettings(): React.ReactElement {
     scheduleSave({ primerTurns: next })
   }
 
+  /** 切换问答注入模式（只改问答侧语义，Agent 侧不读该字段） */
+  const updateQaInjection = (next: PersonaQaInjection): void => {
+    setEditQaInjection(next)
+    scheduleSave({ qaInjection: next })
+  }
+
   return (
     <div className="space-y-6">
       <SettingsSection
@@ -370,6 +392,32 @@ export function PersonaSettings(): React.ReactElement {
                     />
                   )}
                 </div>
+
+                {/* 问答注入模式（内置默认助手不展示：其编辑区已是基线只读预览） */}
+                {!isBaselinePersona && (
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">问答注入方式</label>
+                    <Select
+                      value={editQaInjection}
+                      disabled={isReadonly}
+                      onValueChange={(value) => updateQaInjection(value === 'replace' ? 'replace' : 'append')}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {QA_INJECTION_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                      {QA_INJECTION_HINTS[editQaInjection]}
+                    </p>
+                  </div>
+                )}
 
                 {/* 示范对话编辑器（默认助手没有示范对话，整块隐藏） */}
                 {!isBaselinePersona && (

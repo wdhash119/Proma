@@ -239,7 +239,7 @@ eventBus.use((sessionId, payload, next) => {
     agentQueueCoordinator.onBackgroundTaskComplete(sessionId)
   }
   // 识别 Agent 创建/推送 PR，并把正文引用的 PR 链接自动关联到会话。
-  observeAgentStreamPayload(sessionId, payload as unknown as { kind: string; message?: unknown })
+  observeAgentStreamPayload(sessionId, payload as unknown as { kind: string; message?: unknown; event?: unknown })
   next()
 })
 

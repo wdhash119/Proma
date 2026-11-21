@@ -26,6 +26,7 @@ import {
   trackBinding,
 } from './change-request-store'
 import { ChangeRequestPoller } from './change-request-poller'
+import { isTurnEndEvent, shouldDiscoverAfterTurn, TurnDiscoveryScheduler } from './change-request-turn-discovery'
 import { changeRequestGitHubService, type GitHubRepository } from './github-change-request-service'
 
 const SCOPE_TTL_MS = 60_000
@@ -292,8 +293,16 @@ function textOfToolResult(content: unknown): string {
  */
 export function observeAgentStreamPayload(
   sessionId: string,
-  payload: { kind: string; message?: unknown },
+  payload: { kind: string; message?: unknown; event?: unknown },
 ): void {
+  if (payload.kind === 'proma_event') {
+    // 轮次结束是唯一可靠的「这一轮改完了」信号：刷新状态，再安排一次分支发现。
+    if (isTurnEndEvent(payload.event)) {
+      poller.refresh(sessionId)
+      turnDiscovery.schedule(sessionId)
+    }
+    return
+  }
   if (payload.kind !== 'sdk_message' || !payload.message) return
   const message = payload.message as Record<string, unknown>
   if (message.isReplay === true) return
@@ -327,11 +336,13 @@ export function observeAgentStreamPayload(
   if (!Array.isArray(content)) return
   for (const block of content) {
     if (!block || typeof block !== 'object') continue
-    const typed = block as { type?: string; tool_use_id?: string; content?: unknown }
+    const typed = block as { type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }
     if (typed.type !== 'tool_result' || typeof typed.tool_use_id !== 'string') continue
     const pending = pendingCommands.get(typed.tool_use_id)
     if (!pending) continue
     pendingCommands.delete(typed.tool_use_id)
+    // 失败的命令不会有真实 PR；跳过可避免把报错信息里的链接当成本轮产物。
+    if (typed.is_error === true) continue
     const output = textOfToolResult(typed.content)
     if (isPullRequestCreateCommand(pending.command)) {
       const url = ownChangeRequestUrlFromOutput(output)
@@ -352,6 +363,34 @@ function extractUrls(text: string): string[] {
   return urls
 }
 
+// ===== 轮次结束时的分支发现 =====
+
+function defaultTurnDiscovery(sessionId: string): void {
+  const session = getAgentSessionMeta(sessionId)
+  if (!session) return
+  const hasBindings = listBindings(sessionId).length > 0
+  const cwd = resolveSessionRepositoryCwd(sessionId)
+  const projectRoot = session.workspaceId
+    ? getAgentWorkspace(session.workspaceId)?.projectRootPath ?? null
+    : null
+
+  void changeRequestGitHubService.repositoryRoot(cwd ?? homedir())
+    .then((repositoryRoot) => {
+      if (!shouldDiscoverAfterTurn({ hasBindings, repositoryRoot, projectRoot })) return
+      void discoverSession(sessionId).then(() => syncPoller())
+    })
+    .catch(() => {
+      // 非 Git 仓库或目录不可读：这一轮没有可发现的 PR，静默跳过。
+    })
+}
+
+const turnDiscovery = new TurnDiscoveryScheduler({ run: defaultTurnDiscovery })
+
+/** 安排一次防抖的分支发现；同一会话的新请求会顶掉旧请求。 */
+export function scheduleTurnDiscovery(sessionId: string): void {
+  turnDiscovery.schedule(sessionId)
+}
+
 // ===== 生命周期 =====
 
 /** 应用启动时同步一次绑定，并让轮询器开始工作。 */
@@ -367,6 +406,7 @@ export function initChangeRequestService(): void {
 
 export function disposeChangeRequestService(): void {
   poller.dispose()
+  turnDiscovery.cancelAll()
   scopeCache.clear()
   pendingCommands.clear()
 }

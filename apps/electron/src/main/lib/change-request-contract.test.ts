@@ -45,6 +45,28 @@ describe('变更请求追踪契约', () => {
     expect(store).toContain('migrateLegacyBindings')
   })
 
+  test('Given 轮次结束 When 检查 Then 安排防抖发现并只在项目根或已有绑定时执行', () => {
+    const service = readAppFile('src/main/lib/change-request-service.ts')
+    const pure = readAppFile('src/main/lib/change-request-turn-discovery.ts')
+
+    // 事件入口调用纯判断，再交给调度器。
+    expect(service).toContain('isTurnEndEvent(payload.event)')
+    expect(service).toContain('turnDiscovery.schedule(sessionId)')
+    expect(service).toContain('shouldDiscoverAfterTurn({ hasBindings, repositoryRoot, projectRoot })')
+    // 退出时清掉待触发的发现任务。
+    expect(service).toContain('turnDiscovery.cancelAll()')
+
+    // 纯判断本身的语义：已有绑定优先，否则要求仓库根等于项目根。
+    expect(pure).toContain('if (input.hasBindings) return true')
+    expect(pure).toContain('resolve(input.repositoryRoot) === resolve(input.projectRoot)')
+  })
+
+  test('Given 失败的工具调用 When 检查 Then 不解析其中的 PR 链接', () => {
+    const service = readAppFile('src/main/lib/change-request-service.ts')
+
+    expect(service).toContain('if (typed.is_error === true) continue')
+  })
+
   test('Given PR 状态轮询 When 检查 Then 会话新鲜度不被后台元数据刷新', () => {
     const manager = readAppFile('src/main/lib/agent-session-manager.ts')
 

@@ -20,4 +20,14 @@ describe('侧栏「新建任务」防压缩布局', () => {
     expect(sidebar).toContain('<span className="whitespace-nowrap">新建任务</span>')
     expect(sidebar).toContain('(width ?? 300) >= 280 &&')
   })
+
+  test('Given 非 macOS 侧栏 When 检查 Then 顶部不预留拖拽空白，操作行顶着标题栏', () => {
+    const sidebar = readFileSync(join(appShellDirectory, 'LeftSidebar.tsx'), 'utf8')
+
+    // 旧的平台三元留白已移除，拖拽条与红绿灯避让仅 macOS 渲染
+    expect(sidebar).not.toContain("isMac ? 'h-[30px]' : 'h-1'")
+    expect(sidebar).not.toContain('isMac ? "h-[50px]" : "h-2"')
+    expect(sidebar).toContain('SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac')
+    expect(sidebar).toContain("isMac && 'pt-3'")
+  })
 })

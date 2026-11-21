@@ -406,8 +406,6 @@ function groupByDate<T extends { updatedAt: number }>(items: T[]): Array<{ label
 const SIDEBAR_DRAG_STRIP_HEIGHT = {
   collapsedMac: 50,
   expandedMac: 30,
-  collapsed: 8,
-  expanded: 4,
 } as const
 
 interface QuickSwitchTarget {
@@ -2881,21 +2879,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         )}
         style={{ width: 60, flexShrink: 0 }}
       >
-        <SidebarWindowDragStrip
-          height={
-            isMac
-              ? SIDEBAR_DRAG_STRIP_HEIGHT.collapsedMac
-              : SIDEBAR_DRAG_STRIP_HEIGHT.collapsed
-          }
-        />
-
-        {/* macOS 需要避开左上角红绿灯；边栏覆盖全局标题栏拖拽层，因此留白自身也要可拖拽。 */}
-        <div
-          className={cn(
-            "w-full flex-shrink-0 titlebar-drag-region",
-            isMac ? "h-[50px]" : "h-2",
-          )}
-        />
+        {/* macOS 需要避开左上角红绿灯；其他平台标题栏本身可拖拽，侧栏顶部不再预留空白。 */}
+        {isMac && (
+          <>
+            <SidebarWindowDragStrip height={SIDEBAR_DRAG_STRIP_HEIGHT.collapsedMac} />
+            <div className="w-full flex-shrink-0 titlebar-drag-region h-[50px]" />
+          </>
+        )}
 
         {/* 折叠态将会话放在主路径：控件维持 40px 热区，但把视觉体积收至 32px。 */}
         <div className="flex flex-col items-center gap-0.5">
@@ -3069,15 +3059,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       )}
       style={{ width: width ?? 300, minWidth: 260, flexShrink: 0 }}
     >
-      <SidebarWindowDragStrip
-        height={isMac ? SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac : SIDEBAR_DRAG_STRIP_HEIGHT.expanded}
-      />
+      {/* macOS 需要避开左上角红绿灯；其他平台标题栏本身可拖拽，操作行直接顶着标题栏。 */}
+      {isMac && (
+        <>
+          <SidebarWindowDragStrip height={SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac} />
+          <div className="w-full flex-shrink-0 titlebar-drag-region h-[30px]" />
+        </>
+      )}
 
-      {/* macOS 需要避开左上角红绿灯；边栏覆盖全局标题栏拖拽层，因此留白自身也要可拖拽。 */}
-      <div className={cn('w-full flex-shrink-0 titlebar-drag-region', isMac ? 'h-[30px]' : 'h-1')} />
-
-      {/* 新建任务与搜索、折叠：合并为单行，降低头部高度；容器留白仍可拖拽窗口。 */}
-      <div className="titlebar-drag-region flex items-center gap-1 px-3 pt-3">
+      {/* 新建任务与搜索、折叠：合并为单行，降低头部高度。 */}
+      <div className={cn('titlebar-drag-region flex items-center gap-1 px-3', isMac && 'pt-3')}>
         <Tooltip>
           <TooltipTrigger asChild>
             <button

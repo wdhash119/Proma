@@ -108,6 +108,26 @@ describe('恢复被删除的 worktree', () => {
     expect(existsSync(worktreePath)).toBe(false)
   })
 
+  test('Given 另一个 worktree 目录暂时缺失 When 恢复目标 Then 不注销其登记', async () => {
+    const repo = createRepo()
+    const targetPath = join(repo, '.worktrees', 'feat')
+    const parkedPath = join(repo, '.worktrees', 'parked')
+    git(repo, ['worktree', 'add', '-q', '-b', 'feat', targetPath])
+    git(repo, ['worktree', 'add', '-q', '-b', 'parked', parkedPath])
+    const head = await readWorktreeHeadCommit(targetPath)
+
+    // 模拟外置盘未挂载：两个目录都暂时缺失，但 git 登记仍在。
+    rmSync(targetPath, { recursive: true, force: true })
+    rmSync(parkedPath, { recursive: true, force: true })
+
+    await restoreWorktree({ path: targetPath, branch: 'feat', baseCommit: head, repoPath: repo })
+
+    const registrations = git(repo, ['worktree', 'list', '--porcelain'])
+    // 恢复一个 worktree 不能顺带注销其他「暂时失效但可恢复」的登记。
+    expect(registrations).toContain(parkedPath.replace(/\\/g, '/'))
+    expect(existsSync(parkedPath)).toBe(false)
+  })
+
   test('Given 目录已存在 When 恢复 Then 提示无需恢复', async () => {
     const repo = createRepo()
     const worktreePath = join(repo, '.worktrees', 'alive')

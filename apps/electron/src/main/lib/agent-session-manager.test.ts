@@ -81,9 +81,19 @@ function writeAgentSessionsIndex(sessions: Array<{
   createdAt: number
   updatedAt: number
   agentRuntime?: string
+  agentCwdMode?: 'project' | 'session'
   sdkSessionId?: string
   piSessionFile?: string
   piEntryBindings?: Record<string, string>
+  activeWorktree?: { path: string; mainRepoRoot: string; branch: string; selectedAt: number }
+  checkoutHistory?: Array<{
+    kind: 'worktree' | 'project' | 'workbench'
+    path: string
+    mainRepoRoot?: string
+    branch?: string
+    baseCommit?: string
+    since: number
+  }>
   forkSourceSdkSessionId?: string
   resumeAtMessageUuid?: string
 }>): void {
@@ -222,6 +232,8 @@ describe('Agent 会话 runtime 元数据', () => {
       { id: 'workspace-a', name: '工作区 A', slug: 'workspace-a', createdAt: 1, updatedAt: 1 },
       { id: 'workspace-b', name: '工作区 B', slug: 'workspace-b', createdAt: 1, updatedAt: 1 },
     ])
+    const oldWorktreePath = join(tempHome, 'old-project-worktree')
+    mkdirSync(oldWorktreePath, { recursive: true })
     writeAgentSessionsIndex([{
       id: 'pi-session-to-move',
       title: 'Pi 会话',
@@ -229,19 +241,73 @@ describe('Agent 会话 runtime 元数据', () => {
       createdAt: 1,
       updatedAt: 1,
       agentRuntime: 'pi',
+      agentCwdMode: 'project',
       sdkSessionId: 'pi-session-id',
       piSessionFile: '/tmp/pi-session.jsonl',
       piEntryBindings: { 'assistant-1': 'entry-1' },
+      activeWorktree: { path: oldWorktreePath, mainRepoRoot: oldWorktreePath, branch: 'feat', selectedAt: 1 },
+      checkoutHistory: [{
+        kind: 'worktree',
+        path: oldWorktreePath,
+        mainRepoRoot: oldWorktreePath,
+        branch: 'feat',
+        since: 1,
+      }],
     }])
     mkdirSync(join(tempHome, '.proma', 'agent-workspaces', 'workspace-a', 'pi-session-to-move'), { recursive: true })
 
+    expect(manager.resolveAgentCwd({ slug: 'workspace-a' }, 'pi-session-to-move')).toBe(oldWorktreePath)
     const moved = manager.moveSessionToWorkspace('pi-session-to-move', 'workspace-b')
 
     expect(moved.workspaceId).toBe('workspace-b')
     expect(moved.sdkSessionId).toBeUndefined()
     expect(moved.piSessionFile).toBeUndefined()
     expect(moved.piEntryBindings).toBeUndefined()
+    expect(moved.activeWorktree).toBeUndefined()
+    // 旧 worktree 目录仍在，但迁移后必须从新工作区默认检出重新开始。
+    expect(moved.checkoutHistory).toEqual([{
+      kind: 'project',
+      path: join(tempHome, '.proma', 'agent-workspaces', 'workspace-b', 'workspace-files'),
+      since: 0,
+    }])
+    expect(manager.resolveAgentCwd({ slug: 'workspace-b' }, 'pi-session-to-move'))
+      .toBe(join(tempHome, '.proma', 'agent-workspaces', 'workspace-b', 'workspace-files'))
     expect(existsSync(join(tempHome, '.proma', 'agent-workspaces', 'workspace-b', 'pi-session-to-move'))).toBe(true)
+  })
+
+  test('Given 活动 worktree 目录仍在 When 清除 worktree Then cwd 回到项目默认检出', () => {
+    writeAgentWorkspacesIndex([
+      { id: 'workspace-a', name: '工作区 A', slug: 'workspace-a', createdAt: 1, updatedAt: 1 },
+    ])
+    const oldWorktreePath = join(tempHome, 'clear-project-worktree')
+    mkdirSync(oldWorktreePath, { recursive: true })
+    writeAgentSessionsIndex([{
+      id: 'session-clear-worktree',
+      title: '清除 worktree 会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 1,
+      agentRuntime: 'pi',
+      agentCwdMode: 'project',
+      activeWorktree: { path: oldWorktreePath, mainRepoRoot: oldWorktreePath, branch: 'feat', selectedAt: 1 },
+      checkoutHistory: [{
+        kind: 'worktree',
+        path: oldWorktreePath,
+        mainRepoRoot: oldWorktreePath,
+        branch: 'feat',
+        since: 1,
+      }],
+    }])
+
+    const session = manager.getAgentSessionMeta('session-clear-worktree')!
+    expect(manager.resolveAgentCwd({ slug: 'workspace-a' }, session.id)).toBe(oldWorktreePath)
+
+    const updates = manager.buildWorktreeClearUpdates(session)
+    manager.updateAgentSessionMeta(session.id, updates)
+
+    const projectPath = join(tempHome, '.proma', 'agent-workspaces', 'workspace-a', 'workspace-files')
+    expect(manager.getAgentSessionMeta(session.id)?.activeWorktree).toBeUndefined()
+    expect(manager.resolveAgentCwd({ slug: 'workspace-a' }, session.id)).toBe(projectPath)
   })
 
   test('Given 新安装用户保存关闭思考 When 连续新建会话 Then 不被旧版迁移改回 high', () => {

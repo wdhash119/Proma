@@ -12,8 +12,9 @@
  */
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
-import { getGlobalMemoryFilePath, getWorkspaceMemoryDirectory, PROJECT_INDEX_TARGET } from './memory-service'
+import { getGlobalMemoryFilePath, getWorkspaceMemoryDirectory, MAX_MEMORY_FILE_BYTES, PROJECT_INDEX_TARGET } from './memory-service'
 import { writeTextFileAtomic } from './safe-file'
 
 /** 一次项目能力维护的作用域。 */
@@ -89,21 +90,40 @@ export function hasMemoryAssociation(ctx: ProjectMemoryContext, content: string)
     && content.includes(MEMORY_MAINTENANCE_HEADING.replace(/^##\s*/, ''))
 }
 
-/** 读取文本文件；不存在或非普通文件时返回 undefined。 */
-function readTextFile(path: string, maxBytes = 256 * 1024): string | undefined {
+/**
+ * 读取用于判断是否需要脚手架的文本文件。
+ *
+ * 只有「不存在」或「明确为空」才返回 undefined，允许调用方建立脚手架；
+ * 符号链接、非普通文件、超过 512 KiB 或读取失败一律抛错——绝不能把读不到
+ * 的用户内容当成空文件静默重建。阈值与记忆服务、规则检查保持一致。
+ */
+function readTextFile(path: string): string | undefined {
+  let stats
   try {
-    const stats = lstatSync(path)
-    if (!stats.isFile() || stats.size === 0 || stats.size > maxBytes) return undefined
-    return readFileSync(path, 'utf8')
-  } catch {
-    return undefined
+    stats = lstatSync(path)
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return undefined
+    throw error
   }
+  if (stats.isSymbolicLink()) throw new Error(`拒绝读写符号链接：${path}`)
+  if (!stats.isFile()) throw new Error(`路径不是普通文件，不能安全初始化：${path}`)
+  if (stats.size === 0) return undefined
+  if (stats.size > MAX_MEMORY_FILE_BYTES) {
+    throw new Error(`文件超过 ${MAX_MEMORY_FILE_BYTES / 1024} KiB，不能自动覆盖：${path}`)
+  }
+  return readFileSync(path, 'utf8')
+}
+
+/** 与规则检查一致的内容指纹，用于写入前校验是否被外部修改。 */
+function contentRevision(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex')
 }
 
 /**
  * 确保全局画像与项目索引存在且具备真实脚手架。
  *
- * 返回本次实际创建的文件，供上层判断 `changed`；已存在且非空的文件绝不覆盖。
+ * 返回本次实际创建的文件，供上层判断 `changed`；已存在且非空的文件绝不覆盖，
+ * 符号链接、非普通文件、超大文件或读取失败时直接抛错中止，不做隐式重建。
  */
 export function ensureMemoryFiles(ctx: ProjectMemoryContext): ProjectMemoryPaths & { created: string[] } {
   const paths = getProjectMemoryPaths(ctx)
@@ -147,12 +167,20 @@ function legacyClaudeEntry(projectRoot: string): string | undefined {
  *
  * - 已有 `proma:memory` 块则原位替换（幂等）；
  * - 文件不存在时创建最小 `AGENTS.md`，并在存在旧 `CLAUDE.md` 时保留其入口；
- * - 保留文件其余内容与其中的 `CLAUDE.md` 入口段落。
+ * - 保留文件其余内容与其中的 `CLAUDE.md` 入口段落；
+ * - 传入 `expectedRevision` 时先校验当前内容未被外部修改，避免用旧判断覆盖新编辑。
  */
-export function linkProjectMemory(ctx: ProjectMemoryContext): { path: string; changed: boolean } {
+export function linkProjectMemory(
+  ctx: ProjectMemoryContext,
+  options: { expectedRevision?: string } = {},
+): { path: string; changed: boolean } {
   const existing = findProjectRuleFile(ctx.projectRoot)
   const path = existing?.path ?? join(ctx.projectRoot, 'AGENTS.md')
   const section = memoryAssociationSection(ctx)
+
+  if (existing && options.expectedRevision && contentRevision(existing.content) !== options.expectedRevision) {
+    throw new Error('项目规则在维护期间被外部修改，已停止写入，请重新检查。')
+  }
 
   if (!existing) {
     const legacy = legacyClaudeEntry(ctx.projectRoot)

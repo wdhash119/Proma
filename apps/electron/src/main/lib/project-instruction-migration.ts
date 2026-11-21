@@ -265,12 +265,14 @@ export function resumeProjectInstructions(ctx: ProjectInstructionContext, id: st
  * 退役旧迁移计划，保留用户当前的所有编辑。
  *
  * 只把因迁移而缺失的旧外层文件从快照恢复回来，其余文件保持原样；
- * 之后必须重新 Inspect 并按最新版本再次合并。
+ * 之后必须重新 Inspect 并按最新版本再次合并。已完成或已退役的记录直接返回，
+ * 不能借重规划复活已归档的来源。
  */
 export function replanProjectInstructions(ctx: ProjectInstructionContext, id: string): string {
   assertMigrationAllowed(ctx)
   const journal = readInstructionMigrationJournal(ctx, id)
   if (!journal) throw new Error('未找到该迁移记录，请重新使用 ProjectInstructionsInspect 检查。')
+  if (journal.status === 'completed') return id
   if (journal.status === 'superseded') return id
   assertJournalMatchesContext(ctx, journal)
   for (const source of journal.sources) {

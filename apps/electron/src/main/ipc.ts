@@ -317,6 +317,7 @@ import {
   searchAgentSessionMessages,
   searchAgentSessionReferences,
   resolveAgentCwd,
+  buildWorktreeClearUpdates,
 } from './lib/agent-session-manager'
 import { runAgent, stopAgent, stopAgentAndDrain, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, isAgentSessionBusy, listActiveAgentSessionSnapshots, listQueuedAgentMessages, reserveAgentSessionStart, queueAgentMessage, submitOrEnqueueAgentMessage, enqueueAgentQueuedMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
 import { permissionService } from './lib/agent-permission-service'
@@ -2751,7 +2752,8 @@ export function registerIpcHandlers(): void {
       const session = getAgentSessionMeta(input.sessionId)
       if (!session) throw new Error(`Agent 会话不存在: ${input.sessionId}`)
       if (input.worktreePath === null) {
-        return updateAgentSessionMeta(input.sessionId, { activeWorktree: undefined })
+        // 同时追加默认检出，避免检出历史里的旧 worktree 目录仍在时继续劫持 cwd。
+        return updateAgentSessionMeta(input.sessionId, buildWorktreeClearUpdates(session))
       }
 
       const access = normalizeFileAccessOptions({ sessionId: input.sessionId })

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -12,7 +12,7 @@ import {
   stripMemoryAssociation,
   withMemoryWriteLock,
 } from './project-memory-scaffold'
-import { setMemoryRootsForTesting } from './memory-service'
+import { MAX_MEMORY_FILE_BYTES, setMemoryRootsForTesting } from './memory-service'
 
 let root: string
 let projectRoot: string
@@ -58,6 +58,66 @@ describe('记忆脚手架初始化', () => {
 
     expect(again.created).toEqual([])
     expect(readFileSync(paths.profile, 'utf8')).toContain('用户是教师')
+  })
+})
+
+describe('记忆初始化数据保护', () => {
+  test('Given profile 与 index 是 256–512 KiB 非空文件 When 初始化 Then 保留原内容', () => {
+    const paths = ensureMemoryFiles(ctx())
+    const profileContent = `# 全局用户画像\n\n${'画像事实\n'.repeat(24 * 1024)}`
+    const indexContent = `# 项目记忆索引\n\n${'主题入口\n'.repeat(24 * 1024)}`
+    expect(Buffer.byteLength(profileContent, 'utf8')).toBeGreaterThan(256 * 1024)
+    expect(Buffer.byteLength(profileContent, 'utf8')).toBeLessThanOrEqual(MAX_MEMORY_FILE_BYTES)
+    writeFileSync(paths.profile, profileContent, 'utf8')
+    writeFileSync(paths.index, indexContent, 'utf8')
+
+    const again = ensureMemoryFiles(ctx())
+
+    expect(again.created).toEqual([])
+    expect(readFileSync(paths.profile, 'utf8')).toBe(profileContent)
+    expect(readFileSync(paths.index, 'utf8')).toBe(indexContent)
+  })
+
+  test('Given profile 超过 512 KiB When 初始化 Then 拒绝覆盖并保留原文件', () => {
+    const paths = ensureMemoryFiles(ctx())
+    const content = 'a'.repeat(MAX_MEMORY_FILE_BYTES + 1024)
+    writeFileSync(paths.profile, content, 'utf8')
+
+    expect(() => ensureMemoryFiles(ctx())).toThrow('不能自动覆盖')
+    expect(readFileSync(paths.profile, 'utf8')).toBe(content)
+  })
+
+  test('Given index 是符号链接 When 初始化 Then 拒绝读写链接', () => {
+    const paths = getProjectMemoryPaths(ctx())
+    mkdirSync(join(root, 'global-memory'), { recursive: true })
+    mkdirSync(join(root, 'workspace-memory'), { recursive: true })
+    const real = join(root, 'real-index.md')
+    writeFileSync(real, '# 真实索引\n', 'utf8')
+    symlinkSync(real, paths.index)
+
+    expect(() => ensureMemoryFiles(ctx())).toThrow('符号链接')
+    expect(readFileSync(real, 'utf8')).toBe('# 真实索引\n')
+  })
+
+  test('Given profile 路径是目录 When 初始化 Then 拒绝静默重建', () => {
+    const paths = getProjectMemoryPaths(ctx())
+    mkdirSync(paths.profile, { recursive: true })
+
+    expect(() => ensureMemoryFiles(ctx())).toThrow('不是普通文件')
+  })
+
+  test('Given 记忆文件是明确空文件 When 初始化 Then 仍然生成脚手架', () => {
+    const paths = getProjectMemoryPaths(ctx())
+    mkdirSync(join(root, 'global-memory'), { recursive: true })
+    mkdirSync(join(root, 'workspace-memory'), { recursive: true })
+    writeFileSync(paths.profile, '', 'utf8')
+    writeFileSync(paths.index, '', 'utf8')
+
+    const result = ensureMemoryFiles(ctx())
+
+    expect(result.created).toHaveLength(2)
+    expect(readFileSync(paths.profile, 'utf8')).toContain('全局用户画像')
+    expect(readFileSync(paths.index, 'utf8')).toContain('项目记忆索引')
   })
 })
 
@@ -117,6 +177,43 @@ describe('AGENTS.md 记忆关联', () => {
     expect(result.changed).toBe(true)
     expect(content.split('<!-- proma:memory:start -->')).toHaveLength(2)
     expect(content).toContain('global-memory-2')
+  })
+
+  test('Given AGENTS.md 是 256–512 KiB 非空文件 When 关联 Then 保留正文并追加标记块', () => {
+    const original = `# 项目约定\n\n${'用户规则\n'.repeat(24 * 1024)}`
+    writeFileSync(join(projectRoot, 'AGENTS.md'), original, 'utf8')
+
+    const result = linkProjectMemory(ctx())
+
+    const content = readFileSync(join(projectRoot, 'AGENTS.md'), 'utf8')
+    expect(result.changed).toBe(true)
+    expect(content.startsWith('# 项目约定')).toBe(true)
+    expect(content).toContain('用户规则')
+    expect(content).toContain('<!-- proma:memory:start -->')
+  })
+
+  test('Given AGENTS.md 超过 512 KiB When 关联 Then 拒绝覆盖并保留原文件', () => {
+    const content = 'a'.repeat(MAX_MEMORY_FILE_BYTES + 1024)
+    writeFileSync(join(projectRoot, 'AGENTS.md'), content, 'utf8')
+
+    expect(() => linkProjectMemory(ctx())).toThrow('不能自动覆盖')
+    expect(readFileSync(join(projectRoot, 'AGENTS.md'), 'utf8')).toBe(content)
+  })
+
+  test('Given AGENTS.md 是符号链接 When 关联 Then 拒绝读写链接', () => {
+    const real = join(root, 'real-agents.md')
+    writeFileSync(real, '# 真实规则\n', 'utf8')
+    symlinkSync(real, join(projectRoot, 'AGENTS.md'))
+
+    expect(() => linkProjectMemory(ctx())).toThrow('符号链接')
+    expect(readFileSync(real, 'utf8')).toBe('# 真实规则\n')
+  })
+
+  test('Given 检查后规则被外部修改 When 带旧 revision 关联 Then 中止且不写入', () => {
+    writeFileSync(join(projectRoot, 'AGENTS.md'), '# 项目约定\n\n- 新规则\n', 'utf8')
+
+    expect(() => linkProjectMemory(ctx(), { expectedRevision: '0'.repeat(64) })).toThrow('外部修改')
+    expect(readFileSync(join(projectRoot, 'AGENTS.md'), 'utf8')).toBe('# 项目约定\n\n- 新规则\n')
   })
 })
 

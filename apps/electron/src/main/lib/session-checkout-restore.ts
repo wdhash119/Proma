@@ -1,15 +1,16 @@
 /**
  * 从会话检出日志恢复被删除的 worktree。
  *
- * 只重建日志里记录过的路径与分支：先 prune 掉失效登记，再判断分支是否还在；
- * 分支已被删除时用选择当时的 HEAD 提交重建分支，避免把无关提交带进来。
+ * 只重建日志里记录过的路径与分支：先确认目标登记状态（不做仓库级 prune），
+ * 再判断分支是否还在；分支已被删除时用选择当时的 HEAD 提交重建分支，
+ * 避免把无关提交带进来。
  */
 
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { RestoreSessionWorktreeResult } from '@proma/shared'
+import { normalizePathForCompare, type RestoreSessionWorktreeResult } from '@proma/shared'
 
 const execFileAsync = promisify(execFile)
 const GIT_TIMEOUT_MS = 20_000
@@ -86,6 +87,41 @@ export async function readWorktreeHeadCommit(worktreePath: string): Promise<stri
   return /^[0-9a-f]{7,64}$/i.test(sha) ? sha : undefined
 }
 
+interface RegisteredWorktree {
+  path: string
+  branch?: string
+}
+
+/** 比较 worktree 路径；非 Linux 平台忽略大小写，避免 Windows 路径拼写差异。 */
+function worktreePathKey(path: string): string {
+  const normalized = normalizePathForCompare(resolve(path))
+  return process.platform === 'linux' ? normalized : normalized.toLowerCase()
+}
+
+/** 读取仓库当前登记的 worktree 列表（包括目录已暂时缺失的登记）。 */
+async function listRegisteredWorktrees(repoPath: string, signal?: AbortSignal): Promise<RegisteredWorktree[]> {
+  const result = await git(['worktree', 'list', '--porcelain'], repoPath, signal)
+  if (!result.ok) throw new Error(`读取 worktree 登记失败：${result.stderr}`)
+  const entries: RegisteredWorktree[] = []
+  let current: RegisteredWorktree | undefined
+  for (const line of result.stdout.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      current = { path: line.slice('worktree '.length).trim() }
+      entries.push(current)
+      continue
+    }
+    if (line === '') {
+      current = undefined
+      continue
+    }
+    if (current && line.startsWith('branch ')) {
+      const ref = line.slice('branch '.length).trim()
+      current.branch = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref
+    }
+  }
+  return entries
+}
+
 export async function restoreWorktree(
   request: WorktreeRestoreRequest,
   options: { signal?: AbortSignal } = {},
@@ -105,9 +141,14 @@ export async function restoreWorktree(
     throw new Error('worktree 所属仓库目录已不存在')
   }
 
-  // 目录可能被手动删除，先清掉 git 里的失效登记，否则 add 会因为路径被占用而失败。
-  const prune = await git(['worktree', 'prune'], repoPath, options.signal)
-  if (!prune.ok) throw new Error(`清理 worktree 登记失败：${prune.stderr}`)
+  // 目录被手动删除后，git 里可能仍登记着这个 worktree。
+  // 这里只处理目标自己的登记：不使用仓库级 `git worktree prune`，
+  // 否则会顺带注销该仓库下其他「目录暂时缺失但可恢复」的 worktree。
+  const registrations = await listRegisteredWorktrees(repoPath, options.signal)
+  const registration = registrations.find((item) => worktreePathKey(item.path) === worktreePathKey(path))
+  if (registration?.branch && registration.branch !== branch) {
+    throw new Error('该路径仍登记为其他分支的 worktree，不能按当前记录恢复')
+  }
 
   const branchCheck = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], repoPath, options.signal)
   const plan = planWorktreeRestore({ path, branch, baseCommit, branchExists: branchCheck.ok })
@@ -117,9 +158,11 @@ export async function restoreWorktree(
       : 'worktree 记录无效，不能恢复')
   }
 
+  // 目标仍登记时用 `-f` 覆盖这条失效登记；其他 worktree 的登记保持不变。
+  const forceArgs = registration ? ['-f'] : []
   const add = plan.branchRecreated
-    ? await git(['worktree', 'add', '-b', branch, path, baseCommit!], repoPath, options.signal)
-    : await git(['worktree', 'add', path, branch], repoPath, options.signal)
+    ? await git(['worktree', 'add', ...forceArgs, '-b', branch, path, baseCommit!], repoPath, options.signal)
+    : await git(['worktree', 'add', ...forceArgs, path, branch], repoPath, options.signal)
   if (!add.ok) throw new Error(`恢复 worktree 失败：${add.stderr}`)
 
   return { restored: true, path, branch, branchRecreated: plan.branchRecreated }

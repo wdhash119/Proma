@@ -69,7 +69,8 @@ export function finishInstructionMaintenance(
   ensureMemoryFiles(memoryContext(ctx))
   const state = inspectInstructionMigration(ctx)
   if (state.needed) throw new Error('旧项目规则尚未合并，不能记录项目能力维护完成。')
-  linkProjectMemory(memoryContext(ctx))
+  // 带上检查时的目标 revision：期间若被外部修改，宁可中止也不能用旧判断追加关联。
+  linkProjectMemory(memoryContext(ctx), { expectedRevision: state.target.revision })
   const target = readInstructionFile(state.target.path)
   if (!hasMemoryAssociation(memoryContext(ctx), target.content ?? '')) {
     throw new Error('项目规则记忆关联未就绪，不能记录项目能力维护完成。')

@@ -183,6 +183,21 @@ describe('项目规则迁移', () => {
     expect(replanProjectInstructions(makeCtx(), id)).toBe(id)
   })
 
+  test('Given 已完成迁移 When 重规划 Then 幂等返回且不复活旧来源、不翻改状态', () => {
+    const base = prepareLegacySource()
+    const id = mergeProjectInstructions(makeCtx(), { ...base, content: '# 项目约定\n\n- 旧命令\n', summary: '保留旧命令' })
+    const targetBefore = readFileSync(join(projectRoot, 'AGENTS.md'), 'utf8')
+    expect(existsSync(join(workspaceRoot, 'AGENTS.md'))).toBe(false)
+
+    expect(replanProjectInstructions(makeCtx(), id)).toBe(id)
+
+    expect(readFileSync(join(projectRoot, 'AGENTS.md'), 'utf8')).toBe(targetBefore)
+    // 已归档的旧来源不能被已完成记录重规划复活。
+    expect(existsSync(join(workspaceRoot, 'AGENTS.md'))).toBe(false)
+    const journal = JSON.parse(readFileSync(join(workspaceRoot, 'instruction-history', `${id}.json`), 'utf8')) as { status: string }
+    expect(journal.status).toBe('completed')
+  })
+
   test('Given 无效迁移 ID When 恢复 Then 报 ID 无效', () => {
     expect(() => resumeProjectInstructions(makeCtx(), '../../etc/passwd')).toThrow('迁移 ID 无效')
   })

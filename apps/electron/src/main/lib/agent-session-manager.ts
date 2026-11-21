@@ -27,7 +27,7 @@ import {
   getProjectFilesPath,
   listAgentWorkspaces,
 } from './agent-workspace-manager'
-import { appendCheckoutEntry, checkoutFromActiveWorktree, isCurrentCheckout, resolveSessionCheckout } from './session-checkout'
+import { appendCheckoutEntry, checkoutFromActiveWorktree, defaultCheckout, isCurrentCheckout, resolveSessionCheckout } from './session-checkout'
 import { resolvePiThinkingLevel } from './agent-thinking-level'
 import { getSettings } from './settings-service'
 import type {
@@ -404,6 +404,38 @@ export function resolveAgentCwd(
     isDirectory: isExistingDirectory,
   })
   return checkout?.path
+}
+
+/** 按指定工作区与会话计算默认检出（项目根或会话工作台）。 */
+function defaultCheckoutForWorkspace(
+  workspace: Pick<AgentWorkspace, 'slug'>,
+  sessionId: string,
+  agentCwdMode: AgentCwdMode,
+): SessionCheckoutEntry | null {
+  return defaultCheckout(
+    agentCwdMode,
+    getProjectFilesPath(workspace.slug),
+    getAgentSessionWorkspacePath(workspace.slug, sessionId),
+  )
+}
+
+/**
+ * 清除活动 worktree 时要写入的元数据。
+ *
+ * 只清 `activeWorktree` 不够：检出历史末尾仍是旧 worktree，目录尚未删除时
+ * `resolveSessionCheckout` 会继续从历史里选中它，出现「界面已清除、cwd 未变」。
+ * 这里把默认检出追加到历史末尾，保证解析回到项目根或会话工作台。
+ */
+export function buildWorktreeClearUpdates(
+  meta: AgentSessionMeta,
+): Pick<AgentSessionMeta, 'activeWorktree' | 'checkoutHistory'> {
+  const workspace = meta.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
+  if (!workspace) return { activeWorktree: undefined, checkoutHistory: meta.checkoutHistory }
+  const fallback = defaultCheckoutForWorkspace(workspace, meta.id, getAgentCwdMode(meta))
+  return {
+    activeWorktree: undefined,
+    checkoutHistory: fallback ? appendCheckoutEntry(meta.checkoutHistory, fallback) : meta.checkoutHistory,
+  }
 }
 
 /** 会话检出日志的只读快照；供「恢复已删除的 worktree」入口展示。 */
@@ -810,6 +842,7 @@ export function moveSessionToWorkspace(sessionId: string, targetWorkspaceId: str
     // 确保目标工作区下有 session 目录。
     getAgentSessionWorkspacePath(targetWs.slug, current.id)
 
+    const fallbackCheckout = defaultCheckoutForWorkspace(targetWs, current.id, getAgentCwdMode(current))
     const updated: AgentSessionMeta = {
       ...current,
       workspaceId: targetWorkspaceId,
@@ -819,6 +852,9 @@ export function moveSessionToWorkspace(sessionId: string, targetWorkspaceId: str
       piEntryBindings: undefined,
       // 已切换到另一项目，不能沿用旧项目授权下选择的 worktree。
       activeWorktree: undefined,
+      // 旧检出历史同样指向旧项目 worktree；目录仍在时会让 cwd 解析回旧项目。
+      // 迁移后只保留新工作区的默认检出，保证工作区隔离。
+      checkoutHistory: fallbackCheckout ? [fallbackCheckout] : undefined,
       updatedAt: now,
     }
     index.sessions[i] = updated

@@ -27,6 +27,7 @@ import {
   HardDrive,
   Archive,
   Sparkles,
+  Monitor,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ShortcutKeycaps } from "@/components/shortcuts/ShortcutKeycaps";
@@ -54,6 +55,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ChannelSettings } from "./ChannelSettings";
+import { ComputerUseSettings } from "./ComputerUseSettings";
 import { VisionRelaySettings } from "./VisionRelaySettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { ProxySettings } from "./ProxySettings";
@@ -69,6 +71,7 @@ import { OnboardingSettings } from "./OnboardingSettings";
 import { ChatHistorySettings } from "./ChatHistorySettings";
 import { AboutYouSettings } from "./AboutYouSettings";
 import { useOpenSession } from '@/hooks/useOpenSession'
+import { useComputerUseUpdateStatus } from '@/hooks/useComputerUseUpdateStatus'
 
 /** 设置 Tab 定义 */
 interface TabItem {
@@ -77,10 +80,18 @@ interface TabItem {
   icon: React.ReactNode;
 }
 
+/** Computer Use 独立标签页：安装状态、更新入口与 Agent 配置会话 */
+const COMPUTER_USE_TAB: TabItem = {
+  id: "computer-use",
+  label: "Computer Use",
+  icon: <Monitor size={16} />,
+};
+
 /** 基础 Tabs（所有模式都有） */
 const BASE_TABS: TabItem[] = [
   { id: "general", label: "通用设置", icon: <Settings size={16} /> },
   { id: "channels", label: "模型配置", icon: <Radio size={16} /> },
+  COMPUTER_USE_TAB,
   { id: "vision-relay", label: "视觉助手", icon: <Eye size={16} /> },
   { id: "prompts", label: "提示词管理", icon: <BookOpen size={16} /> },
   { id: "chat-history", label: "历史 Chat", icon: <Archive size={16} /> },
@@ -124,6 +135,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <GeneralSettings />;
     case "channels":
       return <ChannelSettings />;
+    case "computer-use":
+      return <ComputerUseSettings />;
     case "vision-relay":
       return <VisionRelaySettings />;
     case "prompts":
@@ -172,6 +185,8 @@ export function SettingsPanel({
   const setAutomationForm = useSetAtom(automationFormAtom);
   const hasUpdate = useAtomValue(hasUpdateAtom);
   const hasEnvironmentIssues = useAtomValue(hasEnvironmentIssuesAtom);
+  const { status: computerUseUpdateStatus } = useComputerUseUpdateStatus();
+  const hasComputerUseUpdate = computerUseUpdateStatus.status === "available";
   const openSession = useOpenSession()
   /** 统一的退出拦截对话框状态 */
   type PendingAction =
@@ -296,6 +311,13 @@ export function SettingsPanel({
                 <span>{tab.label}</span>
                 {tab.id === "about" && (hasUpdate || hasEnvironmentIssues) && (
                   <span className="w-2 h-2 rounded-full bg-red-500" />
+                )}
+                {tab.id === "computer-use" && hasComputerUseUpdate && (
+                  <span
+                    aria-label="Cua Driver 有更新"
+                    role="img"
+                    className="w-2 h-2 rounded-full bg-red-500"
+                  />
                 )}
               </button>
             ))}

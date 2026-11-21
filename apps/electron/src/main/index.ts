@@ -100,6 +100,8 @@ import {
 } from './lib/bridge-registry'
 import { startScheduler, stopScheduler } from './lib/automation-scheduler'
 import { startPlanningReminderScheduler, stopPlanningReminderScheduler } from './lib/planning-reminder-scheduler'
+import { startCuaCdnChecks } from './lib/computer-use-cdn-runtime'
+import { getConfigDir } from './lib/config-paths'
 import { startPlanningNativeSyncCoordinator, stopPlanningNativeSyncCoordinator } from './lib/planning-native-sync-coordinator'
 import { feishuBridgeManager } from './lib/feishu-bridge-manager'
 import { getFeishuMultiBotConfig } from './lib/feishu-config'
@@ -130,7 +132,7 @@ import { disposeChangeRequestService, initChangeRequestService } from './lib/cha
 import { setPromaVersion } from '@proma/core'
 import { canRecoverRenderer, RENDERER_RECOVERY_WINDOW_MS } from './lib/renderer-process-recovery'
 import { TRAY_IPC_CHANNELS } from '../types'
-import { PLANNING_IPC_CHANNELS } from '@proma/shared'
+import { COMPUTER_USE_IPC_CHANNELS, PLANNING_IPC_CHANNELS } from '@proma/shared'
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
 
@@ -257,6 +259,8 @@ async function recoverEnabledSlackBots(): Promise<void> {
 }
 
 let mainWindow: BrowserWindow | null = null
+/** Computer Use 更新检查调度器的停止函数。 */
+let stopCuaCdnUpdateChecks: (() => void) | undefined
 let startupSplashWindow: BrowserWindow | null = null
 
 const DEFAULT_MAIN_WINDOW_WIDTH = 1400
@@ -803,6 +807,19 @@ async function bootstrap(): Promise<void> {
   // 启动定时任务调度器（恢复持久化的 active 任务）
   safeRun('startScheduler', startScheduler)
   safeRun('startPlanningReminderScheduler', startPlanningReminderScheduler)
+
+  // Computer Use 驱动更新检查：启动先推缓存结论，之后按天（带抖动）访问 CDN。
+  safeRun('startCuaCdnChecks', () => {
+    stopCuaCdnUpdateChecks = startCuaCdnChecks(
+      join(getConfigDir(), 'computer-use-update.json'),
+      (status) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (win.isDestroyed()) continue
+          win.webContents.send(COMPUTER_USE_IPC_CHANNELS.UPDATE_STATUS_CHANGED, status)
+        }
+      },
+    )
+  })
   safeRun('startPlanningNativeSyncCoordinator', startPlanningNativeSyncCoordinator)
 
   app.on('activate', () => {
@@ -896,6 +913,10 @@ app.on('before-quit', () => {
   // 停止所有 Bridge
   stopBridgeSelfHealing()
   stopAllBridges()
+  // 停止 Computer Use 更新检查定时器
+  stopCuaCdnUpdateChecks?.()
+  stopCuaCdnUpdateChecks = undefined
+
   // 停止定时任务调度器
   stopScheduler()
   stopPlanningReminderScheduler()

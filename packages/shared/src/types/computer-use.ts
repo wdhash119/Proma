@@ -53,4 +53,52 @@ export const COMPUTER_USE_IPC_CHANNELS = {
   RETRY: 'computer-use:retry',
   /** 关闭预览，主进程立即释放采集会话。 */
   DISMISS: 'computer-use:dismiss',
+  /** 查询本地驱动安装状态（平台、路径、版本）。 */
+  GET_INSTALLATION_STATUS: 'computer-use:get-installation-status',
+  /** 主动向 CDN 发起一次更新检查（并发调用会合并为一次请求）。 */
+  CHECK_UPDATE_STATUS: 'computer-use:check-update-status',
+  /** 读取缓存的更新检查结论，不触发网络请求。 */
+  GET_UPDATE_STATUS: 'computer-use:get-update-status',
+  /** 更新检查结论变化时由主进程广播。 */
+  UPDATE_STATUS_CHANGED: 'computer-use:update-status-changed',
 } as const
+
+/** Computer Use 支持的平台归类，便于 UI 直接展示文案。 */
+export type ComputerUsePlatform = 'macos' | 'windows' | 'linux' | 'unsupported'
+
+/**
+ * 驱动安装状态：
+ * - `installed`：驱动存在且版本可识别；
+ * - `not_installed`：找不到驱动；
+ * - `needs_attention`：找到驱动但版本输出异常，需要用户重新安装或修复；
+ * - `unsupported`：当前平台不支持 Computer Use。
+ */
+export type ComputerUseInstallationStatus = 'installed' | 'not_installed' | 'needs_attention' | 'unsupported'
+
+/** 主进程返回给 renderer 的安装状态快照；不包含任何可执行内容。 */
+export interface ComputerUseInstallation {
+  platform: ComputerUsePlatform
+  status: ComputerUseInstallationStatus
+  /** 驱动可执行文件绝对路径；仅 `installed` / `needs_attention` 时存在。 */
+  driverPath?: string
+  /** `cua-driver --version` 的原始输出；仅 `installed` 时存在。 */
+  version?: string
+}
+
+/**
+ * 驱动更新检查结论：
+ * - `unknown`：无法判断（平台不支持、未安装、尚未拿到清单）；
+ * - `current`：已是最新；
+ * - `available`：CDN 上有更新版本；
+ * - `error`：本地版本或清单无法解析，更新检查本身失败。
+ */
+export type CuaUpdateStatusKind = 'unknown' | 'current' | 'available' | 'error'
+
+/** 更新检查结果；版本号均为纯 SemVer 字符串（不含 `cua-driver` 前缀）。 */
+export interface CuaUpdateStatus {
+  status: CuaUpdateStatusKind
+  /** 本地已安装版本。 */
+  currentVersion?: string
+  /** CDN 清单中的最新版本；仅在已取得清单（`current` / `available`）时有意义。 */
+  latestVersion?: string
+}

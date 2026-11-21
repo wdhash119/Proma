@@ -295,6 +295,17 @@ export interface ElectronAPI {
   /** 关闭预览面板并释放采集会话 */
   dismissComputerUsePreview: (sessionId: string, previewId: string) => Promise<void>
 
+  // ===== Computer Use 驱动安装与更新 =====
+
+  /** 查询本地驱动安装状态（平台、驱动路径、`--version` 输出） */
+  getComputerUseInstallationStatus: () => Promise<import('@proma/shared').ComputerUseInstallation>
+  /** 主动向 CDN 检查一次更新；并发调用会合并为同一次请求 */
+  checkComputerUseUpdateStatus: () => Promise<import('@proma/shared').CuaUpdateStatus>
+  /** 读取缓存的更新检查结论，不触发网络请求 */
+  getComputerUseUpdateStatus: () => Promise<import('@proma/shared').CuaUpdateStatus>
+  /** 订阅更新检查结论变化；返回取消订阅函数 */
+  onComputerUseUpdateStatusChanged: (callback: (status: import('@proma/shared').CuaUpdateStatus) => void) => () => void
+
   // ===== 通用工具 =====
 
   /** 在系统默认浏览器中打开外部链接 */
@@ -1517,6 +1528,19 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.RETRY, sessionId, previewId),
   dismissComputerUsePreview: (sessionId: string, previewId: string) =>
     ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.DISMISS, sessionId, previewId),
+
+  // Computer Use 驱动安装状态与更新检查：renderer 只接收结论，不接触驱动与 CDN。
+  getComputerUseInstallationStatus: () =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.GET_INSTALLATION_STATUS),
+  checkComputerUseUpdateStatus: () =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.CHECK_UPDATE_STATUS),
+  getComputerUseUpdateStatus: () =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.GET_UPDATE_STATUS),
+  onComputerUseUpdateStatusChanged: (callback: (status: import('@proma/shared').CuaUpdateStatus) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: import('@proma/shared').CuaUpdateStatus) => callback(status)
+    ipcRenderer.on(COMPUTER_USE_IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
+    return () => ipcRenderer.removeListener(COMPUTER_USE_IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
+  },
 
   // 通用工具
   openExternal: (url: string) => {

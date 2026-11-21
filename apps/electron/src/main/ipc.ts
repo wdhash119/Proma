@@ -155,11 +155,15 @@ import type {
   BrowserTabInput,
   BrowserCreateTabInput,
   ComputerUsePreviewState,
+  ComputerUseInstallation,
+  CuaUpdateStatus,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { browserController } from './lib/browser-controller'
 import { computerUsePreview } from './lib/computer-use-preview'
+import { getComputerUseInstallationStatus } from './lib/computer-use-installation'
+import { getCuaUpdateStatus, refreshCuaUpdateStatus } from './lib/computer-use-cdn-runtime'
 import { acknowledgeTerminalOutput, closeTerminalsForSession, createTerminal, getTerminalSnapshot, killTerminal, resizeTerminal, writeTerminal } from './lib/terminal-service'
 import { getMainWindow } from './lib/main-window-store'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
@@ -2684,6 +2688,30 @@ export function registerIpcHandlers(): void {
       await assertMainRenderer(event.sender.id)
       const ids = requirePreviewIds(sessionId, previewId)
       computerUsePreview.dismiss(ids.sessionId, ids.previewId)
+    },
+  )
+
+  // Computer Use 驱动安装状态与更新检查：renderer 只拿到结论，
+  // 驱动路径与 CDN 访问始终留在主进程。
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.GET_INSTALLATION_STATUS,
+    async (event): Promise<ComputerUseInstallation> => {
+      await assertMainRenderer(event.sender.id)
+      return getComputerUseInstallationStatus()
+    },
+  )
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.CHECK_UPDATE_STATUS,
+    async (event): Promise<CuaUpdateStatus> => {
+      await assertMainRenderer(event.sender.id)
+      return refreshCuaUpdateStatus()
+    },
+  )
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.GET_UPDATE_STATUS,
+    async (event): Promise<CuaUpdateStatus> => {
+      await assertMainRenderer(event.sender.id)
+      return getCuaUpdateStatus()
     },
   )
 

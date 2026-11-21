@@ -41,6 +41,8 @@ import { getMainRepoRoot, listWorktrees } from '../git-diff-service'
 import { fetchPageAsMarkdown, formatWebFetchOutcome } from '../web-fetch-service'
 import { formatWebSearchOutcome, searchWeb } from '../web-search-service'
 import { buildPromaSelfTools } from './pi-proma-self-tools'
+import { buildInstructionMigrationTools, resolveInstructionContext } from './pi-instruction-migration-tools'
+import { buildMemoryExtraTools } from './pi-memory-extra-tools'
 import { buildComputerUseTools } from './pi-computer-use-tools'
 import { getWorktreeRepos, getAgentWorkspace, listAgentWorkspaces, listAgentWorkspacesWithProjectRootStatus } from '../agent-workspace-manager'
 import { resolveAutomationWorkspace, summarizeAutomationWorkspace } from './automation-workspace'
@@ -122,6 +124,8 @@ export interface PiBuiltinToolsContext {
   productivityTools?: ProductivityToolsSettings
   /** Proma 自操作的高副作用动作需要用户明确同意（当前仅创建项目）。 */
   requestPromaSelfApproval?: import('../proma-self-controller').PromaSelfApprovalRequester
+  /** 已解析的项目规则维护上下文；省略时按工作区与会话现场解析。 */
+  instructionContext?: import('../project-instruction-state').ProjectInstructionContext
 }
 
 function jsonToolResult(payload: unknown): AgentToolResult<unknown> {
@@ -1717,6 +1721,18 @@ export async function buildPiBuiltinTools(
     console.error('[Pi 桥接] 注入联网工具失败:', error)
   }
 
+  // 记忆组补充工具：初始化、归档与旧画像整合都会写真实长期记忆，
+  // 因此需要工作区上下文；无人值守会话不获得画像整合能力。
+  try {
+    tools.push(...buildMemoryExtraTools(sdk, {
+      workspaceSlug: ctx.workspaceSlug,
+      projectRoot: ctx.agentCwd,
+      allowProfileMigration: ctx.triggeredBy !== 'automation' && ctx.triggeredBy !== 'delegation',
+    }) as ToolDefinition[])
+  } catch (error) {
+    console.error('[Pi 桥接] 注入记忆补充工具失败:', error)
+  }
+
   // Proma 自操作：只有可见主窗口的会话才有意义——自动化、协作子会话与外部 Bridge
   // 既没有窗口可观察，也无法让用户中断，因此不注入。
   const selfControlAvailable = ctx.triggeredBy !== 'automation'
@@ -1727,6 +1743,24 @@ export async function buildPiBuiltinTools(
       tools.push(...buildPromaSelfTools(sdk, ctx) as ToolDefinition[])
     } catch (error) {
       console.error('[Pi 桥接] 注入 Proma 自操作工具失败:', error)
+    }
+  }
+
+  // 项目规则组：首次能力维护与项目地图复查都要求用户在场的可解释写入，
+  // 与自操作工具共用「仅用户主会话」的条件。
+  if (selfControlAvailable) {
+    try {
+      const instructionContext = ctx.instructionContext ?? resolveInstructionContext({
+        workspaceSlug: ctx.workspaceSlug,
+        sessionId: ctx.sessionId,
+        agentCwd: ctx.agentCwd,
+        triggeredBy: ctx.triggeredBy,
+      })
+      if (instructionContext) {
+        tools.push(...buildInstructionMigrationTools(sdk, instructionContext) as ToolDefinition[])
+      }
+    } catch (error) {
+      console.error('[Pi 桥接] 注入项目规则工具失败:', error)
     }
   }
 

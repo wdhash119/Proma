@@ -70,6 +70,7 @@ import { exitPlanService } from './agent-exit-plan-service'
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
+import { resolveInstructionContext } from './adapters/pi-instruction-migration-tools'
 import type { PromaSelfApprovalRequester } from './proma-self-controller'
 import { getAgentVaultRoots, getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
@@ -1085,6 +1086,13 @@ export class AgentOrchestrator {
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const piSdk = await import('@earendil-works/pi-coding-agent')
+      // 项目规则维护上下文一次解析、两处复用：工具注入与系统提示必须看到同一状态。
+      const instructionContext = resolveInstructionContext({
+        workspaceSlug,
+        sessionId,
+        agentCwd,
+        triggeredBy: input.triggeredBy,
+      })
       // Proma 自操作的高副作用动作（当前仅创建项目）必须由用户明确同意。
       // 复用 AskUserQuestion 卡片，让用户在不离开对话的前提下批准或拒绝。
       const requestPromaSelfApproval: PromaSelfApprovalRequester = async (_kind, signal) => {
@@ -1124,6 +1132,7 @@ export class AgentOrchestrator {
         lastWindowsTerminalProfile: appSettings.lastWindowsTerminalProfile,
         productivityTools,
         requestPromaSelfApproval,
+        instructionContext,
       })
       piBuiltinTools = builtinMcpResult.tools
       const collaborationAvailable = builtinMcpResult.collaborationAvailable
@@ -1320,6 +1329,7 @@ export class AgentOrchestrator {
         memoryGuidance,
         memoryRefreshOpportunity,
         selfControlAvailable,
+        instructionContext,
       }) + (automationContext ? `\n\n## 定时任务执行上下文\n\n${automationContext}` : '')
       const startAutoTitleGeneration = (): void => {
         if (titleGenerationStarted) return

@@ -1177,8 +1177,10 @@ export const AgentMessages = React.memo(function AgentMessages({
           color: inherit;
         }
       `}</style>
+          {/* 交付物浮窗置于滚动容器之外（flex 兄弟）：ScrollContent 的 height:100%
+              若与浮窗同处根容器，总高会超出根容器，overflow-y-hidden 裁掉底部消息。 */}
+          <AgentArtifactsBar sessionId={sessionId} streaming={streaming} basePaths={messageBasePaths} />
           <Conversation resize="instant" className={ready ? 'opacity-100' : 'opacity-0'}>
-        <AgentArtifactsBar sessionId={sessionId} streaming={streaming} basePaths={messageBasePaths} />
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
           {!hasContent && !streaming ? (

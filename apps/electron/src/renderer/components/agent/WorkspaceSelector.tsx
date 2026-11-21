@@ -377,7 +377,7 @@ export function WorkspaceSelector(): React.ReactElement {
 
           {/* 新建项目输入框 */}
           {creating && (
-            <div className="flex items-center gap-2 px-2 py-[5px]">
+            <div data-proma-self-control="create-project" className="flex items-center gap-2 px-2 py-[5px]">
               <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
               <input
                 ref={createInputRef}

@@ -2677,7 +2677,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         id: 'agent-project-create',
         estimateSize: 36,
         content: (
-          <div className="flex items-center gap-2 px-2 py-1.5 mb-1 rounded-md bg-foreground/[0.04]">
+          <div
+            data-proma-self-control="create-project"
+            className="flex items-center gap-2 px-2 py-1.5 mb-1 rounded-md bg-foreground/[0.04]"
+          >
             <FolderOpen size={14} className="flex-shrink-0 text-foreground/40" />
             <input
               ref={newProjectInputRef}

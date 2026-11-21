@@ -44,6 +44,20 @@ test('Given a real Electron window When Proma self-control tools run Then observ
         <button id="ok" aria-label="打开设置">打开设置</button>
         <button id="danger">删除项目</button>
         <div data-proma-self-control="deny"><button id="denied">点了也不该生效</button></div>
+        <!-- 复刻生产 UI 的安全标记：编辑器整块 deny，Agent 不能代填或代发。 -->
+        <div data-proma-self-control="deny" id="editor-shell">
+          <div id="editor" role="textbox" aria-label="Agent 输入区" contenteditable="true" style="min-height:32px;border:1px solid #ccc"></div>
+        </div>
+        <!-- AskUserQuestion 横幅整体 deny，另一前台会话不能代答。 -->
+        <div data-proma-self-control="deny" id="ask-shell">
+          <span>Agent 需要你的输入</span>
+          <button id="ask-agree">同意</button>
+        </div>
+        <!-- 新建空白项目输入行 create-project，提交必须经批准守卫。 -->
+        <div data-proma-self-control="create-project" id="create-shell">
+          <input id="project-name" aria-label="项目名称" placeholder="项目名称..." />
+          <button id="create-button">创建项目</button>
+        </div>
         <input id="name" aria-label="名称" placeholder="名称" />
         <div style="position:relative;width:320px;height:56px;margin-top:16px">
           <button class="sidebar-collapse-button mt-2 flex items-center justify-center rounded-[10px]" style="width:40px;height:40px"><svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="#999"/></svg></button>
@@ -52,6 +66,9 @@ test('Given a real Electron window When Proma self-control tools run Then observ
         </div>
         <div id="log"></div>
         <div id="mirror"></div>
+        <div id="submit-log"></div>
+        <div id="ask-log"></div>
+        <div id="create-log"></div>
         <div style="height:2400px"></div>
         <div id="bottom">底部标记</div>
         <script>
@@ -60,6 +77,18 @@ test('Given a real Electron window When Proma self-control tools run Then observ
           });
           document.getElementById('name').addEventListener('input', (event) => {
             document.getElementById('mirror').textContent = '填好了:' + event.target.value;
+          });
+          document.getElementById('editor').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') document.getElementById('submit-log').textContent = 'queued';
+          });
+          document.getElementById('ask-agree').addEventListener('click', () => {
+            document.getElementById('ask-log').textContent = 'answered';
+          });
+          document.getElementById('create-button').addEventListener('click', () => {
+            document.getElementById('create-log').textContent = '已创建项目';
+          });
+          document.getElementById('project-name').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') document.getElementById('create-log').textContent = '已创建项目-enter';
           });
         </script>
       </body></html>\`
@@ -167,6 +196,104 @@ test('Given a real Electron window When Proma self-control tools run Then observ
         'DOM 受保护点击',
       )
       report.blockedDomRejected = true
+
+      currentStep = 'production-editor-deny'
+      // 生产编辑器容器带 deny：既不能代填，也不能用 Enter 把内容代发成用户消息。
+      const forEditor = await controller.observe(sessionId, 300)
+      const editor = forEditor.elements.find((element) => element.name === 'Agent 输入区')
+      assert.ok(editor, '应观察到带 deny 标记的 Agent 编辑器')
+      assert.equal(editor.editable, true, '编辑器在 AX 树里应表现为可编辑')
+      await expectRejection(
+        controller.fill(sessionId, editor.ref, '代填内容', undefined, async () => true),
+        '需要用户亲自操作',
+        '编辑器代填',
+      )
+      await win.webContents.executeJavaScript('document.getElementById("editor").focus(); "focused"')
+      await expectRejection(
+        controller.press(sessionId, 'Enter', undefined, async () => true),
+        '需要用户亲自操作',
+        '编辑器代发 Enter',
+      )
+      await expectRejection(
+        controller.domAction(sessionId, { action: 'fill', selector: '#editor', text: 'selector 代填' }),
+        '需要用户亲自操作',
+        '编辑器 DOM 代填',
+      )
+      const submitLog = await win.webContents.executeJavaScript('document.getElementById("submit-log").textContent')
+      assert.equal(submitLog, '', '编辑器拒绝后不应进入排队/发送逻辑')
+      report.productionEditorDenied = true
+
+      currentStep = 'production-ask-user-deny'
+      // AskUser 横幅整体 deny：另一前台会话不能代答当前用户的问题。
+      const forAsk = await controller.observe(sessionId, 300)
+      const askAgree = forAsk.elements.find((element) => element.name === '同意')
+      assert.ok(askAgree, '应观察到 AskUser 的「同意」选项')
+      await expectRejection(
+        controller.click(sessionId, askAgree.ref, undefined, async () => true),
+        '需要用户亲自操作',
+        '代答 AskUser',
+      )
+      const askLog = await win.webContents.executeJavaScript('document.getElementById("ask-log").textContent')
+      assert.equal(askLog, '', '被拒绝的代答不应触发回答逻辑')
+      report.productionAskUserDenied = true
+
+      currentStep = 'production-create-project-guard'
+      // 新建项目输入行带 create-project：无批准不得填名、不得提交创建。
+      const forCreate = await controller.observe(sessionId, 300)
+      const projectName = forCreate.elements.find((element) => element.name === '项目名称')
+      assert.ok(projectName, '应观察到新建项目名称输入框')
+      await expectRejection(
+        controller.fill(sessionId, projectName.ref, 'Agent 建的项目'),
+        '创建项目前必须获得用户明确同意',
+        '无批准填写项目名',
+      )
+      const createButton = forCreate.elements.find((element) => element.name === '创建项目')
+      assert.ok(createButton, '应观察到创建项目按钮')
+      await expectRejection(
+        controller.click(sessionId, createButton.ref),
+        '创建项目前必须获得用户明确同意',
+        '无批准提交创建',
+      )
+      const createLogBefore = await win.webContents.executeJavaScript('document.getElementById("create-log").textContent')
+      assert.equal(createLogBefore, '', '无批准时不应发生创建')
+      report.productionCreateGuarded = true
+
+      currentStep = 'approved-create-click'
+      // 批准 → 回答 AskUser 会作废 ref；控制器必须重取新鲜节点并成功点击，且只询问一次。
+      const forApproval = await controller.observe(sessionId, 300)
+      const approvedButton = forApproval.elements.find((element) => element.name === '创建项目')
+      assert.ok(approvedButton, '批准前应能观察到创建项目按钮')
+      let approvalCount = 0
+      const approvedResult = await controller.click(sessionId, approvedButton.ref, undefined, async () => {
+        approvalCount += 1
+        // 模拟 IPC 在用户回答 AskUser 时无条件 invalidateSessionRefs。
+        controller.invalidateSessionRefs(sessionId)
+        return true
+      })
+      assert.ok(approvedResult.label.includes('创建项目'), '批准后点击应返回目标标签')
+      assert.equal(approvalCount, 1, '批准后应直接完成点击，不重复询问')
+      const created = await controller.waitFor(sessionId, { kind: 'text', value: '已创建项目' }, 3000)
+      assert.equal(created.matched, true, '批准后点击应真正触发创建逻辑')
+      report.approvedCreateClicked = true
+
+      currentStep = 'approved-fill-and-enter'
+      // 同一创建流程的后续输入复用刚取得的同意，不重复打扰，Enter 提交也能生效。
+      const forContinuation = await controller.observe(sessionId, 300)
+      const continuationInput = forContinuation.elements.find((element) => element.name === '项目名称')
+      assert.ok(continuationInput, '批准后应能观察到项目名称输入框')
+      await controller.fill(sessionId, continuationInput.ref, '批准后的项目', undefined, async () => {
+        approvalCount += 1
+        return true
+      })
+      assert.equal(approvalCount, 1, '两分钟内的连续输入不应再次询问')
+      await controller.press(sessionId, 'Enter', undefined, async () => {
+        approvalCount += 1
+        return true
+      })
+      const createdByEnter = await controller.waitFor(sessionId, { kind: 'text', value: '已创建项目-enter' }, 3000)
+      assert.equal(createdByEnter.matched, true, '批准后的 Enter 提交应生效')
+      assert.equal(approvalCount, 1, '同一创建流程内不重复询问')
+      report.approvedFillAndEnter = true
 
       currentStep = 'invalidate-after-ask'
       // 用户答完问题后作废引用：之前的 ref 必须立刻不可用（走「重新观察」路径）
@@ -331,6 +458,11 @@ test('Given a real Electron window When Proma self-control tools run Then observ
     expect(report.blockedLabelRejected).toBe(true)
     expect(report.blockedContainerRejected).toBe(true)
     expect(report.blockedDomRejected).toBe(true)
+    expect(report.productionEditorDenied).toBe(true)
+    expect(report.productionAskUserDenied).toBe(true)
+    expect(report.productionCreateGuarded).toBe(true)
+    expect(report.approvedCreateClicked).toBe(true)
+    expect(report.approvedFillAndEnter).toBe(true)
     // 截图依赖 Chromium 合成器：无显示/远程会话下会失败，此时必须给出可读提示。
     // 两条路径都算通过，但成功时数据必须真的非空。
     if (report.screenshotUnavailable === undefined) {

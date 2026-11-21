@@ -9,13 +9,66 @@
  */
 
 const MAX_SAMPLE_CHARS = 400
-
+/** 页面侧可见文本取样上限，远小于脚本结果 64k 截断阈值。 */
+export const MAX_VISIBLE_TEXT_EXPRESSION_CHARS = 8_000
+export const MAX_VISIBLE_TITLE_CHARS = 200
 /** 折叠空白并截断，避免把整页文本塞回上下文。 */
 export function summarizeVisibleText(text: string, limit = MAX_SAMPLE_CHARS): string {
   const collapsed = text.replace(/\s+/g, ' ').trim()
   if (!collapsed) return ''
   if (collapsed.length <= limit) return collapsed
   return `${collapsed.slice(0, limit)}…`
+}
+
+/** 从被截断的 JSON 前缀里尽量取出字符串字段，用于超长页面文本的降级取样。 */
+function readPreviewStringField(preview: string, field: 'text' | 'title'): string {
+  const key = `"${field}":"`
+  const start = preview.indexOf(key)
+  if (start < 0) return ''
+  let body = preview.slice(start + key.length)
+  let end = -1
+  for (let index = 0; index < body.length; index += 1) {
+    if (body[index] === '\\') {
+      index += 1
+      continue
+    }
+    if (body[index] === '"') {
+      end = index
+      break
+    }
+  }
+  body = end >= 0 ? body.slice(0, end) : body
+  // 截断可能正好停在转义反斜杠上，去掉它以免 JSON.parse 失败。
+  if (body.endsWith('\\')) body = body.slice(0, -1)
+  try {
+    return JSON.parse(`"${body}"`) as string
+  } catch {
+    return body.replace(/\\n/g, ' ').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+  }
+}
+
+/**
+ * 把 readVisibleText 的返回值还原成可读文本。
+ *
+ * 正常路径是 `{ text, title }`；页面文本超长时通用序列化会截断为
+ * `{ truncated, preview, totalChars }`，此时不能当作「没有可见文本」，
+ * 而应从预览前缀里尽量取回一段文本。
+ */
+export function extractVisibleTextSample(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return ''
+  const record = value as { text?: unknown; title?: unknown; truncated?: unknown; preview?: unknown }
+  if (typeof record.text === 'string' || typeof record.title === 'string') {
+    const text = typeof record.text === 'string' ? record.text : ''
+    const title = typeof record.title === 'string' ? record.title : ''
+    return title ? `${title} ${text}` : text
+  }
+  if (record.truncated === true && typeof record.preview === 'string') {
+    const text = readPreviewStringField(record.preview, 'text')
+    const title = readPreviewStringField(record.preview, 'title')
+    if (text || title) return title ? `${title} ${text}` : text
+  }
+  return ''
 }
 
 /** 等待超时的提示：告诉模型去哪看真实界面状态，而不是重复同一个等待。 */

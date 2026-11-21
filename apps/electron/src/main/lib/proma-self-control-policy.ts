@@ -33,6 +33,23 @@ export const PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR
 
 export const PROMA_SELF_CONTROL_PROJECT_CONSENT_DENIED = '用户未同意创建项目，本次操作已取消。'
 
+/** AskUserQuestion 批准创建项目时使用的预定义同意选项。 */
+export const PROMA_SELF_PROJECT_CONSENT_LABEL = '同意'
+
+/**
+ * 判断 AskUserQuestion 的回答是否构成创建项目的明确同意。
+ *
+ * 只接受与预定义「同意」选项精确相等的答案（多选按 `, ` 连接的集合判定）。
+ * 不能用自然语言子串匹配授权：「不同意」「不要创建」「yesn't」都不得视为同意，
+ * 用户在「其他」里输入的自定义文本也不会恰好等于该选项。
+ */
+export function hasPromaSelfProjectConsent(answers: Record<string, unknown>): boolean {
+  return Object.values(answers).some((value) => {
+    if (typeof value !== 'string') return false
+    return value.split(',').some((part) => part.trim() === PROMA_SELF_PROJECT_CONSENT_LABEL)
+  })
+}
+
 export const PROMA_SELF_CONTROL_PROJECT_CREATION_PATTERN
   = /(?:新建空白项目|从本地文件夹创建项目|新建项目|创建项目|new\s+(?:blank\s+)?project|create\s+(?:a\s+)?project)/i
 

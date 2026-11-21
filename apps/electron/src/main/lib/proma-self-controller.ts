@@ -29,7 +29,7 @@ import { buildBrowserDomActionExpression, buildBrowserScrollExpression } from '.
 import type { BrowserDomActionGuard } from './browser-script-policy'
 import { cdpAxPropertyBoolean, cdpTextValue, isEditableCdpAxNode, type CdpAxNode } from './cdp-ax'
 import { isValidImageBytes } from './image-content-validation'
-import { describeClickObstruction, describeWaitTimeout, summarizeVisibleText } from './proma-self-observation-hints'
+import { describeClickObstruction, describeWaitTimeout, extractVisibleTextSample, MAX_VISIBLE_TEXT_EXPRESSION_CHARS, MAX_VISIBLE_TITLE_CHARS, summarizeVisibleText } from './proma-self-observation-hints'
 import { attributesToRecord, buildElementHint, describeUnnamedElement } from './proma-self-element-hint'
 import { isDocumentNotRequestedError, normalizeCdpError } from './proma-self-cdp-errors'
 import {
@@ -104,6 +104,9 @@ interface RefEntry {
   generation: number
   label: string
   editable: boolean
+  /** 观察时的可访问角色与名称，用于批准后按身份重取节点时校验目标未被替换。 */
+  role: string
+  name: string
 }
 
 interface SessionState {
@@ -139,6 +142,14 @@ export class PromaSelfController {
   private sessions = new Map<string, SessionState>()
   private monitoredDebuggers = new WeakSet<Electron.Debugger>()
   private attachedContents: WebContents | null = null
+  /**
+   * 同一 WebContents 的跨会话串行队列。
+   *
+   * 前台可能同时有多个会话可调用自操作工具，但它们操作的是同一个主窗与焦点，
+   * 交错执行会让 fill/focus/click 落到彼此的目标上。仅按 sessionId 串行不够，
+   * 因此再按共享 WebContents 加一层全局锁。
+   */
+  private contentQueues = new WeakMap<WebContents, Promise<void>>()
 
   constructor(private getWindow: () => Electron.BrowserWindow | null = getMainWindow) {}
 
@@ -203,7 +214,12 @@ export class PromaSelfController {
       if (error instanceof BrowserOperationAbortedError) throw error
       // 文档树未请求属于可自行修复的内部状态，不该冒泡成用户可见错误。
       if (isDocumentNotRequestedError(error)) {
-        await contents.debugger.sendCommand('DOM.getDocument', { depth: 0 })
+        await withBrowserCdpTimeout(
+          () => contents.debugger.sendCommand('DOM.getDocument', { depth: 0 }) as Promise<Record<string, unknown>>,
+          'DOM.getDocument',
+          timeoutMs,
+          signal,
+        )
         return timeoutMs === undefined
           ? withBrowserCdpTimeout(command, method, undefined, signal)
           : withBrowserCdpTimeout(command, method, timeoutMs, signal)
@@ -218,6 +234,14 @@ export class PromaSelfController {
     }
   }
 
+  /** 按共享 WebContents 串行执行，避免不同前台会话交错操作同一窗口与焦点。 */
+  private async withContentQueue<T>(contents: WebContents, task: () => Promise<T>): Promise<T> {
+    const previous = this.contentQueues.get(contents) ?? Promise.resolve()
+    const operation = previous.catch(() => undefined).then(task)
+    this.contentQueues.set(contents, operation.then(() => undefined, () => undefined))
+    return operation
+  }
+
   private async run<T>(
     sessionId: string,
     signal: AbortSignal | undefined,
@@ -229,7 +253,11 @@ export class PromaSelfController {
       : state.abortController.signal
     const operation = state.commandTail.catch(() => undefined).then(async () => {
       throwIfBrowserOperationAborted(operationSignal)
-      return task(this.window(), operationSignal)
+      const window = this.window()
+      return this.withContentQueue(window.webContents, async () => {
+        throwIfBrowserOperationAborted(operationSignal)
+        return task(window, operationSignal)
+      })
     })
     state.commandTail = operation.then(() => undefined, () => undefined)
     return operation
@@ -330,6 +358,8 @@ export class PromaSelfController {
         generation: state.generation,
         label,
         editable: candidate.editable,
+        role: candidate.role,
+        name: candidate.name,
       })
       elements.push({
         ref,
@@ -489,16 +519,14 @@ export class PromaSelfController {
     state.projectConsentExpiresAt = Date.now() + PROJECT_CONSENT_TTL_MS
   }
 
-  private async centerForRef(
+  /** 滚动到目标并读取其几何中心；目标节点需仍然存在。 */
+  private async centerForTarget(
     contents: WebContents,
-    state: SessionState,
-    ref: string,
+    target: RefEntry,
     signal: AbortSignal,
   ): Promise<{ x: number; y: number }> {
-    const generation = state.generation
-    const { backendNodeId } = this.resolveRef(state, ref)
+    const { backendNodeId } = target
     await this.cdp(contents, 'DOM.scrollIntoViewIfNeeded', { backendNodeId }, undefined, signal)
-    this.assertGeneration(state, generation, signal)
     const box = await this.cdp(contents, 'DOM.getBoxModel', { backendNodeId }, undefined, signal)
     const model = box.model as { content?: unknown } | undefined
     const quad = Array.isArray(model?.content) ? (model.content as unknown[]) : []
@@ -509,6 +537,77 @@ export class PromaSelfController {
     return {
       x: (numbers[0]! + numbers[2]! + numbers[4]! + numbers[6]!) / 4,
       y: (numbers[1]! + numbers[3]! + numbers[5]! + numbers[7]!) / 4,
+    }
+  }
+
+  private async centerForRef(
+    contents: WebContents,
+    state: SessionState,
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<{ x: number; y: number }> {
+    const generation = state.generation
+    const target = this.resolveRef(state, ref)
+    const point = await this.centerForTarget(contents, target, signal)
+    this.assertGeneration(state, generation, signal)
+    return point
+  }
+
+  /**
+   * 批准创建项目后重新取得新鲜节点。
+   *
+   * 用户回答 AskUserQuestion 时主进程会无条件 `invalidateSessionRefs`，原 ref 必然失效；
+   * 但批准也可能伴随界面重渲染，不能直接复用旧节点坐标。这里按已校验的 backendNodeId
+   * 重新解析，并核对角色与名称一致后才允许继续，身份不符就停下要求重新观察，避免误点。
+   */
+  private async reacquireRefTarget(
+    contents: WebContents,
+    state: SessionState,
+    previous: RefEntry,
+    signal: AbortSignal,
+  ): Promise<RefEntry> {
+    let resolved: Record<string, unknown>
+    try {
+      resolved = await this.cdp(contents, 'DOM.resolveNode', { backendNodeId: previous.backendNodeId }, undefined, signal)
+    } catch (error) {
+      if (error instanceof BrowserOperationAbortedError) throw error
+      console.warn('[Proma 自操作] 批准后目标节点已不存在:', error)
+      throw new Error('目标元素在等待用户同意期间已不存在，请重新调用 PromaObserve 后再操作。')
+    }
+    const object = resolved.object as { objectId?: unknown } | undefined
+    if (typeof object?.objectId !== 'string') {
+      throw new Error('目标元素在等待用户同意期间已不存在，请重新调用 PromaObserve 后再操作。')
+    }
+
+    let role = ''
+    let name = ''
+    try {
+      const ax = await this.cdp(
+        contents,
+        'Accessibility.getPartialAXTree',
+        { backendNodeId: previous.backendNodeId, fetchRelatives: false },
+        undefined,
+        signal,
+      )
+      const nodes = Array.isArray(ax.nodes) ? (ax.nodes as CdpAxNode[]) : []
+      const node = nodes.find((item) => item && item.backendDOMNodeId === previous.backendNodeId) ?? nodes[0]
+      role = node ? cdpTextValue(node.role) : ''
+      name = node ? cdpTextValue(node.name) : ''
+    } catch (error) {
+      if (error instanceof BrowserOperationAbortedError) throw error
+      throw new Error('无法确认批准后的目标元素身份，请重新调用 PromaObserve 后再操作。')
+    }
+
+    const expectedName = previous.name.slice(0, browserObservationNameLimit(previous.role))
+    const currentName = name.slice(0, browserObservationNameLimit(previous.role))
+    if (role !== previous.role || currentName !== expectedName) {
+      throw new Error('目标元素在等待用户同意期间已变化，为避免误点已取消。请重新调用 PromaObserve 确认当前界面。')
+    }
+    return {
+      ...previous,
+      generation: state.generation,
+      role,
+      name: currentName,
     }
   }
 
@@ -634,12 +733,20 @@ export class PromaSelfController {
     signal: AbortSignal,
     requestApproval: PromaSelfApprovalRequester | undefined,
   ): Promise<RefEntry> {
-    const target = this.resolveRef(state, ref)
+    let target = this.resolveRef(state, ref)
+    let approved = false
     if (await this.assertRefAllowed(window.webContents, target, signal)) {
       await this.requireProjectApproval(state, requestApproval, signal, 'start')
+      approved = true
+    }
+    if (approved) {
+      // 批准期间 AskUser 回答会作废本会话所有 ref，必须按身份重取新鲜节点。
+      target = await this.reacquireRefTarget(window.webContents, state, target, signal)
     }
     const generation = state.generation
-    const { x, y } = await this.centerForRef(window.webContents, state, ref, signal)
+    const { x, y } = approved
+      ? await this.centerForTarget(window.webContents, target, signal)
+      : await this.centerForRef(window.webContents, state, ref, signal)
     this.assertGeneration(state, generation, signal)
     // 滚动或等待期间界面可能重新渲染，点击前再校验一次。
     await this.assertRefAllowed(window.webContents, target, signal)
@@ -829,15 +936,14 @@ export class PromaSelfController {
   /** 读取当前页面可见文本片段；读取失败不影响等待结果本身。 */
   private async readVisibleText(contents: WebContents, signal: AbortSignal): Promise<string> {
     try {
+      // 页面侧先截断：避免整页文本超过脚本结果上限后被序列化成截断对象，
+      // 进而在等待超时时误报「当前页面没有可见文本」。
       const value = await this.executeExpression(
         contents,
-        '(() => ({ text: document.body?.innerText || "", title: document.title || "" }))()',
+        `(() => ({ text: (document.body?.innerText || "").slice(0, ${MAX_VISIBLE_TEXT_EXPRESSION_CHARS}), title: (document.title || "").slice(0, ${MAX_VISIBLE_TITLE_CHARS}) }))()`,
         signal,
       )
-      const record = value as { text?: unknown; title?: unknown } | null
-      const text = typeof record?.text === 'string' ? record.text : ''
-      const title = typeof record?.title === 'string' ? record.title : ''
-      return title ? `${title} ${text}` : text
+      return extractVisibleTextSample(value)
     } catch {
       return ''
     }

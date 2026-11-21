@@ -4,9 +4,11 @@ import {
   PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR,
   PROMA_SELF_CONTROL_PROTECTED_ERROR,
   PROMA_SELF_CONTROL_PROTECTED_SELECTOR,
+  PROMA_SELF_PROJECT_CONSENT_LABEL,
   buildPromaSelfControlProjectCreationFunction,
   buildPromaSelfControlProtectionFunction,
   createPromaSelfControlDomGuard,
+  hasPromaSelfProjectConsent,
   isPromaSelfControlActionLabelProtected,
   isPromaSelfControlProjectCreationLabel,
 } from './proma-self-control-policy'
@@ -71,6 +73,33 @@ describe('注入页面上下文的检测函数', () => {
     expect(PROMA_SELF_CONTROL_PROTECTED_ERROR).toContain('需要用户亲自操作')
     expect(PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR).toContain('AskUserQuestion')
     expect(PROMA_SELF_CONTROL_PROJECT_CONSENT_DENIED).toContain('取消')
+  })
+})
+
+describe('创建项目授权回答判定', () => {
+  test('Given 预定义同意选项 When 判定 Then 授权通过', () => {
+    expect(PROMA_SELF_PROJECT_CONSENT_LABEL).toBe('同意')
+    expect(hasPromaSelfProjectConsent({ 创建项目: '同意' })).toBe(true)
+    // 多选按集合判定：连接字符串里包含精确的同意选项即可。
+    expect(hasPromaSelfProjectConsent({ 创建项目: '先说明用途, 同意' })).toBe(true)
+  })
+
+  test('Given 拒绝或否定语义 When 判定 Then 一律不授权', () => {
+    for (const answer of ['拒绝', '不同意', '不要创建', 'yesn\'t', '不', '']) {
+      expect(hasPromaSelfProjectConsent({ 创建项目: answer })).toBe(false)
+    }
+  })
+
+  test('Given 自定义自然语言 When 判定 Then 不视为授权', () => {
+    for (const answer of ['同意吧', '我认为可以创建', 'yes', 'approve', 'OK', '同意（但先备份）']) {
+      expect(hasPromaSelfProjectConsent({ 创建项目: answer })).toBe(false)
+    }
+  })
+
+  test('Given 空答案或非字符串 When 判定 Then 不授权', () => {
+    expect(hasPromaSelfProjectConsent({})).toBe(false)
+    expect(hasPromaSelfProjectConsent({ 创建项目: null })).toBe(false)
+    expect(hasPromaSelfProjectConsent({ 创建项目: ['同意'] })).toBe(false)
   })
 })
 

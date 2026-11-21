@@ -72,6 +72,7 @@ import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
 import { resolveInstructionContext } from './adapters/pi-instruction-migration-tools'
 import type { PromaSelfApprovalRequester } from './proma-self-controller'
+import { PROMA_SELF_PROJECT_CONSENT_LABEL, hasPromaSelfProjectConsent } from './proma-self-control-policy'
 import { getAgentVaultRoots, getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import { buildAgentRuntimeEnv, type AgentRuntimeEnv } from './agent-runtime-env'
@@ -1105,7 +1106,7 @@ export class AgentOrchestrator {
             questions: [{
               question: 'Agent 准备在 Proma 界面里创建项目，这会在本地新建目录。是否同意？',
               header: '创建项目',
-              options: [{ label: '同意' }, { label: '拒绝' }],
+              options: [{ label: PROMA_SELF_PROJECT_CONSENT_LABEL }, { label: '拒绝' }],
             }],
           },
           signal ?? new AbortController().signal,
@@ -1115,7 +1116,7 @@ export class AgentOrchestrator {
         )
         if (result.behavior !== 'allow') return false
         const answers = (result as { updatedInput?: { answers?: Record<string, unknown> } }).updatedInput?.answers ?? {}
-        return Object.values(answers).some((value) => typeof value === 'string' && /同意|approve|^yes/i.test(value))
+        return hasPromaSelfProjectConsent(answers)
       }
 
       const builtinMcpResult = await buildPiBuiltinTools(piSdk, {

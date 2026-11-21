@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { describeClickObstruction, describeWaitTimeout, summarizeVisibleText } from './proma-self-observation-hints'
+import {
+  describeClickObstruction,
+  describeWaitTimeout,
+  extractVisibleTextSample,
+  summarizeVisibleText,
+} from './proma-self-observation-hints'
 
 describe('可见文本摘要', () => {
   test('Given 多行文本 When 摘要 Then 折叠成单行', () => {
@@ -14,6 +19,37 @@ describe('可见文本摘要', () => {
 
   test('Given 空白文本 When 摘要 Then 返回空串', () => {
     expect(summarizeVisibleText('   \n\t ')).toBe('')
+  })
+})
+
+describe('可见文本取样还原', () => {
+  test('Given 正常对象或字符串 When 还原 Then 拼接标题与文本', () => {
+    expect(extractVisibleTextSample({ text: '正文', title: '标题' })).toBe('标题 正文')
+    expect(extractVisibleTextSample({ text: '正文' })).toBe('正文')
+    expect(extractVisibleTextSample('纯文本')).toBe('纯文本')
+    expect(extractVisibleTextSample(null)).toBe('')
+  })
+
+  test('Given 超长文本被序列化截断 When 还原 Then 从预览前缀取回文本而不是空串', () => {
+    const longText = `设置 外观 主题 ${'x'.repeat(70_000)}`
+    const serialized = JSON.stringify({ text: longText, title: '长页面' })
+    const truncated = {
+      truncated: true,
+      preview: serialized.slice(0, 64_000),
+      totalChars: serialized.length,
+    }
+
+    const sample = extractVisibleTextSample(truncated)
+
+    expect(sample).not.toBe('')
+    // 标题排在正文之后，超长正文会把它挤出预览前缀，但正文取样必须被取回。
+    expect(sample).toContain('设置 外观 主题')
+    expect(sample.length).toBeGreaterThan(1_000)
+  })
+
+  test('Given 截断对象但没有可用字段 When 还原 Then 返回空串', () => {
+    expect(extractVisibleTextSample({ truncated: true, preview: '{"other":"value"}', totalChars: 99 })).toBe('')
+    expect(extractVisibleTextSample({ truncated: true })).toBe('')
   })
 })
 

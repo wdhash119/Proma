@@ -1255,6 +1255,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
 
   return (
     <div
+      data-proma-self-control="deny"
       onKeyDownCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keydown')}
       onKeyUpCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keyup')}
       className={cn(

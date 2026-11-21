@@ -28,6 +28,7 @@ import { detectIsWindows } from '@/lib/platform'
 import { getWindowTitlebarContentInsetClass } from '@/lib/window-titlebar-layout'
 import { cn } from '@/lib/utils'
 import { Toaster } from '@/components/ui/sonner'
+import { ComputerUsePreviewPanel } from '@/components/computer-use/ComputerUsePreviewPanel'
 
 const MIN_RIGHT_PANEL_WIDTH = 300
 // 浏览器、预览、终端等工作区在窄视图中优先允许连续阅读和基础操作；需要更多空间时可继续向左拖拽并折叠左栏。
@@ -383,6 +384,8 @@ export function AppShell(): React.ReactElement {
             <div className="flex-1 min-w-0 relative z-[60]">
               {/* 主内容区域（TabBar + TabContent） */}
               <MainArea />
+              {/* Computer Use 窗口镜像浮动在会话主区右下角，不占用右侧工作区 Tab。 */}
+              <ComputerUsePreviewPanel />
               {/* 全局 Toast 固定在 Agent 历史主区右上角，不进入右侧原生浏览器面板。 */}
               <Toaster position="top-right" offset={{ top: 58, right: 12 }} className="agent-history-toaster" />
             </div>

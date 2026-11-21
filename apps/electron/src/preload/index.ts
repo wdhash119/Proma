@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -283,6 +283,17 @@ export interface ElectronAPI {
   closeAgentBrowser: (sessionId: string) => Promise<void>
   onAgentBrowserStateChanged: (callback: (state: import('@proma/shared').BrowserStateChange) => void) => () => void
   onAgentBrowserTabFocused: (callback: (change: import('@proma/shared').BrowserTabFocusChange) => void) => () => void
+
+  // ===== Computer Use 窗口镜像预览 =====
+
+  /** 轮询当前会话的预览状态（含 base64 画面）；没有活跃预览时返回 null */
+  getComputerUsePreview: (sessionId: string) => Promise<import('@proma/shared').ComputerUsePreviewState | null>
+  /** 把预览目标窗口切换到前台 */
+  activateComputerUsePreview: (sessionId: string, previewId: string) => Promise<void>
+  /** 采集失败后重新采集 */
+  retryComputerUsePreview: (sessionId: string, previewId: string) => Promise<import('@proma/shared').ComputerUsePreviewState | null>
+  /** 关闭预览面板并释放采集会话 */
+  dismissComputerUsePreview: (sessionId: string, previewId: string) => Promise<void>
 
   // ===== 通用工具 =====
 
@@ -1497,6 +1508,15 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on(AGENT_IPC_CHANNELS.BROWSER_TAB_FOCUSED, listener)
     return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.BROWSER_TAB_FOCUSED, listener)
   },
+
+  // Computer Use 预览：renderer 只投影状态快照，不接触驱动与窗口句柄。
+  getComputerUsePreview: (sessionId: string) => ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.GET_PREVIEW, sessionId),
+  activateComputerUsePreview: (sessionId: string, previewId: string) =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.ACTIVATE, sessionId, previewId),
+  retryComputerUsePreview: (sessionId: string, previewId: string) =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.RETRY, sessionId, previewId),
+  dismissComputerUsePreview: (sessionId: string, previewId: string) =>
+    ipcRenderer.invoke(COMPUTER_USE_IPC_CHANNELS.DISMISS, sessionId, previewId),
 
   // 通用工具
   openExternal: (url: string) => {

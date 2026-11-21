@@ -10,7 +10,7 @@ import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statS
 import { realpath, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -154,10 +154,12 @@ import type {
   BrowserNavigateInput,
   BrowserTabInput,
   BrowserCreateTabInput,
+  ComputerUsePreviewState,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { browserController } from './lib/browser-controller'
+import { computerUsePreview } from './lib/computer-use-preview'
 import { acknowledgeTerminalOutput, closeTerminalsForSession, createTerminal, getTerminalSnapshot, killTerminal, resizeTerminal, writeTerminal } from './lib/terminal-service'
 import { getMainWindow } from './lib/main-window-store'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
@@ -2642,6 +2644,49 @@ export function registerIpcHandlers(): void {
     return browserController.closeTab(input.sessionId, input.tabId)
   })
 
+  // Computer Use 窗口镜像：renderer 只能取得 data URL 快照与状态副本，
+  // 驱动路径、采集会话与窗口句柄始终留在主进程。
+  const requirePreviewIds = (sessionId: unknown, previewId: unknown): { sessionId: string; previewId: string } => {
+    if (typeof sessionId !== 'string' || !sessionId || typeof previewId !== 'string' || !previewId) {
+      throw new Error('预览参数非法。')
+    }
+    return { sessionId, previewId }
+  }
+
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.GET_PREVIEW,
+    async (event, sessionId: string): Promise<ComputerUsePreviewState | null> => {
+      await assertMainRenderer(event.sender.id)
+      if (typeof sessionId !== 'string' || !sessionId) throw new Error('会话 ID 非法。')
+      if (!getAgentSessionMeta(sessionId)) return null
+      return computerUsePreview.get(sessionId, true)
+    },
+  )
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.ACTIVATE,
+    async (event, sessionId: string, previewId: string): Promise<void> => {
+      await assertMainRenderer(event.sender.id)
+      const ids = requirePreviewIds(sessionId, previewId)
+      await computerUsePreview.activate(ids.sessionId, ids.previewId)
+    },
+  )
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.RETRY,
+    async (event, sessionId: string, previewId: string): Promise<ComputerUsePreviewState | null> => {
+      await assertMainRenderer(event.sender.id)
+      const ids = requirePreviewIds(sessionId, previewId)
+      return computerUsePreview.retry(ids.sessionId, ids.previewId)
+    },
+  )
+  ipcMain.handle(
+    COMPUTER_USE_IPC_CHANNELS.DISMISS,
+    async (event, sessionId: string, previewId: string): Promise<void> => {
+      await assertMainRenderer(event.sender.id)
+      const ids = requirePreviewIds(sessionId, previewId)
+      computerUsePreview.dismiss(ids.sessionId, ids.previewId)
+    },
+  )
+
 
   // 获取 Agent 会话 SDKMessage（Phase 4 新格式）
   ipcMain.handle(
@@ -2786,6 +2831,8 @@ export function registerIpcHandlers(): void {
       clearAgentQueuedMessages(id)
       // 清理自操作的引用与在途指令，避免会话删除后仍持有主窗口 debugger 引用。
       promaSelfController.disposeSession(id)
+      // 预览会话持有驱动采集会话，删除会话时必须一并回收。
+      computerUsePreview.finishSession(id)
       await browserController.close(id)
       closeTerminalsForSession(id)
       deleteAgentSession(id)

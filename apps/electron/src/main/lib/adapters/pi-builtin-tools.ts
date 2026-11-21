@@ -41,6 +41,7 @@ import { getMainRepoRoot, listWorktrees } from '../git-diff-service'
 import { fetchPageAsMarkdown, formatWebFetchOutcome } from '../web-fetch-service'
 import { formatWebSearchOutcome, searchWeb } from '../web-search-service'
 import { buildPromaSelfTools } from './pi-proma-self-tools'
+import { buildComputerUseTools } from './pi-computer-use-tools'
 import { getWorktreeRepos, getAgentWorkspace, listAgentWorkspaces, listAgentWorkspacesWithProjectRootStatus } from '../agent-workspace-manager'
 import { resolveAutomationWorkspace, summarizeAutomationWorkspace } from './automation-workspace'
 import { downloadInstaller, launchInstaller } from '../installer-downloader'
@@ -1726,6 +1727,16 @@ export async function buildPiBuiltinTools(
       tools.push(...buildPromaSelfTools(sdk, ctx) as ToolDefinition[])
     } catch (error) {
       console.error('[Pi 桥接] 注入 Proma 自操作工具失败:', error)
+    }
+  }
+
+  // Computer Use 窗口镜像同样需要可见主窗口：镜像浮层挂在会话主区，
+  // 自动化与子会话没有用户在场的观察窗口，因此与自操作工具共用同一条件。
+  if (selfControlAvailable) {
+    try {
+      tools.push(...buildComputerUseTools(sdk, ctx) as ToolDefinition[])
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 Computer Use 预览工具失败:', error)
     }
   }
 

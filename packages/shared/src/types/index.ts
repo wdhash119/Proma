@@ -72,3 +72,6 @@ export * from './memory'
 
 // 用户授权的 Markdown Vault 相关类型
 export * from './vault'
+
+// Computer Use 窗口镜像预览相关类型
+export * from './computer-use'

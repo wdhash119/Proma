@@ -798,6 +798,10 @@ export interface AgentSessionMeta {
    * 这里额外记录历史，worktree 目录被删除后可从日志重建。
    */
   checkoutHistory?: SessionCheckoutEntry[]
+  /** 会话关联的变更请求（Pull Request）绑定；详见 change-request.ts。 */
+  changeRequests?: import('./change-request').ChangeRequestBinding[]
+  /** @deprecated 旧版单条绑定，读取时迁移到 changeRequests。 */
+  pullRequest?: import('./change-request').LegacyPullRequestBinding
   /**
    * 会话私有工作台的文件布局。新会话在 workbench 根目录直接存放计划、handoff
    * 等私有资料；缺失字段的历史会话保留 `.context/` 路径以兼容工具历史。

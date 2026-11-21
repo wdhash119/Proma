@@ -51,6 +51,7 @@ import { sendAgentStreamComplete } from './agent-completion-payload'
 import { AgentStreamForwarder } from './agent-stream-forwarder'
 import { AgentStreamRouteRegistry } from './agent-stream-route-registry'
 import { AgentQueueCoordinator } from './agent-queue-coordinator'
+import { observeAgentStreamPayload } from './change-request-service'
 import { isStaleActiveQueueError } from './agent-queue-routing'
 import { shouldStopBeforeAgentRun } from './agent-stop-policy'
 
@@ -237,6 +238,8 @@ eventBus.use((sessionId, payload, next) => {
   if (payload.kind === 'sdk_message' && payload.message.type === 'system' && payload.message.subtype === 'task_notification') {
     agentQueueCoordinator.onBackgroundTaskComplete(sessionId)
   }
+  // 识别 Agent 创建/推送 PR，并把正文引用的 PR 链接自动关联到会话。
+  observeAgentStreamPayload(sessionId, payload as unknown as { kind: string; message?: unknown })
   next()
 })
 

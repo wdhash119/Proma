@@ -635,7 +635,7 @@ export function getAgentSessionSDKMessages(id: string): SDKMessage[] {
  */
 export function updateAgentSessionMeta(
   id: string,
-  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
+  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
 ): AgentSessionMeta {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)
@@ -648,6 +648,10 @@ export function updateAgentSessionMeta(
   const updateKeys = Object.keys(updates)
   // 星标只是侧栏的视觉标记，不应改变会话的新鲜度或归档状态。
   const isStarredOnly = updateKeys.every((key) => key === 'starred')
+  // PR 状态与检出日志是后台元数据：更新它们不能让会话在侧栏里跳到最前。
+  const isBackgroundMetadataOnly = updateKeys.length > 0 && updateKeys.every((key) => (
+    key === 'changeRequests' || key === 'pullRequest' || key === 'checkoutHistory'
+  ))
   // 非手动归档操作时，若会话已归档则自动恢复为活跃（仅更新 stoppedByUser 或 starred 不触发解归档）
   const isStoppedByUserOnly = updateKeys.every((key) => key === 'stoppedByUser')
   const autoUnarchive = existing.archived && !('archived' in updates) && !isStoppedByUserOnly && !isStarredOnly
@@ -655,7 +659,7 @@ export function updateAgentSessionMeta(
     ...existing,
     ...updates,
     ...(autoUnarchive ? { archived: false } : {}),
-    updatedAt: isStarredOnly ? existing.updatedAt : Date.now(),
+    updatedAt: isStarredOnly || isBackgroundMetadataOnly ? existing.updatedAt : Date.now(),
   }
 
   index.sessions[idx] = updated

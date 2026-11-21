@@ -14,6 +14,7 @@ import { FileTypeIcon } from '@/components/file-browser/FileTypeIcon'
 import { agentDiffUnseenFilesAtom, agentDiffDataAtom, agentNonGitFileChangesAtom, agentSelectedWorktreeAtom, agentSessionsAtom, workspaceGitDiffRefreshVersionAtom } from '@/atoms/agent-atoms'
 import type { ChangedFileEntry, ChangedFileStatus, ChangeSource, UntrackedFileEntry, WorktreeInfo } from '@proma/shared'
 import { WorktreeSelector } from './WorktreeSelector'
+import { ChangeRequestBar } from './ChangeRequestBar'
 import { groupSessionFileChanges, arePathsEqual } from '@/lib/session-file-changes'
 import { detectIsWindows } from '@/lib/platform'
 import type { SessionFileChange } from '@/lib/session-file-changes'
@@ -285,6 +286,9 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* 变更请求状态：只要会话在 Git 仓库里就显示，便于没开改动时也能看到 PR。 */}
+      <ChangeRequestBar sessionId={sessionId} />
+
       {/* Worktree 分支选择器仅作用于 Git 改动。 */}
       {shouldShowWorktreeSelector && (
         <WorktreeSelector

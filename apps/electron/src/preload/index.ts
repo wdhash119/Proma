@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -201,6 +201,8 @@ import type {
 import { QUICK_TASK_IPC_CHANNELS, TRAY_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS } from '../types'
 import type {
   SessionArtifact,
+  ChangeRequestBinding,
+  ChangeRequestsActionInput,
   MemoryTargetSummary,
   MemoryDocumentPayload,
   MemoryRevisionItem,
@@ -616,6 +618,10 @@ export interface ElectronAPI {
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => Promise<AgentSessionMeta>
   /** 从会话检出日志恢复被删除的 worktree */
   restoreSessionWorktree: (sessionId: string, worktreePath: string) => Promise<AgentSessionMeta>
+  /** 变更请求（PR）操作：list / discover / refresh / track / dismiss / restore / remove */
+  changeRequestsAction: (input: ChangeRequestsActionInput) => Promise<{ bindings: ChangeRequestBinding[]; error?: string }>
+  /** 主进程推送：会话的变更请求状态已更新 */
+  onChangeRequestsChanged: (callback: (payload: { sessionIds: string[] }) => void) => () => void
 
   /** 删除 Agent 会话 */
   deleteAgentSession: (id: string) => Promise<void>
@@ -1935,6 +1941,15 @@ const electronAPI: ElectronAPI = {
 
   restoreSessionWorktree: (sessionId: string, worktreePath: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RESTORE_SESSION_WORKTREE, sessionId, worktreePath)
+  },
+
+  changeRequestsAction: (input: ChangeRequestsActionInput) => {
+    return ipcRenderer.invoke(CHANGE_REQUESTS_IPC_CHANNELS.ACTION, input)
+  },
+  onChangeRequestsChanged: (callback: (payload: { sessionIds: string[] }) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, payload: { sessionIds: string[] }): void => callback(payload)
+    ipcRenderer.on(CHANGE_REQUESTS_IPC_CHANNELS.CHANGED, listener)
+    return () => { ipcRenderer.removeListener(CHANGE_REQUESTS_IPC_CHANNELS.CHANGED, listener) }
   },
 
   deleteAgentSession: (id: string) => {

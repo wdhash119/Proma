@@ -126,6 +126,7 @@ import {
   shouldSuppressVoiceDictationActivate,
 } from './lib/voice-dictation-window'
 import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/global-shortcut-service'
+import { disposeChangeRequestService, initChangeRequestService } from './lib/change-request-service'
 import { setPromaVersion } from '@proma/core'
 import { canRecoverRenderer, RENDERER_RECOVERY_WINDOW_MS } from './lib/renderer-process-recovery'
 import { TRAY_IPC_CHANNELS } from '../types'
@@ -768,6 +769,9 @@ async function bootstrap(): Promise<void> {
   if (getSettings().voiceDictation?.enabled === true) {
     safeRun('createVoiceDictationWindow', createVoiceDictationWindow)
   }
+
+  // 变更请求追踪：同步已有绑定并开始轮询 PR 状态。
+  safeRun('initChangeRequestService', initChangeRequestService)
 
   // 飞书实时同步开启时，默认阻止系统自动休眠，保证远程群内继续可用。
   safeRun('syncFeishuSyncSleepBlocker', () => syncFeishuSyncSleepBlocker(getSettings()))

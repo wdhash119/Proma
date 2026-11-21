@@ -64,6 +64,9 @@ export * from './automation'
 export * from './planning'
 
 
+// 变更请求（Pull Request）追踪相关类型
+export * from './change-request'
+
 // 记忆维护（全局画像 + 项目记忆）相关类型
 export * from './memory'
 

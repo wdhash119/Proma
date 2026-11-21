@@ -8,7 +8,7 @@ import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nat
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { realpath, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
@@ -1464,6 +1464,12 @@ export function registerIpcHandlers(): void {
   ipcMain.on(TERMINAL_IPC_CHANNELS.ACK_OUTPUT, (event, input) => {
     assertMainTerminalRenderer(event.sender.id)
     acknowledgeTerminalOutput(input)
+  })
+
+  // 沙箱 preload 不能读 node:os；xterm 需要的 Windows build 号由主进程同步代查。
+  ipcMain.on(TERMINAL_IPC_CHANNELS.GET_WINDOWS_BUILD_NUMBER, (event) => {
+    const build = Number(osRelease().split('.')[2])
+    event.returnValue = Number.isFinite(build) && build > 0 ? Math.floor(build) : 0
   })
 
   console.log('[IPC] 正在注册 IPC 处理器...')

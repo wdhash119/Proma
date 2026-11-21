@@ -47,9 +47,10 @@ describe('终端组件 ConPTY 适配契约', () => {
     expect(source).toContain('convertEol: !detectIsWindows()')
   })
 
-  test('Given preload When 检查 Then 同步暴露 getWindowsBuildNumber', () => {
+  test('Given preload When 检查 Then 经同步 IPC 暴露 getWindowsBuildNumber（沙箱不可读 node:os）', () => {
     const source = readFileSync(join(import.meta.dir, '../../preload/index.ts'), 'utf8')
     expect(source).toContain('getWindowsBuildNumber: () => number')
-    expect(source).toContain("osRelease().split('.')[2]")
+    expect(source).toContain('ipcRenderer.sendSync(TERMINAL_IPC_CHANNELS.GET_WINDOWS_BUILD_NUMBER)')
+    expect(source).not.toContain("from 'node:os'")
   })
 })

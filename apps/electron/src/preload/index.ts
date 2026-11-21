@@ -6,7 +6,6 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { release as osRelease } from 'node:os'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
@@ -1774,9 +1773,8 @@ const electronAPI: ElectronAPI = {
   },
 
   getWindowsBuildNumber: () => {
-    // os.release() 形如 '10.0.22631'；第三段是 build 号，供 xterm 选择 ConPTY 路径。
-    const build = Number(osRelease().split('.')[2])
-    return Number.isFinite(build) && build > 0 ? Math.floor(build) : 0
+    // 沙箱 preload 无法使用 node:os，同步 IPC 由主进程代查 os.release() 第三段。
+    return ipcRenderer.sendSync(TERMINAL_IPC_CHANNELS.GET_WINDOWS_BUILD_NUMBER) as number
   },
 
   onSystemThemeChanged: (callback: (isDark: boolean) => void) => {

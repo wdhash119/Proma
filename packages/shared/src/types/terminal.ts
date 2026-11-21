@@ -16,6 +16,8 @@ export const TERMINAL_IPC_CHANNELS = {
   AGENT_CLOSE: 'terminal:agent-close',
   OUTPUT: 'terminal:output',
   EXIT: 'terminal:exit',
+  /** 同步查询 Windows build 号（沙箱 preload 无法读 node:os，由主进程代查）。 */
+  GET_WINDOWS_BUILD_NUMBER: 'terminal:get-windows-build-number',
 } as const
 
 export type TerminalProfile = 'default' | 'zsh' | 'bash' | 'pwsh' | 'powershell' | 'cmd' | 'git-bash' | 'wsl'

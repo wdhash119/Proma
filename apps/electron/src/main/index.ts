@@ -931,6 +931,8 @@ app.on('before-quit', () => {
 
   // 停止定时任务调度器
   stopScheduler()
+  // 停止变更请求轮询器
+  disposeChangeRequestService()
   stopPlanningReminderScheduler()
   stopPlanningNativeSyncCoordinator()
   // 释放飞书同步防休眠

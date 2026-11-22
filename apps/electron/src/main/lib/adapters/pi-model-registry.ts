@@ -18,8 +18,11 @@ import {
   isGpt6LunaFamily,
   isGpt6SolFamily,
   isMimoV26Model,
+  normalizeModelCapabilityOverrides,
   resolveReasoningCapability,
   resolveReasoningProfile,
+  type ModelCapabilityOverrides,
+  type ModelCapabilitySummary,
   type CodexOAuthCredentials,
   type GithubCopilotOAuthCredentials,
   type XaiOAuthCredentials,
@@ -630,10 +633,14 @@ async function findPiCatalogModel(provider: ProviderType, modelId: string): Prom
 export async function resolvePiImageInputCapability(
   provider: ProviderType,
   modelId: string | undefined,
+  modelCapabilities?: ModelCapabilityOverrides,
 ): Promise<'supported' | 'unsupported' | 'unknown'> {
   const resolvedModelId = stripLegacyAgentSdkContextSuffix(modelId)
   if (provider === 'opencode-go-openai') return 'unsupported'
   if (!resolvedModelId) return 'unknown'
+  const overrides = normalizeModelCapabilityOverrides(modelCapabilities)
+  // 手动声明优先于目录与实验变体契约。
+  if (overrides?.imageInput !== undefined) return overrides.imageInput ? 'supported' : 'unsupported'
   // 实验变体尚未进入 Pi catalog，不能因目录缺失退回 unknown。
   if (supportsPiNativeImageInput(resolvedModelId)) return 'supported'
   const catalogModel = await findPiCatalogModel(provider, resolvedModelId)
@@ -647,14 +654,28 @@ export interface PiVisionRelayRoute {
   baseUrl?: string
 }
 
+/** 按手动覆盖调整输入模态；undefined 表示跟随自动检测。 */
+function applyImageInputOverride(
+  input: PiCatalogModel['input'],
+  imageInput: boolean | undefined,
+): PiCatalogModel['input'] {
+  if (imageInput === undefined) return input
+  if (imageInput) return input.includes('image') ? input : [...input, 'image']
+  return input.filter((modality) => modality !== 'image')
+}
+
 export async function resolvePiVisionRelayRoute(
   provider: ProviderType,
   modelId: string | undefined,
+  modelCapabilities?: ModelCapabilityOverrides,
 ): Promise<PiVisionRelayRoute | undefined> {
   const resolvedModelId = stripLegacyAgentSdkContextSuffix(modelId)
   if (provider === 'opencode-go-openai' || !resolvedModelId) return undefined
+  const overrides = normalizeModelCapabilityOverrides(modelCapabilities)
+  // 手动声明不支持图片时，即使目录命中也不路由视觉助手。
+  if (overrides?.imageInput === false) return undefined
   // DeepSeek Flash 的实验视觉模型尚未进入 Pi catalog；其渠道协议无需 catalog 分流。
-  if (supportsPiNativeImageInput(resolvedModelId)) {
+  if (supportsPiNativeImageInput(resolvedModelId) || overrides?.imageInput === true) {
     return { adapterProvider: provider }
   }
 
@@ -673,7 +694,11 @@ export async function resolvePiVisionRelayRoute(
 export async function resolvePiReasoningCapability(
   provider: ProviderType,
   modelId: string | undefined,
+  modelCapabilities?: ModelCapabilityOverrides,
 ): Promise<ReasoningCapability | undefined> {
+  const overrides = normalizeModelCapabilityOverrides(modelCapabilities)
+  // 手动声明不支持推理时，优先于 profile 与 catalog。
+  if (overrides?.reasoning === false) return undefined
   const resolvedModelId = stripLegacyAgentSdkContextSuffix(modelId)
   const catalogModel = resolvedModelId
     ? await findPiCatalogModel(provider, resolvedModelId)
@@ -684,16 +709,36 @@ export async function resolvePiReasoningCapability(
       ? 'openai-responses'
       : toReasoningTransport(resolvePiApi(provider)),
   })
-  return resolveReasoningCapability({
+  const detected = resolveReasoningCapability({
     profile,
     catalog: catalogModel && {
       reasoning: catalogModel.reasoning,
       thinkingLevelMap: catalogModel.thinkingLevelMap,
     },
   })
+  if (detected) return detected
+  // 目录与 profile 均未识别，但用户手动声明支持推理：按协议给出标准档位。
+  if (overrides?.reasoning === true) return createManualReasoningCapability(provider)
+  return undefined
 }
 
-async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiModelDefaults> {
+/** 手动声明推理能力时的兼容档位；不携带模型专属编码，由 Pi 按协议默认处理。 */
+function createManualReasoningCapability(provider: ProviderType): ReasoningCapability {
+  const transport = provider === 'openai-codex' || provider === 'xai'
+    ? 'openai-responses'
+    : toReasoningTransport(resolvePiApi(provider))
+  const levels: ReasoningCapability['levels'] = transport === 'openai-completions' || transport === 'openai-responses'
+    ? ['off', 'low', 'medium', 'high', 'xhigh']
+    : ['off', 'low', 'medium', 'high']
+  return { source: 'manual', levels, defaultLevel: 'high' }
+}
+
+async function resolvePiModelDefaults(input: {
+  provider: ProviderType
+  model?: string
+  modelCapabilities?: ModelCapabilityOverrides
+}): Promise<PiModelDefaults> {
+  const overrides = normalizeModelCapabilityOverrides(input.modelCapabilities)
   const catalogModel = input.model ? await findPiCatalogModel(input.provider, input.model) : undefined
   const codexAlignedCapabilities = getCodexAlignedGPT5Capabilities(input.model)
   const api = resolvePiApi(input.provider)
@@ -711,26 +756,69 @@ async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiMod
   const shouldForceAdaptiveThinking = shouldForcePiAdaptiveThinking(api, catalogModel, input.model)
   return {
     api,
-    reasoning: catalogModel?.reasoning ?? true,
+    // 手动覆盖优先于目录与默认值；未覆盖的字段保持原有自动检测链。
+    reasoning: overrides?.reasoning ?? catalogModel?.reasoning ?? true,
     thinkingLevelMap: providerSpecificCapabilities?.thinkingLevelMap
       ?? catalogModel?.thinkingLevelMap,
     compat: shouldForceAdaptiveThinking
       ? { ...providerSpecificCapabilities?.compat, forceAdaptiveThinking: true }
       : providerSpecificCapabilities?.compat,
-    input: catalogModel ? [...catalogModel.input] : ['text', 'image'],
+    input: applyImageInputOverride(catalogModel ? [...catalogModel.input] : ['text', 'image'], overrides?.imageInput),
     cost: catalogModel ? { ...catalogModel.cost } : { ...ZERO_MODEL_COST },
     // Codex 对齐策略优先；其他模型仍保留 catalog 与 shared inference 中更大的已验证能力。
-    contextWindow: codexAlignedCapabilities?.contextWindow ?? Math.max(catalogContextWindow, inferredContextWindow),
+    contextWindow: overrides?.contextWindow
+      ?? codexAlignedCapabilities?.contextWindow
+      ?? Math.max(catalogContextWindow, inferredContextWindow),
     // Pi catalog 缺少时，GLM-5.3 系列仍按官方 128K 输出上限注册。
-    maxTokens: isVolcengineGlm5x
-      ? VOLCENGINE_GLM_MAX_TOKENS
-      : (catalogModel?.maxTokens
-        ?? (isCatalogMissingGlm53Family
-          ? GLM_53_FAMILY_MAX_TOKENS
-          : isCatalogMissingMimoV26Family
-            ? MIMO_V26_FAMILY_MAX_TOKENS
-            : DEFAULT_MAX_TOKENS)),
+    maxTokens: overrides?.maxOutputTokens
+      ?? (isVolcengineGlm5x
+        ? VOLCENGINE_GLM_MAX_TOKENS
+        : (catalogModel?.maxTokens
+          ?? (isCatalogMissingGlm53Family
+            ? GLM_53_FAMILY_MAX_TOKENS
+            : isCatalogMissingMimoV26Family
+              ? MIMO_V26_FAMILY_MAX_TOKENS
+              : DEFAULT_MAX_TOKENS))),
   }
+}
+
+/**
+ * 解析模型能力自动检测摘要（不含手动覆盖），供模型设置界面展示默认值与识别状态。
+ */
+export async function resolveModelCapabilitySummary(
+  provider: ProviderType,
+  modelId: string,
+): Promise<ModelCapabilitySummary> {
+  const resolvedModelId = stripLegacyAgentSdkContextSuffix(modelId)
+  const defaults = await resolvePiModelDefaults({ provider, model: resolvedModelId })
+  const catalogModel = resolvedModelId ? await findPiCatalogModel(provider, resolvedModelId) : undefined
+  const imageCapability = await resolvePiImageInputCapability(provider, resolvedModelId)
+  const reasoningCapability = await resolvePiReasoningCapability(provider, resolvedModelId)
+  return {
+    contextWindow: defaults.contextWindow,
+    maxOutputTokens: defaults.maxTokens,
+    imageInput: imageCapability === 'unknown' ? undefined : imageCapability === 'supported',
+    reasoning: reasoningCapability ? true : catalogModel?.reasoning,
+    detected: Boolean(catalogModel),
+  }
+}
+
+/** 将手动覆盖应用到已构建的目录模型（订阅渠道的内置模型路径）。 */
+function patchCatalogModelWithOverrides(
+  model: PiCatalogModel,
+  modelCapabilities: ModelCapabilityOverrides | undefined,
+): PiCatalogModel {
+  const overrides = normalizeModelCapabilityOverrides(modelCapabilities)
+  if (!overrides) return model
+  const next: PiCatalogModel = { ...model }
+  if (overrides.contextWindow !== undefined) next.contextWindow = overrides.contextWindow
+  if (overrides.maxOutputTokens !== undefined) next.maxTokens = overrides.maxOutputTokens
+  if (overrides.imageInput !== undefined) next.input = applyImageInputOverride([...model.input], overrides.imageInput)
+  if (overrides.reasoning !== undefined) {
+    next.reasoning = overrides.reasoning
+    if (!overrides.reasoning) next.thinkingLevelMap = undefined
+  }
+  return next
 }
 
 export function normalizePiBaseUrl(baseUrl: string | undefined, provider: ProviderType, api = normalizePiApi(provider)): string | undefined {
@@ -1010,21 +1098,29 @@ export async function buildModel(sdk: PiSdk, input: PiAgentQueryOptions) {
   if (input.provider === 'opencode-go-openai') {
     throw new Error('OpenCode Go 渠道已停用，请选择其他渠道')
   }
+  // 订阅渠道使用 Pi 内置目录模型，手动覆盖在构建后统一补丁。
   if (input.provider === 'openai-codex') {
-    return buildCodexModel(sdk, input)
+    const built = await buildCodexModel(sdk, input)
+    return { ...built, model: patchCatalogModelWithOverrides(built.model, input.modelCapabilities) }
   }
   if (input.provider === 'xai') {
-    return buildXaiModel(sdk, input)
+    const built = await buildXaiModel(sdk, input)
+    return { ...built, model: patchCatalogModelWithOverrides(built.model, input.modelCapabilities) }
   }
   if (input.provider === 'github-copilot') {
-    return buildGithubCopilotModel(sdk, input)
+    const built = await buildGithubCopilotModel(sdk, input)
+    return { ...built, model: patchCatalogModelWithOverrides(built.model, input.modelCapabilities) }
   }
   const providerName = `proma-${input.provider}-${input.sessionId}`
   const resolvedApiKey = resolvePiApiKey(input.provider, input.apiKey)
   // pi runtime 统一剥离历史 `[1m]` 后缀：无论上游从哪条路径传入，注册与查找都用干净 ID。
   const resolvedModelId = stripLegacyAgentSdkContextSuffix(input.model)
   const modelRuntime = await sdk.ModelRuntime.create({ allowModelNetwork: false })
-  const modelDefaults = await resolvePiModelDefaults({ ...input, model: resolvedModelId })
+  const modelDefaults = await resolvePiModelDefaults({
+    provider: input.provider,
+    model: resolvedModelId,
+    modelCapabilities: input.modelCapabilities,
+  })
   const api = modelDefaults.api
   const baseUrl = normalizePiBaseUrl(input.baseUrl, input.provider, api)
   if (!baseUrl) {

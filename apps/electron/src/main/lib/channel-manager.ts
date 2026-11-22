@@ -29,6 +29,7 @@ import type {
 } from '@proma/shared'
 import {
   extractZhipuCodingTeamApiToken,
+  normalizeModelCapabilityOverrides,
   parseZhipuTeamCredentials,
   PROVIDER_DEFAULT_URLS,
   parseCodexCredentials,
@@ -596,6 +597,17 @@ export function getChannelById(id: string): Channel | undefined {
   return config.channels.find((c) => c.id === id)
 }
 
+/** 规范化模型列表中的手动能力覆盖：非法字段丢弃，无有效覆盖时移除该键。 */
+function sanitizeChannelModels(models: ChannelModel[]): ChannelModel[] {
+  return models.map((model) => {
+    const next = { ...model }
+    const capabilities = normalizeModelCapabilityOverrides(next.capabilities)
+    if (capabilities) next.capabilities = capabilities
+    else delete next.capabilities
+    return next
+  })
+}
+
 /**
  * 创建新渠道
  *
@@ -613,7 +625,7 @@ export function createChannel(input: ChannelCreateInput): Channel {
     provider: input.provider,
     baseUrl: input.baseUrl,
     apiKey: encryptApiKey(input.apiKey),
-    models: input.models,
+    models: sanitizeChannelModels(input.models),
     enabled: input.enabled,
     createdAt: now,
     updatedAt: now,
@@ -650,7 +662,7 @@ export function updateChannel(id: string, input: ChannelUpdateInput): Channel {
     provider: input.provider ?? existing.provider,
     baseUrl: input.baseUrl ?? existing.baseUrl,
     apiKey: input.apiKey ? encryptApiKey(input.apiKey) : existing.apiKey,
-    models: input.models ?? existing.models,
+    models: input.models ? sanitizeChannelModels(input.models) : existing.models,
     enabled: input.enabled ?? existing.enabled,
     updatedAt: Date.now(),
   }

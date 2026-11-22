@@ -21,6 +21,8 @@ interface SettingsInputProps {
   onChange: (value: string) => void
   /** 失焦回调（可选，用于延迟保存场景） */
   onBlur?: () => void
+  /** 键盘事件（可选，如回车提交） */
+  onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void
   /** 占位符 */
   placeholder?: string
   /** 是否必填 */
@@ -39,6 +41,7 @@ export function SettingsInput({
   value,
   onChange,
   onBlur,
+  onKeyDown,
   placeholder,
   required,
   disabled,
@@ -58,6 +61,7 @@ export function SettingsInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         required={required}
         disabled={disabled}

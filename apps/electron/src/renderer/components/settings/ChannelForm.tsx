@@ -22,6 +22,7 @@ import {
   Zap,
   Download,
   Search,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSetAtom } from 'jotai'
@@ -32,6 +33,7 @@ import { Input } from '@/components/ui/input'
 import {
   PROVIDER_DEFAULT_URLS,
   PROVIDER_LABELS,
+  hasModelCapabilityOverrides,
   parseZhipuTeamCredentials,
   parseCodexCredentials,
   parseGithubCopilotCredentials,
@@ -45,6 +47,8 @@ import type {
   CodexOAuthDeviceCode,
   GithubCopilotOAuthDeviceCode,
   FetchModelsResult,
+  ModelCapabilityOverrides,
+  ModelCapabilitySummary,
   ProviderType,
   XaiOAuthDeviceCode,
 } from '@proma/shared'
@@ -73,6 +77,7 @@ import {
   SettingsSelect,
   SettingsToggle,
 } from './primitives'
+import { ModelCapabilitiesDialog } from './ModelCapabilitiesDialog'
 
 interface ChannelFormProps {
   /** 编辑模式下传入已有渠道，创建模式传 null */
@@ -134,6 +139,15 @@ const PROVIDER_SELECT_OPTIONS = PROVIDER_OPTIONS.map((p) => {
     icon: getProviderLogo(p),
   }
 })
+
+/** 替换模型列表时，保留同 ID 模型已配置的手动能力覆盖。 */
+function withPreservedCapabilities(next: ChannelModel[], prev: ChannelModel[]): ChannelModel[] {
+  const prevById = new Map(prev.map((m) => [m.id, m]))
+  return next.map((m) => {
+    const old = prevById.get(m.id)
+    return old?.capabilities ? { ...m, capabilities: old.capabilities } : m
+  })
+}
 
 function resolveDirectTestModelId(provider: ProviderType, models: ChannelModel[]): string | undefined {
   if (!PROVIDER_TEST_MODEL_PRESETS[provider]) return undefined
@@ -257,6 +271,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
 
   // 模型搜索过滤
   const [modelFilter, setModelFilter] = React.useState('')
+
+  // 模型能力手动设置
+  const [capabilitiesModelId, setCapabilitiesModelId] = React.useState<string | null>(null)
+  const [capabilitySummaries, setCapabilitySummaries] = React.useState<Record<string, ModelCapabilitySummary>>({})
 
   // UI 状态
   const [saving, setSaving] = React.useState(false)
@@ -580,6 +598,17 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     )
   }
 
+  /** 写回模型能力手动覆盖；编辑模式的 auto-save 由 models 变化触发。 */
+  const handleModelCapabilitiesChange = React.useCallback((modelId: string, capabilities: ModelCapabilityOverrides | undefined): void => {
+    setModels((prev) => prev.map((m) => {
+      if (m.id !== modelId) return m
+      const next = { ...m }
+      if (capabilities) next.capabilities = capabilities
+      else delete next.capabilities
+      return next
+    }))
+  }, [])
+
   const handleCancelCodexLogin = (): void => {
     codexLoggingInRef.current = false
     void window.electronAPI.codexOAuthCancel()
@@ -610,7 +639,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         const modelsResult = await window.electronAPI.fetchModels({ provider, baseUrl, apiKey: credentials })
         setFetchResult(modelsResult)
         if (modelsResult.success && modelsResult.models.length > 0) {
-          codexModels = modelsResult.models.map((m) => ({ ...m, enabled: true }))
+          codexModels = withPreservedCapabilities(modelsResult.models.map((m) => ({ ...m, enabled: true })), models)
           setModels(codexModels)
         }
       } catch (modelErr) {
@@ -675,7 +704,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         }
         // 本次登录返回的模型目录反映当前账号与组织策略。空列表也是权威结果，
         // 不得沿用上一个账号的旧模型，否则选择器会显示无法实际调用的选项。
-        copilotModels = modelsResult.models.map((model) => ({ ...model, enabled: true }))
+        copilotModels = withPreservedCapabilities(modelsResult.models.map((model) => ({ ...model, enabled: true })), models)
         setModels(copilotModels)
       } catch (modelErr) {
         console.error('[模型配置表单] 拉取 GitHub Copilot 模型失败:', modelErr)
@@ -742,7 +771,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         const modelsResult = await window.electronAPI.fetchModels({ provider, baseUrl, apiKey: credentials })
         setFetchResult(modelsResult)
         if (modelsResult.success && modelsResult.models.length > 0) {
-          xaiModels = modelsResult.models.map((model) => ({ ...model, enabled: true }))
+          xaiModels = withPreservedCapabilities(modelsResult.models.map((model) => ({ ...model, enabled: true })), models)
           setModels(xaiModels)
         }
       } catch (modelErr) {
@@ -818,8 +847,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           // ChatGPT (Codex) 是 SDK 内置的少量精选模型，拉取即全部启用，
           // 与登录自动拉取路径（handleCodexLogin）保持一致，避免新模型（如 gpt-5.6 系列）
           // 默认未启用而沉到「可用模型」折叠区，被误认为"拉不到"。
-          if (isSubscriptionProvider) return { ...m, enabled: true }
-          return old ? { ...m, enabled: old.enabled } : { ...m, enabled: false }
+          if (isSubscriptionProvider) return withPreservedCapabilities([{ ...m, enabled: true }], prev)[0]!
+          return old
+            ? withPreservedCapabilities([{ ...m, enabled: old.enabled }], prev)[0]!
+            : { ...m, enabled: false }
         })
         return [...manualKept, ...merged]
       })
@@ -1026,6 +1057,34 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       (m) => m.id.toLowerCase().includes(keyword) || m.name.toLowerCase().includes(keyword)
     )
   }, [models, modelFilter])
+
+  // 已启用模型的自动检测状态（供「能力未识别」徽标）；防抖避免输入时频繁查询。
+  const enabledModelIdsKey = enabledModels.map((m) => m.id).join('|')
+  React.useEffect(() => {
+    const ids = enabledModelIdsKey ? enabledModelIdsKey.split('|') : []
+    if (ids.length === 0) {
+      setCapabilitySummaries({})
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      void Promise.all(ids.map(async (id) => {
+        try {
+          return [id, await window.electronAPI.resolveModelCapabilities(provider, id)] as const
+        } catch {
+          return [id, null] as const
+        }
+      })).then((entries) => {
+        if (cancelled) return
+        const next: Record<string, ModelCapabilitySummary> = {}
+        for (const [id, summary] of entries) {
+          if (summary) next[id] = summary
+        }
+        setCapabilitySummaries(next)
+      })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [enabledModelIdsKey, provider])
 
   return (
     <div className="space-y-6">
@@ -1352,6 +1411,27 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                       <span className="text-muted-foreground ml-1">({model.id})</span>
                     )}
                   </span>
+                  {hasModelCapabilityOverrides(model.capabilities) && (
+                    <span className="flex-shrink-0 rounded-md bg-foreground/[0.05] px-1.5 py-0.5 text-[11px] text-foreground/60">
+                      手动能力
+                    </span>
+                  )}
+                  {!hasModelCapabilityOverrides(model.capabilities) && capabilitySummaries[model.id] && !capabilitySummaries[model.id]!.detected && (
+                    <span
+                      className="flex-shrink-0 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-600 dark:text-amber-400"
+                      title="未收录于内置模型目录，点击右侧能力设置按供应商文档手动核对"
+                    >
+                      能力未识别
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setCapabilitiesModelId(model.id)}
+                    className="p-0.5 text-muted-foreground/70 hover:text-foreground transition-colors"
+                    title="模型能力设置"
+                  >
+                    <SlidersHorizontal size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleToggleModel(model.id)}
@@ -1439,6 +1519,14 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                       <span className="text-muted-foreground ml-1">({model.id})</span>
                     )}
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setCapabilitiesModelId(model.id) }}
+                    className="p-0.5 text-muted-foreground/70 hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                    title="模型能力设置"
+                  >
+                    <SlidersHorizontal size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleRemoveModel(model.id) }}
@@ -1568,6 +1656,14 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 模型能力手动设置 */}
+      <ModelCapabilitiesDialog
+        model={models.find((m) => m.id === capabilitiesModelId) ?? null}
+        provider={provider}
+        onClose={() => setCapabilitiesModelId(null)}
+        onChange={handleModelCapabilitiesChange}
+      />
     </div>
   )
 }

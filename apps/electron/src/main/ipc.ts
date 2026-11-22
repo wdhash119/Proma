@@ -201,7 +201,7 @@ import {
 import { loginCodexOAuth, cancelCodexOAuthLogin } from './lib/codex-oauth-service'
 import { loginGithubCopilotOAuth, cancelGithubCopilotOAuthLogin } from './lib/github-copilot-oauth-service'
 import { loginXaiOAuth, cancelXaiOAuthLogin } from './lib/xai-oauth-service'
-import { resolvePiReasoningCapability } from './lib/adapters/pi-model-registry'
+import { resolvePiReasoningCapability, resolveModelCapabilitySummary } from './lib/adapters/pi-model-registry'
 import { serializeCodexCredentials, serializeGithubCopilotCredentials, serializeXaiCredentials } from '@proma/shared'
 import type { ChangeRequestsActionInput } from '@proma/shared'
 import type { CodexOAuthDeviceCode, CodexOAuthLoginMethod, GithubCopilotOAuthDeviceCode, XaiOAuthDeviceCode } from '@proma/shared'
@@ -1817,6 +1817,17 @@ export function registerIpcHandlers(): void {
     CHANNEL_IPC_CHANNELS.FETCH_MODELS,
     async (_, input: FetchModelsInput): Promise<FetchModelsResult> => {
       return fetchModels(input)
+    }
+  )
+
+  // 解析模型能力自动检测摘要（供模型设置界面展示默认值与识别状态）
+  ipcMain.handle(
+    CHANNEL_IPC_CHANNELS.RESOLVE_MODEL_CAPABILITIES,
+    async (_, provider: import('@proma/shared').ProviderType, modelId: string): Promise<import('@proma/shared').ModelCapabilitySummary> => {
+      if (typeof provider !== 'string' || !provider || typeof modelId !== 'string' || !modelId.trim()) {
+        throw new Error('解析模型能力需要有效的供应商与模型 ID')
+      }
+      return resolveModelCapabilitySummary(provider, modelId.trim())
     }
   )
 
@@ -3866,7 +3877,10 @@ export function registerIpcHandlers(): void {
       if (!channelId || !modelId) return undefined
       const channel = getChannelById(channelId)
       if (!channel) return undefined
-      return resolvePiReasoningCapability(channel.provider, modelId)
+      const channelModel = channel.models.find(
+        (model) => model.id.trim().toLowerCase() === modelId.trim().toLowerCase(),
+      )
+      return resolvePiReasoningCapability(channel.provider, modelId, channelModel?.capabilities)
     }
   )
 

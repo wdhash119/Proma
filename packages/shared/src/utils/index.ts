@@ -94,3 +94,7 @@ export {
   collectSuccessfulSkillReadActivations,
   collectSkillActivations,
 } from './skill-usage'
+export {
+  normalizeModelCapabilityOverrides,
+  hasModelCapabilityOverrides,
+} from './model-capabilities'

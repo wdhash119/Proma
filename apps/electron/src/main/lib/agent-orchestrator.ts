@@ -1270,7 +1270,11 @@ export class AgentOrchestrator {
       const maxTurns = appSettings.agentMaxTurns && appSettings.agentMaxTurns > 0
         ? appSettings.agentMaxTurns
         : undefined
-      const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId)
+      // 模型 ID 在运行时按大小写不敏感匹配；手动能力覆盖随渠道配置持久化。
+      const selectedChannelModel = channel.models.find(
+        (model) => model.id.trim().toLowerCase() === selectedModelId.trim().toLowerCase(),
+      )
+      const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId, selectedChannelModel?.capabilities)
       const piThinkingLevel = resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
       const projectInstructions = workspaceSlug
         ? (() => {
@@ -1407,6 +1411,7 @@ export class AgentOrchestrator {
         provider: channel.provider,
         channelId,
         channelName: channel.name,
+        ...(selectedChannelModel?.capabilities ? { modelCapabilities: selectedChannelModel.capabilities } : {}),
         proxyUrl,
         runtimeEnv,
         ...(maxTurns != null && { maxTurns }),

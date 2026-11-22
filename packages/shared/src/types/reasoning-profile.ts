@@ -71,7 +71,8 @@ export interface PiCatalogReasoningMetadata {
  * 不携带 protocol encoding；Pi catalog 继续负责把所选 level 编码为实际请求字段。
  */
 export interface ReasoningCapability {
-  source: 'profile' | 'pi-catalog'
+  /** manual 表示用户在模型设置中手动声明支持推理，目录与 profile 均未识别该模型 */
+  source: 'profile' | 'pi-catalog' | 'manual'
   levels: readonly AgentThinkingLevel[]
   defaultLevel: AgentThinkingLevel
 }

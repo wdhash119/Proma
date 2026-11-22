@@ -18,6 +18,8 @@ import type {
   ChannelDirectTestInput,
   FetchModelsInput,
   FetchModelsResult,
+  ModelCapabilitySummary,
+  ProviderType,
   ChannelPlanQuotaResult,
   CodexOAuthLoginResult,
   XaiOAuthLoginResult,
@@ -355,6 +357,9 @@ export interface ElectronAPI {
 
   /** 从供应商拉取可用模型列表（直接传入凭证，无需已保存渠道） */
   fetchModels: (input: FetchModelsInput) => Promise<FetchModelsResult>
+
+  /** 解析模型能力自动检测摘要（供模型设置界面展示默认值与识别状态） */
+  resolveModelCapabilities: (provider: ProviderType, modelId: string) => Promise<ModelCapabilitySummary>
 
   /** 查询渠道订阅 Plan 额度 */
   getChannelPlanQuota: (channelId: string) => Promise<ChannelPlanQuotaResult>
@@ -1602,6 +1607,10 @@ const electronAPI: ElectronAPI = {
 
   fetchModels: (input: FetchModelsInput) => {
     return ipcRenderer.invoke(CHANNEL_IPC_CHANNELS.FETCH_MODELS, input)
+  },
+
+  resolveModelCapabilities: (provider: ProviderType, modelId: string) => {
+    return ipcRenderer.invoke(CHANNEL_IPC_CHANNELS.RESOLVE_MODEL_CAPABILITIES, provider, modelId)
   },
 
   getChannelPlanQuota: (channelId: string) => {

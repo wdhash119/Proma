@@ -130,6 +130,8 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   /** OAuth credential coordination key; equals the selected Proma channel id. */
   channelId?: string
   channelName?: string
+  /** 渠道配置中的模型能力手动覆盖；自动检测失败时由用户在模型设置中填写。 */
+  modelCapabilities?: import('@proma/shared').ModelCapabilityOverrides
   maxTurns?: number
   permissionMode: PromaPermissionMode
   canUseTool?: (

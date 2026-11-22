@@ -332,6 +332,23 @@ export function isXaiCredentialExpired(credentials: XaiOAuthCredentials, skewMs 
 }
 
 /**
+ * 模型能力手动覆盖。
+ *
+ * 模型未被内置目录收录、也无法按名称可靠推断时，运行时会回落保守默认值；
+ * 用户可在模型设置中按供应商文档手动修正。未设置的字段继续跟随自动检测。
+ */
+export interface ModelCapabilityOverrides {
+  /** 上下文窗口（token 数） */
+  contextWindow?: number
+  /** 最大输出（token 数） */
+  maxOutputTokens?: number
+  /** 图片输入能力 */
+  imageInput?: boolean
+  /** 推理（思考）能力 */
+  reasoning?: boolean
+}
+
+/**
  * 渠道中的模型配置
  */
 export interface ChannelModel {
@@ -343,6 +360,8 @@ export interface ChannelModel {
   enabled: boolean
   /** 来源标记：手动添加的模型在拉取供应商列表时保留，不会被覆盖清除 */
   source?: 'manual' | 'fetched'
+  /** 手动能力覆盖；缺省表示完全跟随自动检测 */
+  capabilities?: ModelCapabilityOverrides
 }
 
 /**
@@ -466,6 +485,25 @@ export interface ChannelDirectTestInput {
 }
 
 /**
+ * 模型能力自动检测摘要。
+ *
+ * 供模型设置界面展示自动检测默认值与识别状态；手动覆盖不在此返回，
+ * 由渠道配置中的 ChannelModel.capabilities 单独保存。
+ */
+export interface ModelCapabilitySummary {
+  /** 自动检测（含回落默认）的上下文窗口 */
+  contextWindow: number
+  /** 自动检测（含回落默认）的最大输出 */
+  maxOutputTokens: number
+  /** 图片输入；undefined 表示无法确认 */
+  imageInput: boolean | undefined
+  /** 推理（思考）能力；undefined 表示无法确认 */
+  reasoning: boolean | undefined
+  /** 是否命中内置模型目录；false 表示使用回落默认值，建议手动核对 */
+  detected: boolean
+}
+
+/**
  * 拉取模型的结果
  */
 export interface FetchModelsResult {
@@ -535,6 +573,8 @@ export const CHANNEL_IPC_CHANNELS = {
   TEST: 'channel:test',
   /** 从供应商拉取可用模型列表 */
   FETCH_MODELS: 'channel:fetch-models',
+  /** 解析模型能力自动检测摘要（供设置界面展示默认值与识别状态） */
+  RESOLVE_MODEL_CAPABILITIES: 'channel:resolve-model-capabilities',
   /** 直接测试连接（无需已保存渠道，传入明文凭证） */
   TEST_DIRECT: 'channel:test-direct',
   /** 查询订阅 Plan 额度 */

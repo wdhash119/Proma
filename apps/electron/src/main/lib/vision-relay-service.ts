@@ -188,7 +188,8 @@ export async function inspectImageWithVisionRelay(input: InspectImageInput): Pro
     return failure('VISION_ROUTE_UNAVAILABLE', '配置的视觉渠道或模型已不可用，请重新配置视觉助手。')
   }
 
-  const route = await resolvePiVisionRelayRoute(channel.provider, configured.modelId)
+  const configuredModel = channel.models.find((model) => model.id === configured.modelId && model.enabled)
+  const route = await resolvePiVisionRelayRoute(channel.provider, configured.modelId, configuredModel?.capabilities)
   if (!route) {
     return failure('VISION_ROUTE_UNAVAILABLE', '所选模型未被确认支持图片输入或协议路由，请选择一个已知的视觉模型。')
   }

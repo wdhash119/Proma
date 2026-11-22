@@ -220,11 +220,6 @@ function readLatestVersion(latestPath: string): string | undefined {
   }
 }
 
-/** 停止当前调度器（若有）。 */
-export function stopCuaCdnChecks(): void {
-  stopChecks?.()
-}
-
 /**
  * 启动按天检查的调度器。
  *

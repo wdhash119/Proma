@@ -370,17 +370,6 @@ export function getSessionWorkbenchLayout(
   return meta?.sessionWorkbenchLayout ?? 'legacy-context'
 }
 
-/** 会话私有资料目录；新布局直接使用 workbench 根，旧布局保留 `.context/`。 */
-export function resolveSessionWorkbenchContextDir(
-  workspace: Pick<AgentWorkspace, 'slug'> | undefined,
-  sessionId: string,
-  layout?: SessionWorkbenchLayout,
-): string | undefined {
-  if (!workspace) return undefined
-  const sessionDir = getAgentSessionWorkspacePath(workspace.slug, sessionId)
-  return layout === 'root' ? sessionDir : join(sessionDir, '.context')
-}
-
 /** Agent 运行 cwd 与 Proma 会话 sidecar 工作台目录解析。 */
 export function resolveAgentCwd(
   workspace: Pick<AgentWorkspace, 'slug'> | undefined,

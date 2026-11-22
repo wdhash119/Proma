@@ -25,7 +25,6 @@ export {
   stripScheduledRunMarker,
   type MessageGroup,
   type AssistantTurn,
-  type MessageMeta,
 } from './group'
 
 // <think> 标签归一
@@ -40,13 +39,11 @@ export {
   toTranscript,
   summarizeToolInput,
   collapseToolSummaries,
-  type TranscriptTurn,
-  type TurnRole,
 } from './transcript'
 
 // 渐进式读取原语
-export { outline, formatOutlineLine, type OutlineEntry } from './outline'
-export { searchTurns, type SearchHit, type SearchOptions } from './search'
-export { selectTurns, type SelectOptions } from './select'
-export { renderTranscriptMarkdown, type RenderMarkdownOptions } from './render-markdown'
+export { outline, formatOutlineLine } from './outline'
+export { searchTurns } from './search'
+export { selectTurns } from './select'
+export { renderTranscriptMarkdown } from './render-markdown'
 export { estimateTokens } from './tokens'

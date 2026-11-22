@@ -93,4 +93,3 @@ export const AGENT_RUNTIME_METHODS = {
   EVENT_QUERY_CALLBACK: 'agent.query.callback',
 } as const
 
-export type AgentRuntimeMethod = (typeof AGENT_RUNTIME_METHODS)[keyof typeof AGENT_RUNTIME_METHODS]

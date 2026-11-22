@@ -13,12 +13,6 @@ function createUtilityProcessStartupCancelledError(cause?: unknown): UtilityProc
   return error
 }
 
-export function isUtilityProcessStartupCancelledError(error: unknown): error is UtilityProcessStartupCancelledError {
-  return !!error
-    && typeof error === 'object'
-    && (error as { code?: unknown }).code === UTILITY_PROCESS_START_CANCELLED_CODE
-}
-
 type UtilityProcessStartupOptions = {
   platform?: NodeJS.Platform
   sleep?: (milliseconds: number) => Promise<void>

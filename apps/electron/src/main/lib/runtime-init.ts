@@ -154,15 +154,6 @@ export function getRuntimeStatus(): RuntimeStatus | null {
 }
 
 /**
- * 检查运行时是否已初始化
- *
- * @returns 是否已初始化
- */
-export function isRuntimeInitialized(): boolean {
-  return isInitialized
-}
-
-/**
  * 重新初始化运行时
  *
  * @param options - 初始化选项

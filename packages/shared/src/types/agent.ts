@@ -99,62 +99,6 @@ export function isCodexFastModeSupportedModel(modelId: string | undefined): bool
 }
 
 /**
- * 自定义子代理定义
- *
- * 通过 SDK 的 agents 选项注册可被 Agent 工具调用的自定义子代理。
- */
-export interface AgentDefinition {
-  /** 自然语言描述，说明何时使用该代理 */
-  description: string
-  /** 允许使用的工具名称列表，省略则继承父级所有工具 */
-  tools?: string[]
-  /** 明确禁止使用的工具名称列表 */
-  disallowedTools?: string[]
-  /** 自定义系统提示词 */
-  prompt?: string
-  /** 使用的模型（覆盖父级） */
-  model?: string
-  /** 最大轮次（覆盖父级） */
-  maxTurns?: number
-}
-
-/**
- * SDK 会话信息（listSessions 返回）
- *
- * SDK 0.2.53 新增，用于发现和列出历史会话。
- */
-export interface SDKSessionInfo {
-  /** 会话 ID */
-  sessionId: string
-  /** 项目路径 */
-  projectPath?: string
-  /** 会话标题（从 transcript 提取） */
-  title?: string
-  /** 创建时间 ISO 字符串 */
-  createdAt?: string
-  /** 最后更新时间 ISO 字符串 */
-  lastUpdatedAt?: string
-  /** 消息计数概要 */
-  messageCount?: number
-}
-
-/**
- * SDK 会话消息（getSessionMessages 返回）
- *
- * SDK 0.2.59 新增，用于读取会话的完整对话历史。
- */
-export interface SDKSessionMessage {
-  /** 消息类型（SDK 原始类型标识） */
-  type: string
-  /** 消息角色 */
-  role?: 'user' | 'assistant'
-  /** 消息内容 */
-  content?: unknown
-  /** 时间戳 */
-  timestamp?: string
-}
-
-/**
  * JSON Schema 输出格式
  *
  * 用于指定结构化输出，Agent 将返回符合 Schema 的 JSON 数据。
@@ -1025,9 +969,6 @@ export type McpTransportType = 'stdio' | 'http' | 'sse'
 /** 外部配置中常见的 Streamable HTTP 别名 */
 export type McpTransportTypeAlias = 'streamableHttp' | 'streamable-http' | 'streamable_http'
 
-/** MCP 传输类型输入；保存和运行前会规范化为 McpTransportType */
-export type McpTransportTypeInput = McpTransportType | McpTransportTypeAlias
-
 /**
  * MCP 的非敏感 OAuth 客户端元数据。
  *
@@ -1817,9 +1758,6 @@ export const PROMA_PERMISSION_MODE_CONFIG = {
     description: '仅规划不执行，查看工具使用计划',
   },
 } as const satisfies Record<PromaPermissionMode, PromaPermissionModeConfig>
-
-/** 权限模式定义顺序（用于循环切换） */
-export const PROMA_PERMISSION_MODE_ORDER: readonly PromaPermissionMode[] = PROMA_PERMISSION_MODES
 
 export function isPromaPermissionMode(mode: string): mode is PromaPermissionMode {
   return (PROMA_PERMISSION_MODES as readonly string[]).includes(mode)

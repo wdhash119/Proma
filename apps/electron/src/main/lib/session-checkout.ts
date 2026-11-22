@@ -6,7 +6,7 @@
  * 于是某个 worktree 被删掉时只回退一级，而不是把整个会话判定为不可用。
  */
 
-import type { SessionCheckoutEntry, SessionCheckoutKind } from '@proma/shared'
+import type { SessionCheckoutEntry } from '@proma/shared'
 
 /** 检出日志最多保留的条数；超出后丢弃最旧的记录。 */
 export const MAX_CHECKOUT_HISTORY = 20
@@ -110,9 +110,4 @@ export function listRestorableWorktrees(
     .filter((entry) => entry.kind === 'worktree' && !!entry.branch && !!entry.mainRepoRoot)
     .filter((entry) => !isDirectory(entry.path))
     .sort((left, right) => right.since - left.since)
-}
-
-/** 判断路径是否为 worktree 检出（用于 UI 徽标）。 */
-export function isWorktreeCheckoutKind(kind: SessionCheckoutKind): boolean {
-  return kind === 'worktree'
 }

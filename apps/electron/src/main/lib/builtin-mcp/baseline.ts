@@ -35,25 +35,9 @@ const DEFINITIONS: BuiltinMcpDefinition[] = (manifest.servers as unknown as Buil
   ...s,
 }))
 
-const BY_ID = new Map<string, BuiltinMcpDefinition>(DEFINITIONS.map((d) => [d.id, d]))
-
 /** 所有内置 MCP 定义（来自 default-mcp.json，按声明顺序） */
 export function getBuiltinMcpDefinitions(): BuiltinMcpDefinition[] {
   return DEFINITIONS
-}
-
-/** 按 id 取定义 */
-export function getBuiltinMcpById(id: string): BuiltinMcpDefinition | undefined {
-  return BY_ID.get(id)
-}
-
-/**
- * 取某个内置 MCP 的运行时真实 server 名。
- * 注入器、catalog、prompt 一律通过此函数取名，确保和 default-mcp.json 一致。
- * 未登记的 id 回退为 id 本身（容错，不致崩溃）。
- */
-export function getBuiltinMcpName(id: string): string {
-  return BY_ID.get(id)?.name ?? id
 }
 
 /**

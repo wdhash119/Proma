@@ -49,8 +49,6 @@ export interface PlanningNativeSyncStatus {
   reminder: PlanningNativeSyncPermissionResult
 }
 
-export type PlanningNativeConnectionRole = 'managed' | 'linked'
-
 /** 每类实体一个 Proma 受管目标。 */
 export interface PlanningSyncProfile {
   id: string

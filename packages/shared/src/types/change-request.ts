@@ -56,11 +56,6 @@ export interface ChangeRequestsActionInput {
   url?: string
 }
 
-export interface ChangeRequestsActionResult {
-  session: unknown
-  error?: string
-}
-
 /** 兼容旧版本单条 pullRequest 字段。 */
 export interface LegacyPullRequestBinding {
   host: string

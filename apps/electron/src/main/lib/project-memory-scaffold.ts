@@ -11,9 +11,9 @@
  * 3. 写入前保留既有内容，尤其是旧 `CLAUDE.md` 的入口引用。
  */
 
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { getGlobalMemoryFilePath, getWorkspaceMemoryDirectory, MAX_MEMORY_FILE_BYTES, PROJECT_INDEX_TARGET } from './memory-service'
 import { writeTextFileAtomic } from './safe-file'
 
@@ -238,13 +238,4 @@ export async function withMemoryWriteLock<T>(key: string, fn: () => T | Promise<
 /** 供测试清理锁状态。 */
 export function resetMemoryWriteLocksForTesting(): void {
   writeChains.clear()
-}
-
-/** 规范化的项目根标识，用于生成稳定的记录文件名。 */
-export function projectRootIdentity(projectRoot: string): string {
-  try {
-    return realpathSync.native(projectRoot)
-  } catch {
-    return resolve(projectRoot)
-  }
 }

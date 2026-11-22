@@ -1,18 +1,4 @@
 import { getChannelById } from './channel-manager'
-import type { ProviderType } from '@proma/shared'
-
-export interface AvailableAgentModel {
-  id: string
-  name: string
-  source?: 'manual' | 'fetched'
-}
-
-export interface AvailableAgentModelsForChannel {
-  channelId: string
-  channelName: string
-  provider: ProviderType
-  models: AvailableAgentModel[]
-}
 
 export function assertEnabledModelForChannel(input: {
   channelId?: string
@@ -40,31 +26,4 @@ export function assertEnabledModelForChannel(input: {
   }
 
   return modelId
-}
-
-export function listEnabledAgentModelsForChannel(
-  channelId: string | undefined,
-  purpose: string,
-): AvailableAgentModelsForChannel {
-  if (!channelId) {
-    throw new Error(`${purpose}需要可用的 channelId`)
-  }
-
-  const channel = getChannelById(channelId)
-  if (!channel || !channel.enabled) {
-    throw new Error(`${purpose}引用的渠道不存在或未启用: ${channelId}`)
-  }
-
-  return {
-    channelId: channel.id,
-    channelName: channel.name,
-    provider: channel.provider,
-    models: channel.models
-      .filter((model) => model.enabled)
-      .map((model) => ({
-        id: model.id,
-        name: model.name,
-        source: model.source,
-      })),
-  }
 }

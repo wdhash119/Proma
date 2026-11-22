@@ -128,26 +128,3 @@ async function isCommandAvailable(command: string): Promise<boolean> {
     return false
   }
 }
-
-/**
- * 批量验证 MCP 服务器配置
- *
- * @param servers MCP 服务器配置对象
- * @returns 验证结果数组
- */
-export async function validateMcpServers(
-  servers: Record<string, McpServerEntry>,
-  workspaceSlug?: string,
-): Promise<McpValidationResult[]> {
-  const results: McpValidationResult[] = []
-
-  for (const [name, entry] of Object.entries(servers)) {
-    // 跳过未启用的服务器
-    if (!entry.enabled) continue
-
-    const result = await validateMcpServer(name, entry, workspaceSlug)
-    results.push(result)
-  }
-
-  return results
-}

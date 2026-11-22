@@ -113,14 +113,6 @@ function isLikelyUrl(value: string): boolean {
 }
 
 /**
- * 把地址栏/BrowserNavigate 输入解析成 URL 或 Google 搜索地址。
- * 明确的 URL 和可识别的主机名保持直达，普通文本按搜索词处理。
- */
-export function resolveBrowserDestination(input: string): string {
-  return resolveBrowserDestinationWithFallback(input).url
-}
-
-/**
  * 仅默认 Google 新标签页和由普通文本生成的 Google 搜索有 Bing 回退；用户输入的 URL 永远直达。
  */
 export function resolveBrowserDestinationWithFallback(input: string): BrowserDestination {

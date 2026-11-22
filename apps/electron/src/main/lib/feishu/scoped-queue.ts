@@ -15,12 +15,6 @@
  *   2. Agent 跑期间用户又发了 → 不打断当前 run，等结束再合并处理新消息
  */
 
-export interface QueuedMessage<T> {
-  scope: string
-  payload: T
-  enqueuedAt: number
-}
-
 export type FlushHandler<T> = (scope: string, batch: T[]) => void
 
 interface PendingEntry<T> {

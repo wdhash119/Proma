@@ -383,19 +383,6 @@ export function getWorkspaceFilesDir(slug: string): string {
 }
 
 /**
- * 解析工作区文件目录路径（只读，不创建目录）
- *
- * 与 getWorkspaceFilesDir 的区别：不会触发 mkdir 副作用，
- * 适用于 /now 等只读查询场景。
- *
- * @param slug 工作区 slug
- * @returns ~/.proma/agent-workspaces/{slug}/workspace-files/
- */
-export function resolveWorkspaceFilesDir(slug: string): string {
-  return join(getConfigDir(), 'agent-workspaces', slug, 'workspace-files')
-}
-
-/**
  * 解析 Agent 会话工作目录路径（只读，不创建目录）
  *
  * 与 getAgentSessionWorkspacePath 的区别：不会触发 mkdir 副作用，
@@ -699,15 +686,6 @@ export function getSlackBotDeliveryPath(botId: string): string {
  */
 export function getFeishuConfigPath(): string {
   return join(getConfigDir(), 'feishu.json')
-}
-
-/**
- * 获取飞书聊天绑定持久化路径
- *
- * @returns ~/.proma/feishu-bindings.json
- */
-export function getFeishuBindingsPath(): string {
-  return join(getConfigDir(), 'feishu-bindings.json')
 }
 
 /**

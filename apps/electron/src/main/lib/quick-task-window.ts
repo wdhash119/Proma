@@ -128,13 +128,6 @@ export function hideQuickTaskWindow(): void {
 }
 
 /**
- * 获取快速任务窗口实例（用于 IPC 注册）
- */
-export function getQuickTaskWindow(): BrowserWindow | null {
-  return quickTaskWindow
-}
-
-/**
  * 销毁快速任务窗口（应用退出时调用）
  */
 export function destroyQuickTaskWindow(): void {

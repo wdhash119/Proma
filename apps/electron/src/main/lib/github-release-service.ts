@@ -188,11 +188,3 @@ export async function getReleaseByTag(tag: string): Promise<GitHubRelease | null
     return null
   }
 }
-
-/**
- * 清除缓存
- */
-export function clearReleaseCache(): void {
-  releaseCache = null
-  console.log('[GitHub Release] 缓存已清除')
-}

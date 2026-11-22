@@ -341,20 +341,6 @@ const OPENAI_SOL_LUNA_PROFILE: ReasoningProfile = {
   },
 }
 
-export const REASONING_PROFILES: readonly ReasoningProfile[] = [
-  DEEPSEEK_V4_FLASH_PROFILE,
-  DEEPSEEK_FLASH_PROFILE,
-  DEEPSEEK_V4_PRO_PROFILE,
-  K3_PROFILE,
-  GLM_52_PROFILE,
-  GLM_53_PROFILE,
-  OPENAI_STANDARD_PROFILE,
-  OPENAI_MAX_PROFILE,
-  OPENAI_ASTRA_PROFILE,
-  OPENAI_SOL_LUNA_PROFILE,
-]
-
-/** 仅按模型 ID 匹配，再以实际 transport 确认该模型是否有已验证的协议 encoding。 */
 export function resolveReasoningProfile(input: ResolveReasoningProfileInput): ReasoningProfile | undefined {
   const modelId = input.modelId?.toLowerCase()
   if (!modelId) return undefined

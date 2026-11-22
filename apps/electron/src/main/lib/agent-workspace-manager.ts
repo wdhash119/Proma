@@ -720,11 +720,6 @@ export function saveWorkspaceMcpConfig(workspaceSlug: string, config: WorkspaceM
 
 // ===== Skill 目录扫描 =====
 
-/** 扫描工作区活跃 Skills，仅返回 skills/ 下的 Skill */
-export function getWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
-}
-
 /** 解析 SKILL.md 的 YAML frontmatter，支持单行值、block scalar（`|` / `>`）和多行缩进 */
 function parseSkillFrontmatter(content: string, slug: string, enabled: boolean): SkillMeta {
   const meta: SkillMeta = { slug, name: slug, enabled }
@@ -823,7 +818,7 @@ export function deleteWorkspaceSkill(workspaceSlug: string, skillSlug: string): 
   console.log(`[Agent 工作区] 已删除 Skill: ${workspaceSlug}/${skillSlug}`)
 }
 
-/** 扫描指定目录下的 Skills，供 getWorkspaceSkills 和 getAllWorkspaceSkills 复用 */
+/** 扫描指定目录下的 Skills，供 getAllWorkspaceSkills 等上层复用 */
 function isSkillDirectoryEntry(dir: string, entry: Dirent): boolean {
   if (entry.isDirectory()) return true
   if (!entry.isSymbolicLink()) return false

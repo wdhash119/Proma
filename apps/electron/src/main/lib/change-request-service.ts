@@ -7,7 +7,6 @@
  */
 
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
 import { BrowserWindow } from 'electron'
 import type { ChangeRequestBinding, ChangeRequestSnapshot, ChangeRequestsActionInput } from '@proma/shared'
 import { CHANGE_REQUESTS_IPC_CHANNELS, extractChangeRequestUrls, normalizeChangeRequestUrl, parseChangeRequestUrl } from '@proma/shared'
@@ -379,11 +378,6 @@ function defaultTurnDiscovery(sessionId: string): void {
 
 const turnDiscovery = new TurnDiscoveryScheduler({ run: defaultTurnDiscovery })
 
-/** 安排一次防抖的分支发现；同一会话的新请求会顶掉旧请求。 */
-export function scheduleTurnDiscovery(sessionId: string): void {
-  turnDiscovery.schedule(sessionId)
-}
-
 // ===== 生命周期 =====
 
 /** 应用启动时迁移旧版单条绑定，再同步一次绑定并让轮询器开始工作。 */
@@ -404,12 +398,6 @@ export function disposeChangeRequestService(): void {
   turnDiscovery.cancelAll()
   scopeCache.clear()
   pendingCommands.clear()
-}
-
-/** 供测试注入：解析会话仓库时使用的目录。 */
-export function resolveChangeRequestRepositoryCwd(sessionId: string): string | null {
-  const fallback = resolveSessionRepositoryCwd(sessionId) ?? homedir()
-  return resolve(fallback)
 }
 
 export type { ChangeRequestSnapshot }

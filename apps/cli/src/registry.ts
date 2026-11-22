@@ -3,7 +3,7 @@
  */
 import type { ParsedArgs } from './args'
 import type { PathOptions } from './paths'
-import { type CommandExit, UsageError } from './output'
+import type { CommandExit } from './output'
 
 export interface CommandContext {
   args: ParsedArgs
@@ -34,5 +34,3 @@ export function getCommand(name: string): Command | undefined {
 export function allCommands(): Command[] {
   return [...registry.values()]
 }
-
-export { UsageError }

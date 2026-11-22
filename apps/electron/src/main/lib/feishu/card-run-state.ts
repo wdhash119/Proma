@@ -520,17 +520,6 @@ export function markInterrupted(state: RunState): RunState {
   }
 }
 
-export function markIdleTimeout(state: RunState, minutes: number): RunState {
-  return {
-    ...state,
-    blocks: closeStreamingText(state.blocks),
-    reasoning: { ...state.reasoning, active: false },
-    terminal: 'idle_timeout',
-    footer: null,
-    idleTimeoutMinutes: minutes,
-  }
-}
-
 export function markError(state: RunState, message: string): RunState {
   return {
     ...state,
@@ -542,14 +531,3 @@ export function markError(state: RunState, message: string): RunState {
   }
 }
 
-/** 当外部确认 run 已结束但 state 仍是 running 时，兜底收尾。 */
-export function finalizeIfRunning(state: RunState): RunState {
-  if (state.terminal !== 'running') return state
-  return {
-    ...state,
-    blocks: closeStreamingText(state.blocks),
-    reasoning: { ...state.reasoning, active: false },
-    terminal: 'done',
-    footer: null,
-  }
-}

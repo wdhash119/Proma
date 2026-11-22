@@ -440,11 +440,6 @@ export const IPC_CHANNELS = {
 } as const
 
 /**
- * IPC 通道名称类型
- */
-export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
-
-/**
  * 截图导出的统一配额。
  *
  * 渲染端做廉价预检（元素数 / 原始 HTML 字节数），失败立即向用户反馈，避免昂贵的

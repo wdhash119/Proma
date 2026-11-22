@@ -452,9 +452,3 @@ export function cancelDoubaoAsrSession(sessionId: string): void {
   activeSessions.delete(sessionId)
 }
 
-export function cancelAllDoubaoAsrSessions(): void {
-  for (const session of activeSessions.values()) {
-    session.ws.terminate()
-  }
-  activeSessions.clear()
-}

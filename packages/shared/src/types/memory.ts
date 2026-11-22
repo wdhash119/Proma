@@ -69,5 +69,3 @@ export const MEMORY_IPC_CHANNELS = {
   /** 恢复到某个历史版本 */
   RESTORE_REVISION: 'memory:restore-revision',
 } as const
-
-export type MemoryIpcChannel = (typeof MEMORY_IPC_CHANNELS)[keyof typeof MEMORY_IPC_CHANNELS]

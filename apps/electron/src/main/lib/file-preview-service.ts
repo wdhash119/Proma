@@ -6,7 +6,7 @@
  */
 
 import { basename, join, dirname, extname, resolve, relative, sep, isAbsolute as isAbsolutePath, posix as pathPosix } from 'node:path'
-import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync, unlinkSync } from 'node:fs'
+import { readFileSync, statSync, mkdirSync, existsSync, writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -68,19 +68,6 @@ function removeTempFileLater(path: string): void {
     try { unlinkSync(path) } catch { /* 已由启动清理或其他路径删除 */ }
   }, PREVIEW_TEMP_FILE_TTL_MS)
   cleanup.unref()
-}
-
-/** 清理所有临时预览文件 */
-export function cleanPreviewTmpDir(): number {
-  const dir = join(tmpdir(), 'proma-preview')
-  if (!existsSync(dir)) return 0
-  let count = 0
-  try {
-    for (const f of readdirSync(dir)) {
-      try { unlinkSync(join(dir, f)); count++ } catch { /* skip */ }
-    }
-  } catch { /* skip */ }
-  return count
 }
 
 // ─── 路径解析 ───
@@ -788,14 +775,6 @@ export async function renderOfficeWithOfficeCli(
     console.warn('[file-preview] OfficeCLI 文档渲染不可用，回退内置解析器:', lastError instanceof Error ? lastError.message : lastError)
   }
   return null
-}
-
-export async function renderXlsxWithOfficeCli(
-  resolvedPath: string,
-  registerFilePath: (path: string) => string | Promise<string> = registerOfficeCliOutputFile,
-  officeCliCandidates = getOfficeCliCandidates(),
-): Promise<{ htmlUrl: string; text: string } | null> {
-  return renderOfficeWithOfficeCli(resolvedPath, registerFilePath, officeCliCandidates, new Set(['.xlsx']))
 }
 
 /** 将 XLSX/PPTX 转成可内联展示的 HTML 预览 */

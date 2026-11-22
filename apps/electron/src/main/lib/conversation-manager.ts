@@ -6,7 +6,7 @@
  * - 消息存储：~/.proma/conversations/{id}.jsonl（JSONL 格式，逐行追加）
  */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync, unlinkSync, createReadStream } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
 import { writeJsonFileAtomic, readJsonFileSafe } from './safe-file'
@@ -16,13 +16,12 @@ import {
   getConversationsDir,
   getConversationMessagesPath,
 } from './config-paths'
-import { deleteConversationAttachments, deleteAttachment } from './attachment-service'
+import { deleteAttachment } from './attachment-service'
 import type { ConversationMeta, ChatMessage, RecentMessagesResult, SessionMessageSearchResponse } from '@proma/shared'
 import {
   createSearchSnippet,
   MAX_NORMALIZED_SEARCH_QUERY_LENGTH,
   MAX_SEARCH_QUERY_SOURCE_LENGTH,
-  findBestSearchMatch,
   findBestSearchMatchInNormalized,
   insertTopSearchResult,
   normalizeSearchText,
@@ -41,8 +40,6 @@ interface ConversationsIndex {
 
 /** 当前索引版本 */
 const INDEX_VERSION = 1
-const MAX_SEARCH_SESSIONS = 100
-const MAX_SEARCH_HITS_PER_SESSION = 2
 const MAX_SESSION_SEARCH_RESULTS = 50
 const MAX_SESSION_SEARCH_INDEX_CHARACTERS = 250_000
 const MAX_CACHED_SESSION_SEARCHES = 8
@@ -335,41 +332,6 @@ export function updateConversationMeta(
 }
 
 /**
- * 删除对话
- *
- * 同时删除索引条目和消息文件。
- *
- * @param id 对话 ID
- */
-export function deleteConversation(id: string): void {
-  const index = readIndex()
-  const idx = index.conversations.findIndex((c) => c.id === id)
-
-  if (idx === -1) {
-    console.warn(`[对话管理] 对话不存在，跳过删除: ${id}`)
-    return
-  }
-
-  const removed = index.conversations.splice(idx, 1)[0]!
-  writeIndex(index)
-
-  // 删除消息文件
-  const filePath = getConversationMessagesPath(id)
-  if (existsSync(filePath)) {
-    try {
-      unlinkSync(filePath)
-    } catch (error) {
-      console.warn(`[对话管理] 删除消息文件失败 (${id}):`, error)
-    }
-  }
-
-  console.log(`[对话管理] 已删除对话: ${removed.title} (${removed.id})`)
-
-  // 删除对话附件目录
-  deleteConversationAttachments(id)
-}
-
-/**
  * 删除指定消息
  *
  * 读取 JSONL → 过滤掉目标消息 → 覆写文件 → 返回更新后消息列表。
@@ -627,47 +589,4 @@ async function buildConversationSearchIndex(
   }
 
   return { fileSize, modifiedAt, characterCount, truncated, hits }
-}
-
-/**
- * 在单个 Chat JSONL 中收集用户/助手正文命中。
- * 工具活动、工具参数和工具结果不属于 ChatMessage.content，不参与搜索。
- */
-async function findMatchesInJsonl(
-  filePath: string,
-  query: string,
-  maxResults: number,
-): Promise<ConversationSearchHit[]> {
-  const stream = createReadStream(filePath, { encoding: 'utf-8' })
-  const rl = createInterface({ input: stream, crlfDelay: Infinity })
-  const hits: ConversationSearchHit[] = []
-
-  try {
-    for await (const line of rl) {
-      if (!line.trim()) continue
-      let msg: ChatMessage
-      try {
-        msg = JSON.parse(line) as ChatMessage
-      } catch {
-        continue
-      }
-      if ((msg.role !== 'user' && msg.role !== 'assistant') || !msg.content) continue
-
-      const match = findBestSearchMatch(msg.content, query)
-      if (!match) continue
-
-      const snippet = createSearchSnippet(msg.content, match.matchStart, match.matchLength)
-      insertTopSearchResult(hits, {
-        messageId: msg.id,
-        role: msg.role,
-        ...snippet,
-        score: match.score,
-      }, maxResults)
-    }
-  } finally {
-    rl.close()
-    stream.destroy()
-  }
-
-  return hits
 }

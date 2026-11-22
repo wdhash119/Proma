@@ -1,3 +1,19 @@
+# Proma（改造版）
+
+本仓库是基于 [proma-ai/Proma](https://github.com/proma-ai/Proma) 开源版的改造分支，保留原有桌面 Agent 体验与本地数据，并围绕实际开发与自动化工作流继续迭代。
+
+## 本分支的主要改造
+
+- **Agent 与上下文**：完善项目指令、分层记忆、会话协作与交付链路；新增 Live Compact（https://github.com/Tranquillitatis-Lab/hydrogen-harness，https://github.com/carrotciallo/pi-live-compact），在本地按模型上下文窗口比例压缩长对话，支持全局 / 会话开关。
+- **模型与桌面能力**：加入 Computer Use、Proma 自操作和联网检索等本机自动化能力，扩展模型能力手动设置与额度展示等。
+- **产品与工程治理**：退役旧 Chat 主入口、权限 / 计划模式及 Scratch Pad 迁移等历史链路，持续清理死代码与未使用依赖，并补齐 IPC 契约和自动化测试。
+
+> 以下原样保留原项目 README。其中的功能列表、开源 / 商业版说明、下载地址与更新状态均属于原项目语境；本改造版请以当前代码和 `release-notes/` 为准。
+
+---
+
+## 以下是原项目说明
+
 # Proma
 
 ![image-20260909165815654](https://img.erlich.fun/personal-blog/proma/image-20260909165815654.png)

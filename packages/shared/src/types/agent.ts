@@ -2063,6 +2063,11 @@ export const AGENT_IPC_CHANNELS = {
 
   /** 切换指定会话的 ChatGPT Codex Fast Mode（下一轮 Pi 请求生效） */
   UPDATE_SESSION_CODEX_FAST_MODE: 'agent:update-session-codex-fast-mode',
+  /**
+   * 切换指定会话的 Live Compact 开关（会话工具栏按钮）。
+   * 写会话 meta 后立即把生效态推给运行中的会话；全局主闸关闭时仅落 meta。
+   */
+  UPDATE_SESSION_LIVE_COMPACT: 'agent:update-session-live-compact',
   /** 查询 Pi catalog 或专属 profile 支持的会话级推理档位 */
   GET_PI_REASONING_CAPABILITY: 'agent:get-pi-reasoning-capability',
   /** 更新指定会话的推理深度（下一轮 Pi 请求生效） */

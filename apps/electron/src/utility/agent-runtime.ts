@@ -142,6 +142,9 @@ function handleMessage(rawMessage: unknown): void {
     case AGENT_RUNTIME_METHODS.QUERY_SET_PERMISSION_MODE:
       void handleSetPermissionMode(request)
       return
+    case AGENT_RUNTIME_METHODS.QUERY_SET_LIVE_COMPACT:
+      void handleSetLiveCompact(request)
+      return
     default:
       respondError(request, { code: 'runtime.method_not_found', message: `Unsupported runtime method: ${request.method}` })
   }
@@ -296,6 +299,20 @@ async function handleSetPermissionMode(request: RuntimeRequest): Promise<void> {
     return
   }
   await piAdapter.setPermissionMode(activeQuery.sessionId, payload.mode)
+  respond(request, { accepted: true })
+}
+
+/**
+ * 运行中刷新 Live Compact 开关：改写 extension 共享引用，当轮 turn_end 即按新状态决策。
+ * 只接受当前活跃查询的会话，避免把其他会话的状态写到正在运行的会话上。
+ */
+async function handleSetLiveCompact(request: RuntimeRequest): Promise<void> {
+  const payload = request.payload ?? {}
+  if (!activeQuery || payload.sessionId !== activeQuery.sessionId || typeof payload.enabled !== 'boolean') {
+    respondError(request, { code: 'agent.query.not_active', message: 'Agent session is not active' })
+    return
+  }
+  await piAdapter.setLiveCompactEnabled(activeQuery.sessionId, payload.enabled)
   respond(request, { accepted: true })
 }
 

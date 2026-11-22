@@ -31,6 +31,7 @@ import {
   workspaceFilesVersionAtom,
   workspaceGitDiffRefreshVersionAtom,
   agentThinkingAtom,
+  liveCompactGlobalEnabledAtom,
   agentEffortAtom,
   agentMaxBudgetUsdAtom,
   agentMaxTurnsAtom,
@@ -170,6 +171,7 @@ function AgentSettingsInitializer(): null {
   const bumpFiles = useSetAtom(workspaceFilesVersionAtom)
   const bumpGitDiffRefresh = useSetAtom(workspaceGitDiffRefreshVersionAtom)
   const setThinking = useSetAtom(agentThinkingAtom)
+  const setLiveCompactGlobalEnabled = useSetAtom(liveCompactGlobalEnabledAtom)
   const setEffort = useSetAtom(agentEffortAtom)
   const setMaxBudget = useSetAtom(agentMaxBudgetUsdAtom)
   const setMaxTurns = useSetAtom(agentMaxTurnsAtom)
@@ -234,6 +236,8 @@ function AgentSettingsInitializer(): null {
       if (settings.agentThinking) {
         setThinking(settings.agentThinking)
       }
+      // Live Compact 全局主闸：工具栏按钮据此显示启用/禁用态，缺省关闭。
+      setLiveCompactGlobalEnabled(settings.liveCompact?.enabled === true)
       if (settings.agentEffort) {
         setEffort(settings.agentEffort)
       }
@@ -266,7 +270,7 @@ function AgentSettingsInitializer(): null {
       console.error(err)
       setAgentSettingsReady(true) // 即使出错也标记就绪，避免永远阻塞
     })
-  }, [setAgentChannelId, setAgentModelId, setAgentWorkspaces, setCurrentWorkspaceId, setThinking, setEffort, setMaxBudget, setMaxTurns, setAutomationGroupOrder, setChannels, setChannelsLoaded, setAgentSettingsReady])
+  }, [setAgentChannelId, setAgentModelId, setAgentWorkspaces, setCurrentWorkspaceId, setThinking, setLiveCompactGlobalEnabled, setEffort, setMaxBudget, setMaxTurns, setAutomationGroupOrder, setChannels, setChannelsLoaded, setAgentSettingsReady])
 
   // 工作区切换时重置能力缓存，预加载基线
   useEffect(() => {

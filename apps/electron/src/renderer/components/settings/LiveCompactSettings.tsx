@@ -3,7 +3,7 @@
  *
  * 两块内容：
  * 1. 全局主闸：写 `settings.json` 的 `liveCompact.enabled`（既有 settings 更新通道）。
- *    关闭即硬停所有会话；开启后会话默认启用，会话级开关随 P4 提供。
+ *    关闭即硬停所有会话；开启后会话默认启用，可在会话工具栏单独关闭。
  * 2. 上游算法同步：读取版本状态、检查上游 HEAD、同步（下载 → 三重闸 → 原子激活）与
  *    回退内置版本。下载、解包、测试闸全部在主进程完成，本页只展示结论。
  *
@@ -23,11 +23,13 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useSetAtom } from 'jotai'
 import type { LiveCompactState } from '@proma/shared'
 import type { LiveCompactSettings as LiveCompactSettingsValue } from '@/types/settings'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { SettingsCard, SettingsRow, SettingsSection } from './primitives'
+import { liveCompactGlobalEnabledAtom } from '@/atoms/agent-atoms'
 
 /** 主闸缺省关闭：未启用时运行链路零变化。 */
 const DEFAULT_SETTINGS: LiveCompactSettingsValue = { enabled: false }
@@ -52,6 +54,9 @@ function describeError(error: unknown): string {
 export function LiveCompactSettings(): React.ReactElement {
   const [settings, setSettings] = React.useState<LiveCompactSettingsValue>(DEFAULT_SETTINGS)
   const [saving, setSaving] = React.useState(false)
+  // 会话工具栏按钮读的是这个 atom；设置页保存成功后同步写入，
+  // 否则已经挂载的 AgentView 会一直拿启动时的旧值。
+  const setGlobalEnabledAtom = useSetAtom(liveCompactGlobalEnabledAtom)
 
   const [state, setState] = React.useState<LiveCompactState | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -70,6 +75,7 @@ export function LiveCompactSettings(): React.ReactElement {
         ])
         if (cancelled) return
         setSettings(appSettings.liveCompact ?? DEFAULT_SETTINGS)
+        setGlobalEnabledAtom(appSettings.liveCompact?.enabled === true)
         setState(liveCompactState)
       } catch (error) {
         console.error('[Live Compact 设置] 加载失败:', error)
@@ -81,7 +87,7 @@ export function LiveCompactSettings(): React.ReactElement {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setGlobalEnabledAtom])
 
   /** 重新读版本状态：检查/同步/回退后都走这里，状态卡与主进程保持同一来源。 */
   const refreshState = React.useCallback(async (): Promise<LiveCompactState | null> => {
@@ -104,6 +110,8 @@ export function LiveCompactSettings(): React.ReactElement {
     setSaving(true)
     try {
       await window.electronAPI.updateSettings({ liveCompact: { enabled } })
+      // 落盘成功后再同步 atom：失败路径要保留工具栏原状态。
+      setGlobalEnabledAtom(enabled)
     } catch (error) {
       console.error('[Live Compact 设置] 保存主闸失败:', error)
       setSettings(previous)
@@ -123,7 +131,7 @@ export function LiveCompactSettings(): React.ReactElement {
       if (result.updateAvailable) {
         toast.info(`上游有新提交：${shortSha(result.sha)}`)
       } else {
-        toast.success('当前算法已对应当前上游版本')
+        toast.success('当前算法已是上游最新版本')
       }
     } catch (error) {
       console.error('[Live Compact 设置] 检查上游失败:', error)
@@ -201,7 +209,7 @@ export function LiveCompactSettings(): React.ReactElement {
           <SettingsRow
             label="启用 Live Compact"
             icon={<Sparkles className="size-4 text-violet-500" />}
-            description="关闭会立即停止所有会话（包括单独关闭过的会话）；开启后新会话默认启用，会话级开关即将提供。"
+            description="关闭会立即停止所有会话的上下文改写（包括曾单独开启的会话）；开启后会话默认启用，可在会话工具栏单独关闭。"
           >
             <Switch
               checked={settings.enabled}

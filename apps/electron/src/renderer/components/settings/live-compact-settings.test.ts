@@ -33,9 +33,17 @@ describe('Live Compact 设置页注册与主闸语义', () => {
 
     expect(settings).toContain('window.electronAPI.updateSettings({ liveCompact: { enabled } })')
     expect(settings).toContain('appSettings.liveCompact ?? DEFAULT_SETTINGS')
-    // 主闸文案必须说清「关闭即停所有会话、开启后会话默认启用」。
-    expect(settings).toContain('关闭会立即停止所有会话')
+    // 主闸文案必须说清「关闭即停所有会话的上下文改写、开启后会话默认启用且可在工具栏单独关闭」。
+    expect(settings).toContain('关闭会立即停止所有会话的上下文改写（包括曾单独开启的会话）')
+    expect(settings).toContain('可在会话工具栏单独关闭')
     expect(settings).toContain('缺省关闭')
+  })
+
+  test('Given 检查上游无更新 When 提示 Then 文案是“已是上游最新版本”', () => {
+    const settings = readAppFile('src/renderer/components/settings/LiveCompactSettings.tsx')
+
+    expect(settings).toContain("toast.success('当前算法已是上游最新版本')")
+    expect(settings).not.toContain('当前算法已对应当前上游版本')
   })
 
   test('Given 设置页 When 检查 Then 展示版本状态、同步按钮与风险提示', () => {

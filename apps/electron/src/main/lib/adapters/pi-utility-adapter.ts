@@ -181,6 +181,23 @@ export class PiUtilityAdapter {
     )
   }
 
+  /**
+   * 运行中刷新 Live Compact 会话开关。
+   *
+   * 与权限模式同一条活链：主进程不重建会话，只把新的生效态转成一次 RPC，
+   * 由 utility 进程改写 extension 共享的可变引用（每轮 turn_end 现读）。
+   * 找不到运行中的查询时直接返回：该会话下一轮 query 会按最新 meta 重新解析。
+   */
+  async setLiveCompactEnabled(sessionId: string, enabled: boolean): Promise<void> {
+    const pending = this.findPending(sessionId)
+    if (!pending) return
+    await pending.client.call(
+      AGENT_RUNTIME_METHODS.QUERY_SET_LIVE_COMPACT,
+      { sessionId, enabled },
+      { queryId: pending.queryId },
+    )
+  }
+
   dispose(): void {
     for (const pending of this.pendingQueries.values()) {
       pending.runtimeFailed = true

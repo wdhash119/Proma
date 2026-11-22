@@ -2128,6 +2128,21 @@ export class AgentOrchestrator {
     console.log(`[Agent 编排] 运行中权限模式已切换: sessionId=${sessionId}, mode=${mode}`)
   }
 
+  /**
+   * 运行中刷新会话的 Live Compact 开关。
+   *
+   * 与权限模式同一条范式：主进程只把新的生效态转给 utility 进程，
+   * extension 内部的可变引用每轮 turn_end 现读，因此不需要重建会话或换算法。
+   * 会话不在运行中时是空操作：下一轮 query 起点会按最新 meta/全局设置重新解析。
+   */
+  async updateSessionLiveCompact(sessionId: string, enabled: boolean): Promise<void> {
+    if (!this.activeSessions.has(sessionId)) return
+    if (this.adapter.setLiveCompactEnabled) {
+      await this.adapter.setLiveCompactEnabled(sessionId, enabled)
+    }
+    console.log(`[Agent 编排] 运行中 Live Compact 已切换: sessionId=${sessionId}, enabled=${enabled}`)
+  }
+
   // ===== 快照回退 =====
 
   /**

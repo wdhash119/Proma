@@ -312,7 +312,7 @@ import {
   resolveAgentCwd,
   buildWorktreeClearUpdates,
 } from './lib/agent-session-manager'
-import { runAgent, stopAgent, stopAgentAndDrain, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, isAgentSessionBusy, listActiveAgentSessionSnapshots, listQueuedAgentMessages, reserveAgentSessionStart, submitOrEnqueueAgentMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
+import { runAgent, stopAgent, stopAgentAndDrain, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, isAgentSessionBusy, listActiveAgentSessionSnapshots, listQueuedAgentMessages, reserveAgentSessionStart, submitOrEnqueueAgentMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, rewindAgentSession, setVisibleAgentSession, setAgentSessionLiveCompactEnabled, resyncLiveCompactForActiveSessions } from './lib/agent-service'
 import { permissionService } from './lib/agent-permission-service'
 import { resolvePathAgainstAgentCwd } from './lib/agent-file-path'
 import { askUserService } from './lib/agent-ask-user-service'
@@ -2096,6 +2096,15 @@ export function registerIpcHandlers(): void {
         syncFeishuSyncSleepBlocker(result)
       }
 
+      // 全局主闸变化要让运行中会话立即停手（否则要等下一轮消息才生效）；
+      // 这里不 await：设置写入是同步磁盘操作，推送结果不影响保存语义，
+      // 失败只记日志（下一轮消息仍会按新设置重新解析）。
+      if (updates.liveCompact !== undefined) {
+        void resyncLiveCompactForActiveSessions().catch((error) => {
+          console.error('[设置] Live Compact 全局开关推送失败:', error)
+        })
+      }
+
       // 主题相关设置变化时，广播给所有窗口（跨窗口同步，如 Quick Task 面板）
       if (updates.themeMode !== undefined || updates.themeStyle !== undefined) {
         const payload = {
@@ -2499,6 +2508,23 @@ export function registerIpcHandlers(): void {
     async (event): Promise<LiveCompactState> => {
       await assertLiveCompactMainRenderer(event.sender.id)
       return getLiveCompactSyncService().resetToBundled()
+    },
+  )
+
+  // 会话级 Live Compact 开关：写法与 Codex Fast Mode 同类（专用通道 + 布尔入参），
+  // 但与它不同的是**允许运行中切换**：落 meta 后立即把生效态推给该会话，
+  // 本轮剩余决策点即按新值执行。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPDATE_SESSION_LIVE_COMPACT,
+    async (event, sessionId: string, enabled: boolean): Promise<AgentSessionMeta> => {
+      await assertLiveCompactMainRenderer(event.sender.id)
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('会话 ID 无效')
+      }
+      if (typeof enabled !== 'boolean') {
+        throw new Error(`无效的 Live Compact 状态: ${String(enabled)}`)
+      }
+      return setAgentSessionLiveCompactEnabled(sessionId, enabled)
     },
   )
 

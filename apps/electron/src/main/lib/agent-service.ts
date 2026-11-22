@@ -43,6 +43,8 @@ import { getAgentSessionWorkspacePath } from './config-paths'
 import { getAgentWorkspaceBySlug, getProjectFilesPath } from './agent-workspace-manager'
 import { getLocalProjectRootStatus } from './project-root-health'
 import { getAgentSessionMeta, markAgentSessionDeleting, updateAgentSessionMeta } from './agent-session-manager'
+import { resolveLiveCompactEnabled } from './live-compact-settings'
+import { getSettings } from './settings-service'
 import { setAgentStopper, setHeadlessAgentRunner } from './agent-headless-runner-registry'
 import { getHeadlessAgentRunTarget } from './agent-headless-run-target'
 import { sendAgentStreamComplete } from './agent-completion-payload'
@@ -609,6 +611,45 @@ export function stopAllAgents(): void {
  */
 export async function updateAgentPermissionMode(sessionId: string, mode: PromaPermissionMode): Promise<void> {
   await orchestrator.updateSessionPermissionMode(sessionId, mode)
+}
+
+/**
+ * 会话级 Live Compact 开关（会话工具栏按钮）。
+ *
+ * 先落会话 meta（下一轮 query 起点一定读到新值），再把**生效态**推给运行中的会话：
+ * - 全局主闸关闭时 effective 永远为 false，推送也只是把已关闭的状态再确认一次；
+ * - 全局开启时会话 true → effective true，false → effective false。
+ * 之所以推 effective 而不是原始 meta 值：utility 侧的闭包只认布尔开关，
+ * 全局主闸语义必须留在主进程单源（live-compact-settings）。
+ */
+export async function setAgentSessionLiveCompactEnabled(
+  sessionId: string,
+  enabled: boolean,
+): Promise<import('@proma/shared').AgentSessionMeta> {
+  if (!getAgentSessionMeta(sessionId)) {
+    throw new Error(`Agent 会话不存在: ${sessionId}`)
+  }
+  const updated = updateAgentSessionMeta(sessionId, { liveCompact: enabled })
+  await orchestrator.updateSessionLiveCompact(sessionId, resolveLiveCompactEnabled(updated, getSettings()))
+  return updated
+}
+
+/**
+ * 全局主闸变化后重推所有运行中会话。
+ *
+ * 没有这条推送，“关闭全局开关立即停手”就只能等下一轮消息：
+ * 运行中的会话会继续按旧值改写上下文，用户却以为已关掉。
+ */
+export async function resyncLiveCompactForActiveSessions(): Promise<void> {
+  const snapshots = orchestrator.listActiveSessionSnapshots()
+  if (snapshots.length === 0) return
+  const settings = getSettings()
+  await Promise.all(snapshots.map((snapshot) =>
+    orchestrator.updateSessionLiveCompact(
+      snapshot.sessionId,
+      resolveLiveCompactEnabled(getAgentSessionMeta(snapshot.sessionId), settings),
+    ),
+  ))
 }
 
 // ===== 流式追加消息 =====

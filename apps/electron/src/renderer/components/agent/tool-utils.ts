@@ -5,6 +5,7 @@
 
 import type { LucideIcon } from 'lucide-react'
 import {
+  ArchiveRestore,
   BookOpen,
   Bot,
   CalendarClock,
@@ -100,6 +101,8 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   BrowserPreviewOpen: Globe,
   BrowserDomAction: MousePointer2,
   BrowserExecuteJavaScript: Code2,
+  // Live Compact 的原文召回工具（Pi extension 注册，不进 customTools 管线）
+  spine_recall: ArchiveRestore,
 }
 
 /**
@@ -172,6 +175,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   BrowserPreviewOpen: '打开本地网页预览',
   BrowserDomAction: '操作网页 DOM',
   BrowserExecuteJavaScript: '执行网页 JavaScript',
+  // 裸工具名 spine_recall 不友好：统一显示为「原文召回」
+  spine_recall: '原文召回',
 }
 
 /**

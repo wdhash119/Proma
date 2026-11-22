@@ -855,6 +855,14 @@ export const sessionExistsAtom = atomFamily((sessionId: string) =>
 /** Agent 思考模式：未加载持久化设置前也默认开启，避免输入栏按钮短暂显示为关闭。 */
 export const agentThinkingAtom = atom<ThinkingConfig | undefined>({ type: 'adaptive' })
 
+/**
+ * Live Compact 全局主闸（settings.liveCompact.enabled）。
+ *
+ * 缺省 false：与主进程缺省一致，未启用时工具栏按钮直接显示为禁用态。
+ * 设置页保存成功后同步写入（见 LiveCompactSettings），避免 AgentView 一直持有启动时的旧值。
+ */
+export const liveCompactGlobalEnabledAtom = atom<boolean>(false)
+
 /** Agent 推理深度 */
 export const agentEffortAtom = atom<AgentEffort | undefined>(undefined)
 

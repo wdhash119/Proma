@@ -163,8 +163,8 @@ describe('Live Compact 接线契约（源码级）', () => {
     expect(source).toContain('resolveLiveCompactAlgorithm(liveCompact.configDir')
     // cut 事件 v1 的结构化日志出口。
     expect(source).toContain("console.log('[live-compact] ' + JSON.stringify(record))")
-    // 默认关闭时不加载算法，也不创建 factory。
-    expect(source).toContain("active.liveCompact = { enabled: input.liveCompact?.enabled === true }")
+    // 默认关闭时不加载算法，也不创建 factory；开关引用每轮按解析值刷新（保留对象身份）。
+    expect(source).toContain("applyLiveCompactEnabled(active, input.liveCompact?.enabled === true)")
   })
 
   test('Given 编排层 When 组装查询输入 Then 用单源 helper 组装并按需下发字段', () => {

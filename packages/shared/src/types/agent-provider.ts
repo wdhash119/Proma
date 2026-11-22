@@ -70,4 +70,10 @@ export interface AgentProviderAdapter {
   cancelQueuedMessage?(sessionId: string, messageUuid: string): Promise<void>
   /** 动态切换活跃查询的权限模式（可选，仅支持 SDK 原生 setPermissionMode 的 Provider） */
   setPermissionMode?(sessionId: string, mode: string): Promise<void>
+  /**
+   * 动态刷新活跃查询的 Live Compact 开关（可选）。
+   * 由会话工具栏按钮与全局主闸变化触发；写的是 extension 共享引用，
+   * 因此当轮 turn_end 即按新状态决策，不需要重建会话。
+   */
+  setLiveCompactEnabled?(sessionId: string, enabled: boolean): Promise<void>
 }

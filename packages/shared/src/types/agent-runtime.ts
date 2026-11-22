@@ -79,6 +79,8 @@ export const AGENT_RUNTIME_METHODS = {
   QUERY_ABORT: 'agent.query.abort',
   QUERY_SEND_QUEUED_MESSAGE: 'agent.query.sendQueuedMessage',
   QUERY_SET_PERMISSION_MODE: 'agent.query.setPermissionMode',
+  /** 运行中刷新 Live Compact 会话开关：utility 侧的 extension 闭包每轮现读该引用。 */
+  QUERY_SET_LIVE_COMPACT: 'agent.query.setLiveCompactEnabled',
   CAPABILITY_CAN_USE_TOOL: 'agent.capability.canUseTool',
   CAPABILITY_CANCEL: 'agent.capability.cancel',
   CAPABILITY_CUSTOM_TOOL: 'agent.capability.customTool',

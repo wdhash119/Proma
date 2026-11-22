@@ -17,7 +17,7 @@ import * as React from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { CornerDownLeft, Square, Settings, X, Brain, Sparkles, ListTodo, Paperclip } from 'lucide-react'
+import { CornerDownLeft, Square, Settings, X, Brain, Sparkles, ListTodo, Paperclip, Layers } from 'lucide-react'
 import { AgentMessages, type AgentHistoryQuoteNavigationRequest } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { AgentMessageQueue } from './AgentMessageQueue'
@@ -99,6 +99,7 @@ import {
   workspaceAttachedFilesMapAtom,
   liveMessagesMapAtom,
   agentThinkingAtom,
+  liveCompactGlobalEnabledAtom,
   agentEffortAtom,
   stoppedByUserSessionsAtom,
   agentSessionPathMapAtom,
@@ -142,6 +143,7 @@ import {
   restoreQueuedMessageToFront,
 } from '@/lib/agent-message-queue'
 import type { AgentQueuedAttachment, AgentQueuedMessage, QueueDropPlacement } from '@/lib/agent-message-queue'
+import { resolveLiveCompactButtonState } from './live-compact-button'
 
 /** 稳定的空 string 数组引用，避免无附件会话的 memo 链每次渲染失效。 */
 const EMPTY_STRING_ARRAY: string[] = []
@@ -505,6 +507,9 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const agentChannelId = sessionMetaChannelId ?? sessionChannelMap.get(sessionId) ?? defaultChannelId
   const agentModelId = sessionMetaModelId ?? sessionModelMap.get(sessionId) ?? defaultModelId
   const [agentThinking, setAgentThinking] = useAtom(agentThinkingAtom)
+  // Live Compact 全局主闸：启动时由 AgentSettingsInitializer 写入，设置页保存后同步更新。
+  const liveCompactGlobalEnabled = useAtomValue(liveCompactGlobalEnabledAtom)
+  const [liveCompactSaving, setLiveCompactSaving] = React.useState(false)
   const agentEffort = useAtomValue(agentEffortAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setModelSelectorOpen = useSetAtom(modelSelectorOpenAtom)
@@ -766,6 +771,16 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     && agentChannelProvider === 'openai-codex'
     && isCodexFastModeSupportedModel(agentModelId ?? undefined)
   const codexFastModeEnabled = isCodexFastModeAvailable && sessionMeta?.codexFastMode === true
+  // 会话工具栏的 Live Compact 按钮状态：只在 Agent 会话存在时渲染，
+  // 显式值与继承态统一在纯函数里解析（与主进程 resolveLiveCompactEnabled 同语义）。
+  const liveCompactButtonState = React.useMemo(
+    () => resolveLiveCompactButtonState({
+      globalEnabled: liveCompactGlobalEnabled,
+      sessionLiveCompact: sessionMeta?.liveCompact,
+      pending: liveCompactSaving,
+    }),
+    [liveCompactGlobalEnabled, sessionMeta?.liveCompact, liveCompactSaving],
+  )
   const reasoningProfile = hasSessionMeta
     ? resolveReasoningProfile({
       modelId: agentModelId ?? undefined,
@@ -1972,6 +1987,37 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     }
   }, [backgroundWaiting, codexFastModeEnabled, isCodexFastModeAvailable, sessionId, sessionMeta, setAgentSessions, streaming])
 
+  /**
+   * 切换本会话的 Live Compact 开关。
+   *
+   * 写的是显式 true/false（全局开启时 true 与继承等价），不做继承态回退。
+   * 乐观更新后如果失败就回滚，与设置页开关一致；按钮状态机负责三态与禁用态。
+   */
+  const handleLiveCompactToggle = React.useCallback(async (): Promise<void> => {
+    if (!sessionMeta || liveCompactButtonState.disabled) return
+    const previousSessionMeta = sessionMeta
+    const nextEnabled = liveCompactButtonState.nextSessionValue
+    setLiveCompactSaving(true)
+    setAgentSessions((prev) => prev.map((item) => (
+      item.id === sessionId ? { ...item, liveCompact: nextEnabled, updatedAt: Date.now() } : item
+    )))
+    try {
+      const updated = await window.electronAPI.updateSessionLiveCompact(sessionId, nextEnabled)
+      setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? updated : item))
+      if (nextEnabled && (streaming || backgroundWaiting)) {
+        // 本轮 query 起点开关为关时没有加载压缩 factory，无法在当轮插入；
+        // 关闭方向则相反——主进程会立即推送生效态，本轮剩余决策点就停手。
+        toast.info('Live Compact 已开启，下一轮消息起生效', { id: `agent-live-compact-deferred-${sessionId}` })
+      }
+    } catch (error) {
+      console.error('[AgentView] 切换 Live Compact 失败:', error)
+      setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? previousSessionMeta : item))
+      toast.error('Live Compact 切换失败', { description: getErrorMessage(error) })
+    } finally {
+      setLiveCompactSaving(false)
+    }
+  }, [backgroundWaiting, liveCompactButtonState.disabled, liveCompactButtonState.nextSessionValue, sessionId, sessionMeta, setAgentSessions, streaming])
+
   const updateReasoningLevel = React.useCallback(async (thinkingLevel: AgentThinkingLevel): Promise<void> => {
     if (!isSessionThinkingAvailable || !sessionMeta) return
 
@@ -2816,6 +2862,33 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       ),
     },
     {
+      key: 'live-compact',
+      node: (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                inputToolbarButtonClass,
+                liveCompactButtonState.effective && inputToolbarActiveButtonClass,
+              )}
+              onClick={() => void handleLiveCompactToggle()}
+              disabled={liveCompactButtonState.disabled}
+              aria-pressed={liveCompactButtonState.effective}
+              aria-label={liveCompactButtonState.ariaLabel}
+            >
+              <Layers className="size-[17px]" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>{liveCompactButtonState.tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ),
+    },
+    {
       key: 'persona',
       node: (
         <AgentPersonaPopover
@@ -2878,6 +2951,8 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     handleAttachContent,
     handleCompact,
     agentVoiceInputId,
+    liveCompactButtonState,
+    handleLiveCompactToggle,
   ])
 
   const stopControl = (

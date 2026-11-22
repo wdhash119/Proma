@@ -240,15 +240,36 @@ interface ActivePiSession {
   onSkillActivated?: (activations: SkillActivation[], userMessageUuid: string) => void
   /**
    * Live Compact 会话开关的可变引用。
-   * 本批初始化为查询输入值；P4 的中途切换只需改这里（工厂每轮 turn_end 现读），
-   * 不需要重建会话或热换 extension。
+   * 每轮 query 起点用本次解析的生效态刷新（见 applyLiveCompactEnabled）；
+   * 运行中切换只改这里（工厂每轮 turn_end 现读），不需要重建会话或热换 extension。
    */
   liveCompact?: LiveCompactEnabledRef
 }
 
 /** Live Compact 开关引用；与 Pi extension 共享同一个对象，写入即生效于下一轮。 */
-interface LiveCompactEnabledRef {
+export interface LiveCompactEnabledRef {
   enabled: boolean
+}
+
+/**
+ * 让会话的 Live Compact 开关引用反映本轮查询解析出的生效态。
+ *
+ * 只改 `enabled` 字段而保留 ref 对象身份：extension factory 的 `isEnabled` 闭包
+ * 捕获的是这个对象，换对象会让工厂永远读到创建时那一刻的旧值。
+ * 因此新一轮 query 也必须就地刷新，而不是整体替换。
+ */
+export function applyLiveCompactEnabled(
+  session: { liveCompact?: LiveCompactEnabledRef },
+  enabled: boolean,
+): LiveCompactEnabledRef {
+  const existing = session.liveCompact
+  if (existing) {
+    existing.enabled = enabled
+    return existing
+  }
+  const created: LiveCompactEnabledRef = { enabled }
+  session.liveCompact = created
+  return created
 }
 
 interface PendingInterruptPrompt {
@@ -1396,8 +1417,7 @@ async function createLiveCompactExtensionFactories(
     if (resolved.source === 'override' && resolved.override) {
       console.log(`[Live Compact] 使用同步覆盖层算法 ${resolved.override.version}（${resolved.override.sha.slice(0, 7)}）`)
     }
-    const enabledRef: LiveCompactEnabledRef = active.liveCompact ?? { enabled: liveCompact.enabled }
-    active.liveCompact = enabledRef
+    const enabledRef = applyLiveCompactEnabled(active, liveCompact.enabled)
     return [
       createLiveCompactExtension({
         isEnabled: () => enabledRef.enabled,
@@ -1421,9 +1441,9 @@ export class PiAgentAdapter implements AgentProviderAdapter {
   async *query(input: PiAgentQueryOptions): AsyncIterable<SDKMessage> {
     const active = createActivePiSession()
     this.activeSessions.set(input.sessionId, active)
-    // Live Compact 开关引用：本批固定为查询输入值（未启用时恒为 false），
-    // P4 的中途切换控制消息只需要改写 active.liveCompact.enabled。
-    active.liveCompact = { enabled: input.liveCompact?.enabled === true }
+    // Live Compact 开关引用：每轮都按本次解析的生效态刷新（不跨轮残留旧值），
+    // 且沿用已有 ref 对象身份，工厂的 isEnabled 闭包仍然读同一个对象。
+    applyLiveCompactEnabled(active, input.liveCompact?.enabled === true)
     const queue = createAsyncQueue<SDKMessage>()
     const runtimeGuard = createAgentRuntimeGuard(input)
     // 同一 session 的新请求可能在旧 IPC 事件之后开始；所有 retry 生命周期均携带这一轮标识。
@@ -2165,6 +2185,17 @@ export class PiAgentAdapter implements AgentProviderAdapter {
 
   async setPermissionMode(_sessionId: string, _mode: string): Promise<void> {
     // Proma 权限由工具包装层实时读取 sessionPermissionModes，自身无需同步给 Pi。
+  }
+
+  async setLiveCompactEnabled(sessionId: string, enabled: boolean): Promise<void> {
+    // 只改与 extension 共享的引用：工厂每轮 turn_end 现读 isEnabled，
+    // 因此中途关闭在本轮剩余决策点即停手，不需要重建会话。
+    // 若本轮查询起点开关为关（没有加载工厂），这里自然无消费者，
+    // 下一轮 query 会按最新 meta/全局设置重新解析并决定是否加载工厂。
+    const active = this.activeSessions.get(sessionId)
+    if (!active?.liveCompact) return
+    active.liveCompact.enabled = enabled
+    console.log(`[Live Compact] 会话开关已刷新: sessionId=${sessionId}, enabled=${enabled}`)
   }
 
   dispose(): void {

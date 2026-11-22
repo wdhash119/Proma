@@ -405,6 +405,15 @@ export function getToolPhrase(toolName: string, input: Record<string, unknown>):
       return phrase('发送消息')
     }
 
+    case 'spine_recall': {
+      // Live Compact 卡片上的「原文存档」ref（条目 id）：带 ref 才能和卡片对上号。
+      const ref = input.ref
+      if (typeof ref === 'string' && ref.trim()) {
+        return phrase(`原文召回 ${truncate(ref.trim(), 48)}`)
+      }
+      return phrase('原文召回')
+    }
+
     default: {
       // MCP 工具：mcp__serverName__toolName
       const mcpParts = toolName.split('__')

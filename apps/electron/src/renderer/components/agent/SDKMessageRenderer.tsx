@@ -30,7 +30,7 @@ import {
   type MessageGroup,
   type AssistantTurn,
 } from '@proma/session-core'
-export { groupIntoTurns, getGroupPreview, extractUserText } from '@proma/session-core'
+export { getGroupPreview, extractUserText } from '@proma/session-core'
 export type { MessageGroup, AssistantTurn } from '@proma/session-core'
 import { DurationBadge } from './AgentMessages'
 import {

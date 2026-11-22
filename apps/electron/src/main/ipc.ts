@@ -6,12 +6,12 @@
 
 import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard } from 'electron'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { existsSync, realpathSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
-import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
+import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
   VoiceDictationAudioChunkInput,
@@ -312,7 +312,7 @@ import { permissionService } from './lib/agent-permission-service'
 import { resolvePathAgainstAgentCwd } from './lib/agent-file-path'
 import { askUserService } from './lib/agent-ask-user-service'
 import { exitPlanService } from './lib/agent-exit-plan-service'
-import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir, getScratchPadPath } from './lib/config-paths'
+import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
 import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/storage-service'
 import {
@@ -2127,23 +2127,6 @@ export function registerIpcHandlers(): void {
       win.webContents.send(SETTINGS_IPC_CHANNELS.ON_SYSTEM_THEME_CHANGED, isDark)
     })
   })
-
-  // ===== Scratch Pad 持久化 =====
-
-  // 从磁盘加载 scratch-pad.md
-  ipcMain.handle(
-    SCRATCH_PAD_IPC_CHANNELS.LOAD,
-    async (): Promise<string> => {
-      const path = getScratchPadPath()
-      try {
-        if (!existsSync(path)) return ''
-        return readFileSync(path, 'utf-8')
-      } catch (err) {
-        console.error('[ScratchPad] 加载失败:', err)
-        return ''
-      }
-    }
-  )
 
   // ===== 应用图标切换 =====
 

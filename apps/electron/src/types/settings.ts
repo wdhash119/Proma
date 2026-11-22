@@ -435,12 +435,6 @@ export const SETTINGS_IPC_CHANNELS = {
   ON_THEME_SETTINGS_CHANGED: 'settings:theme-settings-changed',
 } as const
 
-/** Scratch Pad IPC 通道 */
-export const SCRATCH_PAD_IPC_CHANNELS = {
-  /** 从磁盘加载 scratch-pad.md 内容 */
-  LOAD: 'scratch-pad:load',
-} as const
-
 /** 应用图标 IPC 通道 */
 export const APP_ICON_IPC_CHANNELS = {
   /** 设置应用图标（variant ID） */

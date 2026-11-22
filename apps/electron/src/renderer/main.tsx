@@ -81,7 +81,6 @@ import { GlobalShortcuts } from './components/shortcuts/GlobalShortcuts'
 import { VoiceDictationApp } from './components/voice-dictation/VoiceDictationApp'
 import { TabSwitcher } from './components/tabs/TabSwitcher'
 import { PromaLogo } from './lib/model-logo'
-import { triggerLegacyScratchPadMigration } from './lib/legacy-scratch-pad-migration'
 import { initializePerformanceMonitor } from './lib/performance-monitor'
 import { createUpdateReminderScheduler, type UpdateReminderScheduler } from './lib/update-reminder-scheduler'
 import './styles/globals.css'
@@ -993,17 +992,6 @@ function TabStatePersistenceInitializer(): null {
   return null
 }
 
-/**
- * Legacy Scratch Pad migration trigger.
- * The retained load IPC moves old content into the managed Vault without restoring UI state.
- */
-function LegacyScratchPadMigrationInitializer(): null {
-  useEffect(() => {
-    triggerLegacyScratchPadMigration(window.electronAPI.loadScratchPad)
-  }, [])
-  return null
-}
-
 // ===== 快速任务窗口：轻量渲染 =====
 if (isQuickTaskWindow) {
   import('./components/quick-task/QuickTaskApp').then(({ QuickTaskApp }) => {
@@ -1064,7 +1052,6 @@ if (isQuickTaskWindow) {
       <SlackInitializer />
       <DingTalkInitializer />
       <TabStatePersistenceInitializer />
-      <LegacyScratchPadMigrationInitializer />
       <VoiceDictationApp embedded />
       <GlobalShortcuts />
       <TabSwitcher />

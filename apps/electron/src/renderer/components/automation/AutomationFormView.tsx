@@ -28,7 +28,6 @@ import { ModelSelector } from '@/components/chat/ModelSelector'
 import {
   automationFormAtom,
   automationsAtom,
-  AUTOMATION_INTERVAL_OPTIONS,
   AUTOMATION_WEEKDAY_OPTIONS,
   automationToDraft,
   type AutomationDraft,

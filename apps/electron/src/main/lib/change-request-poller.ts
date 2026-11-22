@@ -6,7 +6,6 @@
  * 已合并的停止轮询，已关闭的只在保留期内低频看一眼。
  */
 
-import type { ChangeRequestSnapshot } from '@proma/shared'
 import { isCheckPending } from '@proma/shared'
 import type { ChangeRequestFetchResult } from './change-request-store'
 

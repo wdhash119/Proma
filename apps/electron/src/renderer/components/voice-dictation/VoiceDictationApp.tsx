@@ -23,7 +23,6 @@ const STOP_COMMIT_TIMEOUT_MS = 1400
 const FINAL_COMMIT_DELAY_MS = 180
 
 export function VoiceDictationApp({ embedded = false }: { embedded?: boolean }): React.ReactElement {
-  const [sessionId, setSessionId] = React.useState<string | null>(null)
   const [status, setStatus] = React.useState<VoiceDictationStateEvent['status']>('idle')
   const [message, setMessage] = React.useState('按快捷键开始语音输入')
   const [transcript, setTranscript] = React.useState('')
@@ -506,7 +505,6 @@ export function VoiceDictationApp({ embedded = false }: { embedded?: boolean }):
     const nextSessionId = crypto.randomUUID()
     const nextDictationId = crypto.randomUUID()
     dictationIdRef.current = nextDictationId
-    setSessionId(nextSessionId)
     sessionIdRef.current = nextSessionId
 
     const audioCapture = startAudioCapture(recordingAttempt).catch((error) => {
@@ -615,7 +613,6 @@ export function VoiceDictationApp({ embedded = false }: { embedded?: boolean }):
         const isCurrentReconnect = (): boolean =>
           recordingAttemptRef.current === reconnectAttempt &&
           sessionIdRef.current === nextSessionId
-        setSessionId(nextSessionId)
         sessionIdRef.current = nextSessionId
         asrReadyRef.current = false
         queuedAudioRef.current = []

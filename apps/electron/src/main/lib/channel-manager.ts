@@ -1202,7 +1202,7 @@ async function testOpenAICompatible(
   baseUrl: string,
   apiKey: string,
   proxyUrl?: string,
-  provider: ProviderType = 'openai',
+  _provider: ProviderType = 'openai',
 ): Promise<ChannelTestResult> {
   const url = resolveOpenAIModelsUrl(baseUrl)
   const fetchFn = getFetchFn(proxyUrl)
@@ -2268,7 +2268,7 @@ async function fetchOpenAICompatibleModels(
   baseUrl: string,
   apiKey: string,
   proxyUrl?: string,
-  provider: ProviderType = 'openai',
+  _provider: ProviderType = 'openai',
 ): Promise<FetchModelsResult> {
   const url = resolveOpenAIModelsUrl(baseUrl)
   const fetchFn = getFetchFn(proxyUrl)

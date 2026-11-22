@@ -330,7 +330,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const [pdfSrc, setPdfSrc] = React.useState('')
   const [pdfZoom, setPdfZoom] = React.useState(100)
   const pdfIframeRef = React.useRef<HTMLIFrameElement>(null)
-  const [imagePath, setImagePath] = React.useState('')
   const [imageDataUrl, setImageDataUrl] = React.useState('')
   // 默认 25%：预览面板空间有限，先展示缩略全貌，用户可手动放大查看细节
   const [imageZoom, setImageZoom] = React.useState(0.25)
@@ -647,7 +646,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     setHtmlSourceMode(false)
     setPdfSrc('')
     setPdfZoom(100)
-    setImagePath('')
     setImageDataUrl('')
     setImageZoom(0.25)
     setImageNaturalSize({ w: 0, h: 0 })
@@ -796,7 +794,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       setPreviewMetadata(cached.previewMetadata)
       setPdfSrc(cached.pdfSrc ?? '')
       setPdfZoom(100)
-      setImagePath(cached.imagePath ?? '')
       setImageDataUrl(cached.imageDataUrl ?? '')
       setImageZoom(0.25)
       setImageNaturalSize({ w: 0, h: 0 })
@@ -819,7 +816,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         setPreviewMetadata(undefined)
         setPdfSrc('')
         setPdfZoom(100)
-        setImagePath('')
         setImageDataUrl('')
         setImageZoom(0.25)
         setImageNaturalSize({ w: 0, h: 0 })
@@ -887,11 +883,9 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               const resolved = await window.electronAPI.resolveFilePath(filePath, fileAccess)
               if (cancelled) return
               if (resolved) {
-                setImagePath(filePath)
                 setImageDataUrl(resolved.url)
                 setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', imagePath: filePath, imageDataUrl: resolved.url })
               } else {
-                setImagePath('')
                 setImageDataUrl('')
                 setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', imagePath: '', imageDataUrl: '' })
               }

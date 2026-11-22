@@ -7,10 +7,6 @@ import { getUnstagedChanges, invalidateGitDiffCache } from './git-diff-service'
 
 let repoPath = ''
 
-function git(...args: string[]): void {
-  execFileSync('git', args, { cwd: repoPath, stdio: 'pipe' })
-}
-
 function createRepository(prefix: string, fileName: string): string {
   const path = mkdtempSync(join(tmpdir(), prefix))
   execFileSync('git', ['init'], { cwd: path, stdio: 'pipe' })

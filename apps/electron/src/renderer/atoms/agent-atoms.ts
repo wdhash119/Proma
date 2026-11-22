@@ -9,8 +9,7 @@ import { atom } from 'jotai'
 import type { Getter } from 'jotai'
 import { atomWithStorage, selectAtom } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
-import type { AgentSessionMeta, AgentEvent, AgentEventUsage, AgentWorkspace, AgentPendingFile, RetryAttempt, PromaPermissionMode, PermissionRequest, AskUserRequest, ExitPlanModeRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@proma/shared'
-import { PROMA_DEFAULT_PERMISSION_MODE } from '@proma/shared'
+import type { AgentSessionMeta, AgentEvent, AgentEventUsage, AgentWorkspace, AgentPendingFile, RetryAttempt, AskUserRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@proma/shared'
 import { calculateDockBadgeCount, countPendingRequests } from '@/lib/dock-badge-count'
 import type { AgentQueuedMessage } from '@/lib/agent-message-queue'
 import type { SessionFileChange } from '@/lib/session-file-changes'
@@ -289,7 +288,7 @@ export const currentAgentSessionIdAtom = atom<string | null>(null)
  * 聚合 atom 仅作为低频汇总和旧调用方兼容入口保留。
  */
 const agentStreamingStateIdsAtom = atom<Set<string>>(new Set<string>())
-const agentStreamingStateStorageAtomFamily = atomFamily((sessionId: string) =>
+const agentStreamingStateStorageAtomFamily = atomFamily((_sessionId: string) =>
   atom<AgentStreamState | undefined>(undefined),
 )
 
@@ -844,7 +843,7 @@ export interface SkillDetailNavigationRequest {
 }
 
 /** 历史引用导航属于会话级短暂 UI 状态，避免其他会话的 Skills 视图消费请求。 */
-export const skillDetailNavigationAtomFamily = atomFamily((sessionId: string) => atom<SkillDetailNavigationRequest | null>(null))
+export const skillDetailNavigationAtomFamily = atomFamily((_sessionId: string) => atom<SkillDetailNavigationRequest | null>(null))
 
 /** 在当前 Agent 会话中打开并聚焦一个项目级组件。 */
 export const openWorkspaceComponentAtom = atom(

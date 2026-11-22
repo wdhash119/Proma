@@ -9,6 +9,9 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    // 与根 tsconfig 保持一致：未使用的局部变量/形参直接报错，防止死代码回流
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "types": ["bun"]
   },
   "include": ["src/**/*"]

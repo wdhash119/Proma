@@ -41,7 +41,7 @@ function joinTranscriptParts(left: string, right: string): string {
 export function mergeVoiceDictationTranscript(
   state: VoiceDictationTranscriptMergeState,
   incomingText: string,
-  isFinal: boolean,
+  _isFinal: boolean,
   sessionId: string,
 ): VoiceDictationTranscriptMergeResult {
   const text = incomingText.trim()

@@ -45,7 +45,6 @@ import {
 } from '@/hooks/useConversationSettings'
 import { registerPendingTitle } from '@/hooks/useGlobalChatListeners'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
-import { cn } from '@/lib/utils'
 import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
 import {
   clearStopGenerationTarget,
@@ -104,7 +103,7 @@ function ChatViewInner({ conversationId }: ChatViewProps): React.ReactElement {
   }, [stopShortcutTarget])
 
   // ===== Per-conversation hooks（分屏独立） =====
-  const [selectedModel, setSelectedModel] = useConversationModel()
+  const [selectedModel] = useConversationModel()
   const [contextLength] = useConversationContextLength()
   const [thinkingEnabled] = useConversationThinkingEnabled()
   const [thinkingLevel] = useConversationThinkingLevel()

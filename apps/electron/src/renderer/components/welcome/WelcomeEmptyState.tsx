@@ -4,16 +4,12 @@
  * 在没有会话时展示：
  * 1. 个性化时段问候
  * 2. 平台感知的小 Tips
- * 3. Chat/Agent 模式切换 Tab
  */
 
 import * as React from 'react'
-import { useAtomValue, useAtom } from 'jotai'
-import { Lightbulb, MessageSquare, Bot } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useAtomValue } from 'jotai'
+import { Lightbulb } from 'lucide-react'
 import { userProfileAtom } from '@/atoms/user-profile'
-import { appModeAtom, type AppMode } from '@/atoms/app-mode'
-import { themeStyleAtom } from '@/atoms/theme'
 import { getRandomTip, getPlatform, type Tip } from '@/lib/tips'
 
 /** 根据小时返回时段问候 */
@@ -26,7 +22,6 @@ function getGreeting(hour: number): string {
 
 export function WelcomeEmptyState(): React.ReactElement {
   const userProfile = useAtomValue(userProfileAtom)
-  const themeStyle = useAtomValue(themeStyleAtom)
 
   // 稳定的随机 Tip（组件挂载时选一条）
   const [tip] = React.useState<Tip>(() => getRandomTip(getPlatform()))

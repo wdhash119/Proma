@@ -66,11 +66,6 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function optionalString(value: unknown): string | undefined {
-  const text = readString(value)
-  return text ? text : undefined
-}
-
 /** 提案参数由模型给出；缺字段时按空串/null 处理，交给校验层给出中文原因。 */
 function readProposal(value: unknown): ProfileMigrationProposal | undefined {
   if (!value || typeof value !== 'object') return undefined

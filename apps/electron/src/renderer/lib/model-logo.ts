@@ -16,13 +16,11 @@ import DefaultLogo from '@/assets/models/default.png'
 
 // Claude / Anthropic
 import ClaudeLogo from '@/assets/models/claude.png'
-import ClaudeDarkLogo from '@/assets/models/claude_dark.png'
 
 // OpenAI / GPT 系列
 import OpenAILogo from '@/assets/models/openai.png'
 import GPT4Logo from '@/assets/models/gpt_4.png'
 import GPT35Logo from '@/assets/models/gpt_3.5.png'
-import GPTDarkLogo from '@/assets/models/gpt_dark.png'
 import GPTo1Logo from '@/assets/models/gpt_o1.png'
 import GPTImageLogo from '@/assets/models/gpt_image_1.png'
 import GPT5Logo from '@/assets/models/gpt-5.png'
@@ -38,13 +36,10 @@ import GPT6AstraLogo from '@/assets/models/gpt-6-astra.webp'
 
 // DeepSeek
 import DeepSeekLogo from '@/assets/models/deepseek.png'
-import DeepSeekDarkLogo from '@/assets/models/deepseek_dark.png'
 
 // Google / Gemini
 import GeminiLogo from '@/assets/models/gemini.png'
-import GeminiDarkLogo from '@/assets/models/gemini_dark.png'
 import GemmaLogo from '@/assets/models/gemma.png'
-import GemmaDarkLogo from '@/assets/models/gemma_dark.png'
 
 // 自定义 Gemini 衍生模型
 import DeepGeminiLogo from '@/assets/models/deepgemini.png'
@@ -54,11 +49,9 @@ import SeedGeminiLogo from '@/assets/models/seedgemini.png'
 
 // Qwen / 通义
 import QwenLogo from '@/assets/models/qwen.png'
-import QwenDarkLogo from '@/assets/models/qwen_dark.png'
 
 // Grok / xAI
 import GrokLogo from '@/assets/models/grok.png'
-import GrokDarkLogo from '@/assets/models/grok_dark.png'
 
 // Kimi
 import KimiLogo from '@/assets/models/moonshot.png'
@@ -68,40 +61,28 @@ import VolcengineLogo from '@/assets/models/volcengine.svg'
 
 // Zhipu / 智谱
 import ZhipuLogo from '@/assets/models/zhipu.png'
-import ZhipuDarkLogo from '@/assets/models/zhipu_dark.png'
-
-// ChatGLM
-import ChatGLMLogo from '@/assets/models/chatglm.png'
-import ChatGLMDarkLogo from '@/assets/models/chatglm_dark.png'
 
 // Llama / Meta
 import LlamaLogo from '@/assets/models/llama.png'
-import LlamaDarkLogo from '@/assets/models/llama_dark.png'
 
 // Mistral / Mixtral
 import MistralLogo from '@/assets/models/mixtral.png'
-import MistralDarkLogo from '@/assets/models/mixtral_dark.png'
 import CodestralLogo from '@/assets/models/codestral.png'
 
 // Yi / 零一
 import YiLogo from '@/assets/models/yi.png'
-import YiDarkLogo from '@/assets/models/yi_dark.png'
 
 // Hunyuan / 混元
 import HunyuanLogo from '@/assets/models/hunyuan.png'
-import HunyuanDarkLogo from '@/assets/models/hunyuan_dark.png'
 
 // Wenxin / 文心 / ERNIE
 import WenxinLogo from '@/assets/models/wenxin.png'
-import WenxinDarkLogo from '@/assets/models/wenxin_dark.png'
 
 // SparkDesk / 讯飞星火
 import SparkDeskLogo from '@/assets/models/sparkdesk.png'
-import SparkDeskDarkLogo from '@/assets/models/sparkdesk_dark.png'
 
 // Step / 阶跃
 import StepLogo from '@/assets/models/step.png'
-import StepDarkLogo from '@/assets/models/step_dark.png'
 
 // MiniMax
 import MiniMaxLogo from '@/assets/models/minimax.png'
@@ -117,7 +98,6 @@ import PromaLogo from '@/assets/models/proma.png'
 
 // Cohere
 import CohereLogo from '@/assets/models/cohere.png'
-import CohereDarkLogo from '@/assets/models/cohere_dark.png'
 
 // Embedding
 import EmbeddingLogo from '@/assets/models/embedding.png'

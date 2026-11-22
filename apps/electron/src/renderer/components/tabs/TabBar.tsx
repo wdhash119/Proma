@@ -235,7 +235,7 @@ function TabBarInner({
     : undefined
   const showBrowserButton = Boolean(activeAgentSession)
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
-  const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
+  const setBrowserOpenMap = useSetAtom(browserPanelOpenMapAtom)
   const browserMinimizedMap = useAtomValue(browserPanelMinimizedMapAtom)
   const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
   const browserStateMap = useAtomValue(browserStateMapAtom)

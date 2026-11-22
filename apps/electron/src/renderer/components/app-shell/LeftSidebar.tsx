@@ -19,7 +19,7 @@ import { UserAvatar } from '@/components/chat/UserAvatar'
 import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { planningTabAtom } from '@/atoms/planning-atoms'
-import { appModeAtom, type AppMode } from '@/atoms/app-mode'
+import { appModeAtom } from '@/atoms/app-mode'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
 import {
   conversationsAtom,
@@ -118,7 +118,6 @@ import {
 } from '@/components/session-preview/SessionMiniMapPopover'
 import { detectIsMac } from '@/lib/platform'
 import { ShortcutKeycaps } from '@/components/shortcuts/ShortcutKeycaps'
-import { getActiveAccelerator, getAcceleratorDisplay } from '@/lib/shortcut-registry'
 import { rememberStopGenerationTarget } from '@/lib/stop-generation-target'
 import { markSessionCompletionViewed } from '@/lib/agent-completion-presence'
 import {
@@ -285,47 +284,12 @@ function WorkspaceComponentSidebarEntry({ label, icon, active, onClick, badge }:
   )
 }
 
-interface WorkspaceComponentRailButtonProps {
-  label: string
-  icon: React.ReactNode
-  active: boolean
-  onClick: () => void
-  badge?: React.ReactNode
-}
-
-function WorkspaceComponentRailButton({ label, icon, active, onClick, badge }: WorkspaceComponentRailButtonProps): React.ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          className={cn(
-            'relative flex size-10 items-center justify-center rounded-[12px] border transition-colors titlebar-no-drag',
-            active
-              ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
-              : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
-          )}
-        >
-          {icon}
-          {badge}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 export interface LeftSidebarProps {
   /** 可选固定宽度，默认使用 CSS 响应式宽度 */
   width?: number
   /** 拖拽过程中禁用 CSS transition，保证即时响应 */
   noTransition?: boolean
 }
-
-/** 日期分组标签 */
-type DateGroup = '今天' | '昨天' | '更早'
 
 interface AgentProjectGroup {
   workspace: AgentWorkspace
@@ -374,33 +338,6 @@ function formatRelativeUpdatedAt(updatedAt: number, now: number): string {
   if (diff < month) return `${Math.floor(diff / day)} 天`
   if (diff < year) return `${Math.floor(diff / month)} 月`
   return `${Math.floor(diff / year)} 年`
-}
-
-/** 按 updatedAt 将项目分为 今天 / 昨天 / 更早 三组 */
-function groupByDate<T extends { updatedAt: number }>(items: T[]): Array<{ label: DateGroup; items: T[] }> {
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const yesterdayStart = todayStart - 86_400_000
-
-  const today: T[] = []
-  const yesterday: T[] = []
-  const earlier: T[] = []
-
-  for (const item of items) {
-    if (item.updatedAt >= todayStart) {
-      today.push(item)
-    } else if (item.updatedAt >= yesterdayStart) {
-      yesterday.push(item)
-    } else {
-      earlier.push(item)
-    }
-  }
-
-  const groups: Array<{ label: DateGroup; items: T[] }> = []
-  if (today.length > 0) groups.push({ label: '今天', items: today })
-  if (yesterday.length > 0) groups.push({ label: '昨天', items: yesterday })
-  if (earlier.length > 0) groups.push({ label: '更早', items: earlier })
-  return groups
 }
 
 const SIDEBAR_DRAG_STRIP_HEIGHT = {
@@ -692,7 +629,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const setSessionPathMap = useSetAtom(agentSessionPathMapAtom)
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
   const [workspaces, setWorkspaces] = useAtom(agentWorkspacesAtom)
-  const setMode = useSetAtom(appModeAtom)
 
   // 当前项目能力（MCP + Skill 计数）
   const [capabilities, setCapabilities] = React.useState<WorkspaceCapabilities | null>(null)
@@ -721,7 +657,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const [viewMode, setViewMode] = useAtom(sidebarViewModeAtom)
   const searchDialogOpen = useAtomValue(searchDialogOpenAtom)
   const setSearchDialogOpen = useSetAtom(searchDialogOpenAtom)
-  const newChatShortcutLabel = getAcceleratorDisplay(getActiveAccelerator('new-session'))
 
   /** 归档会话只在用户打开归档视图时加载；active 视图只保留未归档元数据。 */
   const refreshAgentSidebarSessions = React.useCallback(async (includeArchived: boolean): Promise<void> => {

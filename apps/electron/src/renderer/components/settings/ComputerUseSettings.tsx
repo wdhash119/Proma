@@ -18,7 +18,7 @@ import {
   Terminal,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { ComputerUseInstallation, CuaUpdateStatus } from '@proma/shared'
+import type { ComputerUseInstallation } from '@proma/shared'
 import {
   agentChannelIdAtom,
   agentModelIdAtom,

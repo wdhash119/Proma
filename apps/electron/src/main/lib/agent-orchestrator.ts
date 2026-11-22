@@ -18,11 +18,9 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
-import { app } from 'electron'
-import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, AgentActiveSessionSnapshot, CodexOAuthCredentials, GithubCopilotOAuthCredentials, XaiOAuthCredentials, TypedError, SDKMessage, SDKAssistantMessage, AgentStreamPayload, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@proma/shared'
+import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, AgentActiveSessionSnapshot, CodexOAuthCredentials, GithubCopilotOAuthCredentials, XaiOAuthCredentials, TypedError, SDKMessage, SDKAssistantMessage, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@proma/shared'
 import {
   PROMA_DEFAULT_PERMISSION_MODE,
-  PROMA_PERMISSION_MODE_CONFIG,
   THINKING_SIGNATURE_ERROR_CODE,
   THINKING_SIGNATURE_ERROR_MESSAGE,
   THINKING_SIGNATURE_ERROR_TITLE,
@@ -46,7 +44,6 @@ import { AgentEventBus } from './agent-event-bus'
 import { isStaleActiveQueueError } from './agent-queue-routing'
 import { decryptApiKey, getChannelById, listChannels, persistCodexOAuthCredentials, persistGithubCopilotOAuthCredentials, persistXaiOAuthCredentials, resolveChannelRuntimeApiKey, resolveCodexOAuthCredentials, resolveGithubCopilotOAuthCredentials, resolveXaiOAuthCredentials } from './channel-manager'
 import { getAdapter, fetchTitle } from '@proma/core'
-import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { recordSkillUsage } from './skill-usage-service'
@@ -77,7 +74,7 @@ import type { PromaSelfApprovalRequester } from './proma-self-controller'
 import { PROMA_SELF_PROJECT_CONSENT_LABEL, hasPromaSelfProjectConsent } from './proma-self-control-policy'
 import { getAgentVaultRoots, getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
-import { buildAgentRuntimeEnv, type AgentRuntimeEnv } from './agent-runtime-env'
+import { buildAgentRuntimeEnv } from './agent-runtime-env'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
 import { resolvePiThinkingLevel } from './agent-thinking-level'
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
@@ -204,17 +201,6 @@ function buildPiAdditionalDirectoriesPrompt(directories: string[]): string {
 如需读取或修改这些目录中的内容，请直接使用绝对路径，不要先复制到当前工作目录。
 ${directoryLines}
 </attached_directories>`
-}
-
-const LOCAL_PROJECT_ROOT_UNAVAILABLE_CODE = 'local_project_root_unavailable'
-
-function createLocalProjectRootUnavailableError(projectRootPath: string, status?: string): Error {
-  const error = new Error(
-    `本地项目根目录不可用: 本地项目根目录不存在或无法访问：${projectRootPath}。请在 Proma 中重新选择项目文件夹。`,
-  ) as Error & { code?: string; details?: string[] }
-  error.code = LOCAL_PROJECT_ROOT_UNAVAILABLE_CODE
-  error.details = status ? [`目录状态: ${status}`] : undefined
-  return error
 }
 
 // ===== AgentOrchestrator =====

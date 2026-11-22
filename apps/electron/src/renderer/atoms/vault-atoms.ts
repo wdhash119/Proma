@@ -7,8 +7,8 @@ export function getVaultSessionScope(sessionId?: string): string {
   return sessionId ?? '__standalone_vault__'
 }
 
-export const selectedVaultFileAtomFamily = atomFamily((sessionScope: string) => atom<string | null>(null))
+export const selectedVaultFileAtomFamily = atomFamily((_sessionScope: string) => atom<string | null>(null))
 /** Transient navigation target for an Obsidian context chip; not Agent state. */
-export const focusedVaultFolderAtomFamily = atomFamily((sessionScope: string) => atom<string | null>(null))
-export const vaultReadResultAtomFamily = atomFamily((sessionScope: string) => atom<VaultReadResult | null>(null))
+export const focusedVaultFolderAtomFamily = atomFamily((_sessionScope: string) => atom<string | null>(null))
+export const vaultReadResultAtomFamily = atomFamily((_sessionScope: string) => atom<VaultReadResult | null>(null))
 export const vaultRefreshTokenAtom = atom(0)

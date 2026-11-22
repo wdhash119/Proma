@@ -17,7 +17,7 @@ export const proxyConfigAtom = atom<ProxyConfig | null>(null)
 /**
  * 加载代理配置
  */
-export const loadProxyConfigAtom = atom(null, async (get, set) => {
+export const loadProxyConfigAtom = atom(null, async (_get, set) => {
   try {
     const config = await window.electronAPI.getProxySettings()
     set(proxyConfigAtom, config)
@@ -31,7 +31,7 @@ export const loadProxyConfigAtom = atom(null, async (get, set) => {
  */
 export const updateProxyConfigAtom = atom(
   null,
-  async (get, set, config: ProxyConfig) => {
+  async (_get, set, config: ProxyConfig) => {
     try {
       await window.electronAPI.updateProxySettings(config)
       set(proxyConfigAtom, config)

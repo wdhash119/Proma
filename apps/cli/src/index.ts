@@ -16,7 +16,7 @@
  */
 import { parseArgs, boolFlag, strFlag } from './args'
 import { getCommand, allCommands } from './registry'
-import { EXIT_OK, EXIT_USAGE, EXIT_ERROR, UsageError, errorLine, info, emitText } from './output'
+import { EXIT_OK, EXIT_USAGE, EXIT_ERROR, UsageError, errorLine, info } from './output'
 import type { PathOptions } from './paths'
 
 // 注册命令（import 即注册）

@@ -8,7 +8,7 @@
  * 照搬 conversation-manager.ts 的模式。
  */
 
-import { readFileSync, appendFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, createReadStream, createWriteStream, statSync, type WriteStream } from 'node:fs'
+import { readFileSync, appendFileSync, existsSync, unlinkSync, readdirSync, createReadStream, createWriteStream, statSync, type WriteStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { writeJsonFileAtomic, writeTextFileAtomic, readJsonFileSafe } from './safe-file'
 import { randomUUID } from 'node:crypto'

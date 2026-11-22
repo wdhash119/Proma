@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { BROWSER_RISK_DISCLAIMER_VERSION } from '@/types/settings'
-import { cn } from '@/lib/utils'
 import { browserPendingNavigationMapAtom } from '@/atoms/browser-atoms'
 import { BrowserSlot } from './BrowserSlot'
 import { shouldReuseInitialBrowserTab } from './agent-browser-link-utils'

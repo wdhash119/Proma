@@ -171,7 +171,7 @@ export function normalizeOpenAIBaseUrlForSdk(baseUrl: string): string {
  * - custom: "https://api.example.com/v1/chat/completions" → 原样使用
  * - 自行拼接 /chat/completions  防止有直接从大模型官网拷贝的baseurl 里没有/chat/completions后缀 增加容错性
  */
-export function resolveOpenAIChatCompletionsUrl(baseUrl: string, provider: ProviderType = 'openai'): string {
+export function resolveOpenAIChatCompletionsUrl(baseUrl: string, _provider: ProviderType = 'openai'): string {
   // if (provider === 'custom') {
   //   return trimTrailingUrlPathSlash(baseUrl)
   // }

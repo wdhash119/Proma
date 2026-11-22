@@ -15,8 +15,6 @@ import {
   inferCodexAlignedGPT5ContextWindow,
   getGeminiModelCapability,
   isGpt6AstraFamily,
-  isGpt6LunaFamily,
-  isGpt6SolFamily,
   isMimoV26Model,
   normalizeModelCapabilityOverrides,
   resolveReasoningCapability,
@@ -849,14 +847,6 @@ export function requiresPromaUserAgent(provider: ProviderType): boolean {
     || provider === 'zhipu-coding-team'
 }
 
-function usesBearerOnlyAnthropicAuth(provider: ProviderType): boolean {
-  return requiresPromaUserAgent(provider)
-    || provider === 'minimax'
-    || provider === 'qwen-anthropic'
-    || provider === 'qianwen-anthropic'
-    || provider === 'qianwen-token-plan'
-}
-
 export function buildPiRequestHeaders(provider: ProviderType, apiKey: string): PiRequestHeaders | undefined {
   if (normalizePiApi(provider) !== 'anthropic-messages') return undefined
 
@@ -869,10 +859,6 @@ export function buildPiRequestHeaders(provider: ProviderType, apiKey: string): P
   }
 
   return headers
-}
-
-function shouldUseRuntimeApiKey(provider: ProviderType): boolean {
-  return !usesBearerOnlyAnthropicAuth(provider)
 }
 
 /**

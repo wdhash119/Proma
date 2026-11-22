@@ -17,7 +17,7 @@ import * as React from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { CornerDownLeft, Square, Settings, X, Copy, Check, Brain, Sparkles, ListTodo, Paperclip } from 'lucide-react'
+import { CornerDownLeft, Square, Settings, X, Brain, Sparkles, ListTodo, Paperclip } from 'lucide-react'
 import { AgentMessages, type AgentHistoryQuoteNavigationRequest } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { AgentMessageQueue } from './AgentMessageQueue'
@@ -132,7 +132,6 @@ import {
 import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
 import { INSERT_AGENT_INPUT_QUOTE_EVENT, type InsertAgentInputQuoteDetail } from '@/lib/agent-input-quote'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
-import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   buildQueuedMessageSendPayload,
   createAgentQueuedMessage,
@@ -556,8 +555,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   }, [sessionId, sessionMetaChannelId, sessionMetaModelId, hasSessionMeta, defaultChannelId, defaultModelId, setSessionChannelMap, setSessionModelMap])
 
   const setAgentStreamErrors = useSetAtom(agentStreamErrorsAtom)
-  const streamErrors = useAtomValue(agentStreamErrorsAtom)
-  const agentError = streamErrors.get(sessionId) ?? null
   const currentQuotedSelection = useAtomValue(currentQuotedSelectionAtom)
   const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
   const openPreview = useOpenPreview()
@@ -700,7 +697,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const sessionPath = sessionPathMap.get(sessionId) ?? null
   const [workspaceFilesPath, setWorkspaceFilesPath] = React.useState<string | null>(null)
   const [isDragOver, setIsDragOver] = React.useState(false)
-  const [errorCopied, setErrorCopied] = React.useState(false)
 
   // pendingFiles ref（供 addFilesAsAttachments 读取最新列表，避免闭包旧值）
   const pendingFilesRef = React.useRef(pendingFiles)
@@ -2375,19 +2371,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       })
     })
   }, [sessionId, agentChannelId, agentModelId, currentWorkspaceId, streaming, setStreamingStates, store])
-
-  /** 复制错误信息到剪贴板 */
-  const handleCopyError = React.useCallback(async (): Promise<void> => {
-    if (!agentError) return
-
-    try {
-      await copyTextToClipboard(agentError)
-      setErrorCopied(true)
-      setTimeout(() => setErrorCopied(false), 2000)
-    } catch (error) {
-      console.error('[AgentView] 复制错误信息失败:', error)
-    }
-  }, [agentError])
 
   const handleRelinkProjectRoot = React.useCallback(async (): Promise<void> => {
     if (!currentWorkspaceId) return

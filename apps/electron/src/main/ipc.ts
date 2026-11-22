@@ -11,7 +11,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
-import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
+import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
   VoiceDictationAudioChunkInput,
@@ -62,7 +62,6 @@ import type {
   WorkspaceAttachFileInput,
   WorkspaceMcpConfig,
   SkillMeta,
-  BulkImportSkillItemResult,
   BulkImportSkillsResult,
   BulkImportWorkspaceSelection,
   SkillFileContent,
@@ -87,7 +86,6 @@ import type {
   PersonaExportResult,
   ChatToolInfo,
   ChatToolState,
-  ChatToolMeta,
   MoveSessionToWorkspaceInput,
   ForkSessionInput,
   RewindSessionInput,
@@ -170,7 +168,6 @@ import {
   createUntitledVaultFile,
   createUntitledVaultFileInFolder,
   createVaultFolder,
-  discoverObsidianVaultCandidates,
   discoverVaultCandidates,
   selectDefaultVault,
   getConfiguredVaultFileSystem,
@@ -244,8 +241,7 @@ import {
   downloadInstaller,
   launchInstaller,
 } from './lib/installer-downloader'
-import { getEffectiveProxyUrl, getProxySettings, saveProxySettings } from './lib/proxy-settings-service'
-import { getFetchFn } from './lib/proxy-fetch'
+import { getProxySettings, saveProxySettings } from './lib/proxy-settings-service'
 import { detectSystemProxy } from './lib/system-proxy-detector'
 import {
   listAutomations,

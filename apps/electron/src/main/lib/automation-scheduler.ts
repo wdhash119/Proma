@@ -111,9 +111,8 @@ export function broadcastChanged(): void {
  * 执行一次定时任务：新建子会话 + headless 运行
  *
  * @param automation 任务定义
- * @param manual 是否手动「立即运行」（手动运行也走同一路径，但不影响调度计时由 appendRun 统一推进）
  */
-export async function runAutomation(automation: Automation, manual = false): Promise<void> {
+export async function runAutomation(automation: Automation): Promise<void> {
   if (runningAutomations.has(automation.id)) {
     console.log(`[定时任务] ${automation.name} 上一轮尚未结束，跳过本轮`)
     appendRun(automation.id, {
@@ -261,7 +260,7 @@ export async function runAutomationNow(id: string): Promise<void> {
   if (!automation.channelId || !automation.workspaceId) {
     throw new Error('请先为该任务配置模型与项目')
   }
-  await runAutomation(automation, true)
+  await runAutomation(automation)
 }
 
 /** 一个 tick：扫描所有 active 且到期的任务并触发 */

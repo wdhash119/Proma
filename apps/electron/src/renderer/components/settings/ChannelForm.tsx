@@ -395,7 +395,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   ) => {
     if (!isEdit || !channel) return
     try {
-      const savedChannel = await window.electronAPI.updateChannel(channel.id, {
+      await window.electronAPI.updateChannel(channel.id, {
         name: currentName,
         provider: currentProvider,
         baseUrl: currentBaseUrl,
@@ -782,7 +782,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       // auto-save，避免用户立刻关闭表单而丢失 refresh token。
       const savedModels = xaiModels.length > 0 ? xaiModels : models
       if (isEdit && channel) {
-        const saved = await window.electronAPI.updateChannel(channel.id, {
+        await window.electronAPI.updateChannel(channel.id, {
           name,
           provider,
           baseUrl,

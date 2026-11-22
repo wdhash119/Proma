@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, nativeTheme, protocol, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, protocol, screen, shell } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { existsSync } from 'fs'

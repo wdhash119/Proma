@@ -98,7 +98,7 @@ export function ChannelSettings(): React.ReactElement {
   /** 切换渠道启用状态 */
   const handleToggle = async (channel: Channel): Promise<void> => {
     try {
-      const savedChannel = await window.electronAPI.updateChannel(channel.id, { enabled: !channel.enabled })
+      await window.electronAPI.updateChannel(channel.id, { enabled: !channel.enabled })
       await loadChannels()
     } catch (error) {
       console.error('[渠道设置] 切换渠道状态失败:', error)

@@ -147,7 +147,7 @@ describe('预览状态机', () => {
   test('Given 运行中预览 When finish Then 状态结束且 2 秒后自动清理', async () => {
     const harness = createHarness()
     showWindow(harness.service)
-    const created = await harness.service.get(SESSION_ID, true)
+    await harness.service.get(SESSION_ID, true)
 
     harness.service.finish(OWNER)
     const finished = await harness.service.get(SESSION_ID, false)

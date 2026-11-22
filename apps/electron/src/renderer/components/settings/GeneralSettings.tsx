@@ -48,7 +48,6 @@ import {
   updateSessionHoverPreviewEnabled,
 } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
-import { detectIsMac, detectIsWindows } from '@/lib/platform'
 import { getEffectiveSoundPackId } from '@/lib/notification-sound-selection'
 import type { NotificationSoundId, NotificationSoundType, NotificationSoundSettings, ProductivityToolsSettings } from '@/types/settings'
 
@@ -77,8 +76,6 @@ export function GeneralSettings(): React.ReactElement {
   const [archiveAfterDays, setArchiveAfterDays] = React.useState<number>(7)
   /** Git/PR 推广标识：默认开启 */
   const [gitAttributionEnabled, setGitAttributionEnabled] = React.useState(true)
-  const isMac = React.useMemo(() => detectIsMac(), [])
-  const isWindows = React.useMemo(() => detectIsWindows(), [])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // 加载归档天数与 Git/PR 标识设置

@@ -739,13 +739,6 @@ function createJsonToolResult(payload: unknown): AgentToolResult<unknown> {
   } as AgentToolResult<unknown>
 }
 
-function createTextToolResult(text: string, details?: unknown): AgentToolResult<unknown> {
-  return {
-    content: [{ type: 'text', text }],
-    ...(details === undefined ? {} : { details: normalizePiToolResultDetails(details) }),
-  } as AgentToolResult<unknown>
-}
-
 function createTerminatingJsonToolResult(payload: unknown): AgentToolResult<unknown> {
   return {
     ...createJsonToolResult(payload),

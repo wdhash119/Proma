@@ -47,7 +47,6 @@ let runtimePort: MessagePortLike | undefined
 let status: AgentRuntimeState['status'] = 'starting'
 let activeQuery: ActiveQuery | undefined
 const parentRequests = new Map<string, PendingParentRequest>()
-const capabilityAbortControllers = new Map<string, AbortController>()
 const piAdapter = new PiAgentAdapter()
 const parentPort = (process as typeof process & { parentPort?: ParentPortLike }).parentPort
 

@@ -112,10 +112,6 @@ export function WorkspaceMemoryTab({ workspaceSlug, sessionId, search, embedded 
   }, [selected, editText, editBaseText, isDirty, saveConflict])
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const persistInFlightRef = React.useRef<Promise<void> | null>(null)
-  const historyRangeLabel = React.useMemo(
-    () => MEMORY_HISTORY_RANGE_OPTIONS.find((option) => option.value === historyRange)?.label ?? '近 1 个月',
-    [historyRange],
-  )
 
   const refreshSummaryAndTree = React.useCallback(async (): Promise<WorkspaceMemorySummary> => {
     const [nextSummary, files] = await Promise.all([

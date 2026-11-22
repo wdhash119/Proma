@@ -1183,7 +1183,7 @@ export class BrowserController {
         // did-navigate 表示主框架已收到可用文档；不等待页面的子资源加载完成。
         finish(resolve)
       }
-      const onFail = (event: Electron.Event, errorCode: number, description: string, _validatedURL: string, isMainFrame: boolean): void => {
+      const onFail = (_event: Electron.Event, errorCode: number, description: string, _validatedURL: string, isMainFrame: boolean): void => {
         if (!isMainFrame) return
         finish(() => reject(new Error(`页面导航失败（${errorCode}）：${description}`)))
       }

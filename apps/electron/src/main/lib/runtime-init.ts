@@ -13,16 +13,13 @@ import type { RuntimeStatus, RuntimeInitOptions, ShellEnvironmentStatus } from '
 import { loadShellEnv } from './shell-env'
 import { detectNodeRuntime } from './node-detector'
 import { detectBunRuntime } from './bun-finder'
-import { detectGitRuntime, getGitRepoStatus } from './git-detector'
+import { detectGitRuntime } from './git-detector'
 import { detectGitBash } from './git-bash-detector'
 import { detectWsl } from './wsl-detector'
 import { selectWindowsShell } from './windows-shell-selection'
 
 /** 运行时状态缓存 */
 let runtimeStatusCache: RuntimeStatus | null = null
-
-/** 初始化标志 */
-let isInitialized = false
 
 /**
  * 初始化运行时环境
@@ -127,7 +124,6 @@ export async function initializeRuntime(options: RuntimeInitOptions = {}): Promi
 
   // 缓存状态
   runtimeStatusCache = runtimeStatus
-  isInitialized = true
 
   const duration = Date.now() - startTime
   console.log(`[运行时初始化] 初始化完成 (耗时 ${duration}ms)`)
@@ -160,7 +156,6 @@ export function getRuntimeStatus(): RuntimeStatus | null {
  * @returns 新的运行时状态
  */
 export async function reinitializeRuntime(options: RuntimeInitOptions = {}): Promise<RuntimeStatus> {
-  isInitialized = false
   runtimeStatusCache = null
   return initializeRuntime(options)
 }

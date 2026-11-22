@@ -97,7 +97,6 @@ import {
   discardInapplicableAutomationScheduleFields,
 } from './automation-tool-schema'
 import { updateSettings } from '../settings-service'
-import { getConfiguredVaultFileSystem, getVaultConfig } from '../vault-service'
 import type { ProductivityToolsSettings } from '../../../types'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
@@ -1608,7 +1607,7 @@ function buildWebResearchTools(sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDef
   ]
 }
 
-function buildPromaCloudTools(sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDefinition[] {
+function buildPromaCloudTools(_sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDefinition[] {
   // proma-cloud MCP 工具（get_credentials / create_app_key）通常由 Proma 的
   // 内置 MCP server 进程独立提供（非 SDK in-process），Pi adapter 在 orchestrator
   // 构建 mcpServers 后通过 customTools 或 MCP stdio 通道访问。

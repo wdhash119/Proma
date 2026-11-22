@@ -74,7 +74,6 @@ import type {
   SystemProxyDetectResult,
   GitHubRelease,
   GitHubReleaseListOptions,
-  AskUserRequest,
   AskUserResponse,
   PersonaConfig,
   Persona,

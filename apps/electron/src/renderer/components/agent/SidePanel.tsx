@@ -57,7 +57,6 @@ import {
   fileBrowserAutoRevealAtom,
   fileBrowserScrollTopMapAtom,
   isFileBrowserAutoRevealActive,
-  pruneFileBrowserStateMap,
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
   agentSideDelegationMapAtom,
@@ -495,13 +494,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const setPreviewFilesMap = useSetAtom(previewFilesMapAtom)
   const setPreviewContentRefreshVersion = useSetAtom(previewContentRefreshVersionAtom)
   const setPreviewResolvedPaths = useSetAtom(previewResolvedPathAtom)
-  const previewOpenMap = useAtomValue(previewPanelOpenMapAtom)
   const setPreviewOpenMap = useSetAtom(previewPanelOpenMapAtom)
   const previewFiles = previewFilesMap.get(sessionId) ?? []
   const requestedPreviewId = getPreviewIdFromSidePanelTab(activeTab)
   const currentPreviewFile = (requestedPreviewId ? previewFiles.find((file) => getPreviewFileId(file) === requestedPreviewId) : null)
     ?? previewFileMap.get(sessionId) ?? null
-  const previewOpen = previewFiles.length > 0 || previewOpenMap.get(sessionId) === true
   const selectedFilePath = currentPreviewFile?.filePath
 
   const openPreview = useOpenPreview()

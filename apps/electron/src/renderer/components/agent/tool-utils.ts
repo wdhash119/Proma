@@ -23,7 +23,6 @@ import {
   MousePointer2,
   Layers,
   LoaderCircle,
-  List,
   ListChecks,
   LogIn,
   LogOut,

@@ -12,11 +12,6 @@ import {
   type PromaPermissionMode,
 } from '@proma/shared'
 
-const PERMISSION_RANK: Record<PromaPermissionMode, number> = {
-  plan: 0,
-  bypassPermissions: 1,
-}
-
 export const MAX_RUNNING_DELEGATIONS_PER_PARENT = 50
 /** 未显式指定时，父会话等待子会话完成的时长。 */
 export const DEFAULT_DELEGATION_WAIT_SECONDS = 60 * 60

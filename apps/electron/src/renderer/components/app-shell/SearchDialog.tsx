@@ -29,7 +29,6 @@ import {
   agentPendingPromptAtom,
 } from '@/atoms/agent-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
-import { appModeAtom } from '@/atoms/app-mode'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
@@ -204,7 +203,6 @@ export function SearchDialog(): React.ReactElement {
   const sessionHoverPreviewEnabled = useAtomValue(sessionHoverPreviewEnabledAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
   const channels = useAtomValue(channelsAtom)
-  const appMode = useAtomValue(appModeAtom)
   const currentAgentChannelId = useAtomValue(agentChannelIdAtom)
   const setAgentPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const setActiveView = useSetAtom(activeViewAtom)

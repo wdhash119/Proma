@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, FolderInput, FolderPlus, ListTodo } from 'lucide-react'
+import { Bot, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, FolderInput, FolderPlus, ListTodo } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
@@ -24,11 +24,8 @@ import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @proma/session-core 作为唯一真源。
 // 这里 import 供本文件内部使用，并 re-export 以保持既有 `from './SDKMessageRenderer'` 导入方零改动。
 import {
-  groupIntoTurns,
-  getGroupPreview,
   extractUserText,
   extractMeta,
-  isUserInputMessage,
   stripScheduledRunMarker,
   type MessageGroup,
   type AssistantTurn,
@@ -73,8 +70,6 @@ import type {
   SDKContentBlock,
   SDKResultMessage,
   AgentEventUsage,
-  SDKToolUseBlock,
-  SDKToolResultBlock,
   RecoveryAction,
 } from '@proma/shared'
 import type { AgentPendingFile } from '@proma/shared'
@@ -86,7 +81,6 @@ import {
   THINKING_SIGNATURE_ERROR_MESSAGE,
   isThinkingSignatureError,
 } from '@proma/shared'
-import type { ToolActivity } from '@/atoms/agent-atoms'
 
 // ===== system 消息：上下文压缩分割线 =====
 
@@ -279,7 +273,7 @@ export interface AssistantTurnRendererProps {
   sessionModelId?: string
 }
 
-export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
+export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser }: AssistantTurnRendererProps): React.ReactElement | null {
   const channels = useAtomValue(channelsAtom)
   // 收集所有 assistant 消息的内容块，保留 parent_tool_use_id 关联
   interface EnrichedBlock {

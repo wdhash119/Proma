@@ -54,10 +54,6 @@ interface CollaborationToolContext {
   triggeredBy?: 'user' | 'automation' | 'delegation'
 }
 
-interface CollaborationToolResult extends Record<string, unknown> {
-  content: Array<{ type: 'text'; text: string }>
-}
-
 interface DelegationRecord {
   delegationId: string
   parentSessionId: string

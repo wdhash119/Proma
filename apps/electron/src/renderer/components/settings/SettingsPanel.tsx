@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { cn } from "@/lib/utils";
 import { detectIsWindows } from "@/lib/platform";
 import { getWindowTitlebarDragInsetStyle } from "@/lib/window-titlebar-layout";
@@ -33,14 +33,11 @@ import {
   settingsTabAtom,
   channelFormDirtyAtom,
   settingsCloseRequestedAtom,
-  settingsOpenAtom,
   settingsPendingSessionNavigationAtom,
   normalizeSettingsTab,
   type SettingsSessionNavigation,
 } from "@/atoms/settings-tab";
 import type { SettingsTab } from "@/atoms/settings-tab";
-import { activeViewAtom } from "@/atoms/active-view";
-import { automationFormAtom } from "@/atoms/automation-atoms";
 import { hasUpdateAtom } from "@/atoms/updater";
 import { hasEnvironmentIssuesAtom } from "@/atoms/environment";
 import {
@@ -180,9 +177,6 @@ export function SettingsPanel({
   const channelFormDirty = useAtomValue(channelFormDirtyAtom);
   const [closeRequested, setCloseRequested] = useAtom(settingsCloseRequestedAtom);
   const [pendingSessionNavigation, setPendingSessionNavigation] = useAtom(settingsPendingSessionNavigationAtom);
-  const setSettingsOpen = useSetAtom(settingsOpenAtom);
-  const setActiveView = useSetAtom(activeViewAtom);
-  const setAutomationForm = useSetAtom(automationFormAtom);
   const hasUpdate = useAtomValue(hasUpdateAtom);
   const hasEnvironmentIssues = useAtomValue(hasEnvironmentIssuesAtom);
   const { status: computerUseUpdateStatus } = useComputerUseUpdateStatus();

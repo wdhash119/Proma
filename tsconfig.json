@@ -21,9 +21,11 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
-    // Some stricter flags (disabled by default)
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    // 更严格的检查（按需开启）
+    // 未使用的局部变量/类型/导入、未使用的形参一律报错：防止死代码回流。
+    // 需要保留签名的位置参数请用下划线前缀（如 _sdk、_event）。
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": false
   }
 }

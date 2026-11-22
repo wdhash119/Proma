@@ -67,7 +67,6 @@ import {
  * 挂载后从 settings 加载自定义配置，并注册所有应用级快捷键。
  */
 export function GlobalShortcuts(): null {
-  const [appMode, setAppMode] = useAtom(appModeAtom)
   const [settingsOpen, setSettingsOpen] = useAtom(settingsOpenAtom)
   const channelFormDirty = useAtomValue(channelFormDirtyAtom)
   const setSettingsCloseRequested = useSetAtom(settingsCloseRequestedAtom)

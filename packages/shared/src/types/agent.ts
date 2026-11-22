@@ -2078,7 +2078,6 @@ export const AGENT_IPC_CHANNELS = {
   /** 工作区文件变化（session 目录文件监听触发，用于文件浏览器刷新） */
   WORKSPACE_FILES_CHANGED: 'agent:workspace-files-changed',
 
-  /** 切换指定会话的 Agent runtime（下一轮生效，跨 runtime 时清空 SDK resume ID） */
   /** 切换指定会话的 ChatGPT Codex Fast Mode（下一轮 Pi 请求生效） */
   UPDATE_SESSION_CODEX_FAST_MODE: 'agent:update-session-codex-fast-mode',
   /** 查询 Pi catalog 或专属 profile 支持的会话级推理档位 */

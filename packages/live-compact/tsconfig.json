@@ -1,0 +1,26 @@
+{
+  // 本包是 vendored 上游算法层，刻意**不** extends 根 tsconfig：
+  // 1. 根开启 noUnusedLocals / noUnusedParameters / noUncheckedIndexedAccess，
+  //    上游源码会大面积违反，而算法文件按红线必须逐字节原样保留；
+  // 2. 上游源码在 TS 5.9 的语义检查下有 1 处自身类型收窄瑕疵
+  //    （src/plan.ts:407，`ids instanceof Set` 的 false 分支推出 Set<unknown>），
+  //    只改源码才能消除。
+  // 因此本包不检查 src/ 实现，只检查 Proma 自有声明 types/：跨包消费走声明，
+  // 宿主（extends 根配置）因此不会把 vendored 实现拉进类型检查。
+  // 算法行为由随包的 94 例上游测试守护，声明由 types:generate 再生。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node"]
+  },
+  "include": ["types"]
+}

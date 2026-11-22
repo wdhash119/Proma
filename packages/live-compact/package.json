@@ -1,0 +1,25 @@
+{
+  "name": "@proma/live-compact",
+  "version": "0.12.0",
+  "license": "MIT",
+  "description": "Live Compact 算法层：vendored 自 pi-live-compact 0.12.0（MIT，port 自 dsh-live-compact 1.1.12）",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "types:generate": "tsc --declaration --emitDeclarationOnly --noCheck --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --types node --skipLibCheck --rootDir src --outDir types src/index.ts && bun scripts/add-dts-banner.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

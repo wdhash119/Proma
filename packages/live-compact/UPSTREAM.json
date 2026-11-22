@@ -1,0 +1,19 @@
+{
+  "name": "pi-live-compact",
+  "repo": "https://github.com/carrotciallo/pi-live-compact",
+  "commit": "6da2d086f111171446e0eda610527732b1800f4a",
+  "version": "0.12.0",
+  "portedFrom": "dsh-live-compact@1.1.12 (MIT, MerkyorLynn)",
+  "vendoredAt": "2026-11-22",
+  "files": [
+    "src/plan.ts",
+    "src/select.ts",
+    "src/cooldown.ts",
+    "src/recall.ts",
+    "tests/plan.test.ts",
+    "tests/select.test.ts",
+    "tests/recall.test.ts",
+    "tests/cooldown.test.ts"
+  ],
+  "generatedTypes": "types/"
+}

@@ -370,6 +370,14 @@ export function createLiveCompactExtension(
       const spans: LiveCompactCutSpanRecord[] = []
       let cuts = 0
 
+      // 本轮受保护的条目：turn_end 携带的末条消息与工具结果。
+      // 集合在整次 turn_end 内不变，但每一趟都要重新检查——drain 可能先切旧段，
+      // 后续 pass 才把当前轮选成候选。
+      const protectedEntryIds = new Set<string>([
+        event.messageEntryId,
+        ...event.toolResultEntryIds,
+      ])
+
       for (let pass = 0; pass < MAX_PASSES; pass += 1) {
         if (drain && simulatedTotal <= thresholds.keepRoundTokens) break
         const chunk = algorithm.selectNewestChunk(work, {
@@ -381,14 +389,30 @@ export function createLiveCompactExtension(
           ...(drain ? { totalTokens: simulatedTotal } : {}),
         })
         if (!chunk) break
+
+        const span = work.slice(chunk.start, chunk.end + 1)
+        const head = span[0]
+        if (!head) break
+        // 选段后守卫：候选一旦触及刚结束的当前轮或投影尾部，就停止本次后续切段。
+        // 这里必须 break 而非 continue：work 与 simulatedTotal 都没变，重试只会
+        // 得到同一个候选。若此前 pass 已产生安全旧段草案，保留并返回这些草案。
+        const touchesCurrentTurn = span.some((entry) => protectedEntryIds.has(entry.id))
+        const touchesProjectionTail = chunk.end >= work.length - 1
+        if (touchesCurrentTurn || touchesProjectionTail) {
+          console.log('[live-compact] ' + JSON.stringify({
+            event: 'skip_protected_span',
+            sessionId: options.sessionId,
+            reason: touchesCurrentTurn ? 'current_turn' : 'projection_tail',
+            headEntryId: head.id,
+          }))
+          break
+        }
+
         const tailBeyondKept = chunk.after - (chunk.keptTokens || 0)
         if (!drain && tailBeyondKept > MAX_TAIL_TOKENS && simulatedTotal < thresholds.urgentTokens) {
           break
         }
 
-        const span = work.slice(chunk.start, chunk.end + 1)
-        const head = span[0]
-        if (!head) break
         const recallItems = buildRecallItems(span)
         let cardText = chunk.card.text
         if (recallItems.length > 0) cardText += `\n${algorithm.recallHint(recallItems)}`

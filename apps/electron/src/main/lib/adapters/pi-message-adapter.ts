@@ -306,6 +306,18 @@ export function hasToolResult(message: SDKMessage): boolean {
   return Array.isArray(content) && content.some((block) => block.type === 'tool_result')
 }
 
+/**
+ * 助手消息是否含可展示内容：非空白正文、非空白 thinking 或任一工具调用。
+ * 口径与 orchestrator 的“零可见消息”保护一致，空数组、空白 text/thinking 都视为空。
+ */
+function hasVisibleAssistantContent(message: AssistantMessage): boolean {
+  return message.content.some((block) => {
+    if (block.type === 'text') return block.text.trim().length > 0
+    if (block.type === 'thinking') return block.thinking.trim().length > 0
+    return true
+  })
+}
+
 export function convertResultMessage(
   messages: AgentMessage[],
   sessionId: string,
@@ -327,14 +339,41 @@ export function convertResultMessage(
   )
   const lastAssistant = assistants[assistants.length - 1]
   const assistantError = lastAssistant?.stopReason === 'error' ? lastAssistant.errorMessage : undefined
-  const terminalReason = override?.terminalReason ?? (lastAssistant?.stopReason === 'length' ? 'max_tokens' : 'completed')
+  // 延续后的最终空答复：至少两条 assistant（说明已经续跑过）、末条正常 stop 却没有
+  // 任何可展示内容。首答留给 orchestrator 的零可见消息保护；length / error 与
+  // runtime guard override 均保持原有优先级。
+  const emptyContinuedResponse = !override
+    && assistants.length > 1
+    && lastAssistant?.stopReason === 'stop'
+    && !hasVisibleAssistantContent(lastAssistant)
+  const terminalReason = override?.terminalReason ?? (
+    lastAssistant?.stopReason === 'length'
+      ? 'max_tokens'
+      : emptyContinuedResponse
+        ? 'empty_final_answer'
+        : 'completed'
+  )
+  const subtype = override?.subtype ?? (
+    assistantError || emptyContinuedResponse
+      ? 'error_during_execution'
+      : terminalReason === 'max_tokens'
+        ? 'max_tokens'
+        : 'success'
+  )
+  const errors = override?.errors ?? (
+    assistantError
+      ? [assistantError]
+      : emptyContinuedResponse
+        ? ['模型在后续回合返回了空答复，任务未能正常完成。请重试或切换模型。']
+        : undefined
+  )
   return {
     type: 'result',
-    subtype: override?.subtype ?? (assistantError ? 'error_during_execution' : terminalReason === 'max_tokens' ? 'max_tokens' : 'success'),
+    subtype,
     usage,
     total_cost_usd: costValues.length > 0 ? costValues.reduce((sum, cost) => sum + cost, 0) : undefined,
     terminal_reason: terminalReason,
-    errors: override?.errors ?? (assistantError ? [assistantError] : undefined),
+    errors,
     session_id: sessionId,
   } as unknown as SDKMessage
 }

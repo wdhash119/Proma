@@ -149,6 +149,20 @@ function cuttableProjection(): ProjectedSessionEntry[] {
   ]
 }
 
+/**
+ * 以一段 40000 token 的 `read` 结果收尾的投影：该结果超过 POINTER_TOKENS（32000），
+ * 会让算法把当前轮选成指针候选。六个 5000 token 的旧工具轮用于避开与本次无关的
+ * 上游短投影越界边缘 case。
+ */
+function currentLongReadProjection(): ProjectedSessionEntry[] {
+  return [
+    userEntry('u1', 'inspect the large files'),
+    ...toolRounds(6, 5000),
+    toolCallEntry('a-current', 'call-current', 'read', 'reading current file'),
+    toolResultEntry('t-current', 'call-current', 'read', bigToolText(40000)),
+  ]
+}
+
 interface FakeContextOptions {
   sessionFile?: string
   tokens?: number | null
@@ -191,7 +205,15 @@ function createFakeContext(options: FakeContextOptions = {}): ExtensionContext {
   return ctx as unknown as ExtensionContext
 }
 
-function createTurnEndEvent(contextEntries: ProjectedSessionEntry[]): TurnEndEvent {
+interface TurnEndIds {
+  messageEntryId?: string
+  toolResultEntryIds?: string[]
+}
+
+function createTurnEndEvent(
+  contextEntries: ProjectedSessionEntry[],
+  ids: TurnEndIds = {},
+): TurnEndEvent {
   const message: ToolResultMessage = {
     role: 'toolResult',
     toolCallId: 'test-call',
@@ -205,8 +227,8 @@ function createTurnEndEvent(contextEntries: ProjectedSessionEntry[]): TurnEndEve
     turnIndex: 1,
     message,
     toolResults: [],
-    messageEntryId: 'a5',
-    toolResultEntryIds: [],
+    messageEntryId: ids.messageEntryId ?? 'a5',
+    toolResultEntryIds: ids.toolResultEntryIds ?? [],
     entries: [],
     continue: false,
     outcome: 'completed',
@@ -285,10 +307,14 @@ function install(options: {
   return { pi, ctx, records }
 }
 
-function runTurnEnd(harness: Harness, contextEntries: ProjectedSessionEntry[]) {
+function runTurnEnd(
+  harness: Harness,
+  contextEntries: ProjectedSessionEntry[],
+  ids: TurnEndIds = {},
+) {
   const handler = harness.pi.handlers.get('turn_end')
   if (!handler) throw new Error('turn_end handler 未注册')
-  return handler(createTurnEndEvent(contextEntries), harness.ctx) as
+  return handler(createTurnEndEvent(contextEntries, ids), harness.ctx) as
     | { entries: ContextEditEntryDraft[] }
     | undefined
 }
@@ -374,6 +400,76 @@ describe('Live Compact 胶层：切段草案', () => {
     const result = runTurnEnd(harness, [userEntry('u1', 'short')])
     expect(result).toBeUndefined()
     expect(harness.records).toHaveLength(0)
+  })
+})
+
+describe('Live Compact 胶层：当前轮与投影尾部保护', () => {
+  test('Given 当前轮以 40000 token read 收尾 When turn_end Then 零草案且不记录 cut', () => {
+    const harness = install()
+    // 修复前算法会把当前轮选成指针候选，这里会返回一条指向 t-current 的草案。
+    const result = runTurnEnd(harness, currentLongReadProjection(), {
+      messageEntryId: 'a-current',
+      toolResultEntryIds: ['t-current'],
+    })
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given messageEntryId 不可解析且工具结果 ID 为空 When turn_end Then 尾部兜底仍不替换末条', () => {
+    const harness = install()
+    // 生产中的 Pi 无法解析 messageEntryId 时不会派发 turn_end，此用例只钉住胶层防御。
+    const result = runTurnEnd(harness, currentLongReadProjection(), {
+      messageEntryId: 'unresolvable-entry',
+      toolResultEntryIds: [],
+    })
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 长读轮已成为历史且尾部是新 assistant When turn_end Then 旧长读轮仍可切成指针卡', () => {
+    const harness = install()
+    const projected = [
+      ...currentLongReadProjection(),
+      toolCallEntry('a-next', 'call-next', 'bash', 'continue after the read'),
+    ]
+    const result = runTurnEnd(harness, projected, {
+      messageEntryId: 'a-next',
+      toolResultEntryIds: [],
+    })
+    expect(result).toBeDefined()
+    const drafts = result?.entries ?? []
+    // 没有永久禁用 long-read 压缩：历史长读轮照样能切成指针卡（调用条目换卡片、结果条目省略）。
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['a-current', 't-current'])
+    expect(harness.records).toHaveLength(1)
+    expect(harness.records[0]?.spans[0]?.pointerOnly).toBe(true)
+  })
+
+  test('Given 云端 drain 且首个候选是当前长读轮 When turn_end Then 本轮零切段', () => {
+    const pi = createFakePi()
+    const records: LiveCompactCutRecord[] = []
+    createLiveCompactExtension({
+      isEnabled: () => true,
+      sessionId: 'session-cloud',
+      algorithm: bundledAlgorithm,
+      thresholds: testThresholds({ urgentTokens: 2000 }),
+      onCut: (record) => records.push(record),
+    })(pi.api)
+
+    const ctx = createFakeContext({
+      tokens: 60400,
+      provider: 'deepseek-official',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+    })
+    const result = pi.handlers.get('turn_end')?.(
+      createTurnEndEvent(currentLongReadProjection(), {
+        messageEntryId: 'a-current',
+        toolResultEntryIds: ['t-current'],
+      }),
+      ctx,
+    )
+    // drain 同样宁可本轮不切：返回 undefined 即没有任何草案触及当前轮。
+    expect(result).toBeUndefined()
+    expect(records).toHaveLength(0)
   })
 })
 

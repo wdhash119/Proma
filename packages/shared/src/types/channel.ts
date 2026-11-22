@@ -332,6 +332,79 @@ export function isXaiCredentialExpired(credentials: XaiOAuthCredentials, skewMs 
 }
 
 /**
+ * 千问 Token Plan 额度查询凭据。
+ *
+ * 与 Codex / Copilot / xAI 不同，这份凭据**不用于推理**：推理始终使用
+ * Channel.apiKey 中的 `sk-sp` Key。本凭据只用于主进程查询个人版/团队版订阅额度，
+ * 单独存储在 Channel.planQuotaCredential（同样经 safeStorage 加密）。
+ *
+ * 官方 CLI v1.12.0 只持久化 access token 与过期时间，没有可复用的 refresh 流程，
+ * 因此这里也不保存 refresh；过期后由用户重新登录。
+ */
+export interface QianwenPlanQuotaCredentials {
+  /** 千问账号 access token。 */
+  access: string
+  /** access token 到期时间，Unix 毫秒。 */
+  expires: number
+  /** 可选：上游返回的账号标识，仅用于展示。 */
+  accountId?: string
+}
+
+/** 将额度凭据序列化为可加密存储的 JSON 字符串；只保留已知字段。 */
+export function serializeQianwenPlanQuotaCredentials(credentials: QianwenPlanQuotaCredentials): string {
+  return JSON.stringify({
+    access: credentials.access,
+    expires: credentials.expires,
+    ...(credentials.accountId ? { accountId: credentials.accountId } : {}),
+  })
+}
+
+/**
+ * 从加密字段解析额度凭据。
+ *
+ * 严格要求非空 access 和有限正数 expires：临时的 0/负数/NaN 都是损坏数据，
+ * 应提示用户重新登录，而不是被当成「已过期但可用」继续请求上游。
+ */
+export function parseQianwenPlanQuotaCredentials(secret: string): QianwenPlanQuotaCredentials | null {
+  const trimmed = secret.trim()
+  if (!trimmed) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed) as unknown
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const record = parsed as Record<string, unknown>
+  const access = typeof record.access === 'string' ? record.access.trim() : ''
+  const expires = record.expires
+  if (!access) return null
+  if (typeof expires !== 'number' || !Number.isFinite(expires) || expires <= 0) return null
+  return {
+    access,
+    expires,
+    ...(typeof record.accountId === 'string' && record.accountId ? { accountId: record.accountId } : {}),
+  }
+}
+
+/** 判断 provider 是否属于千问 Token Plan（Anthropic / OpenAI 兼容两种协议）。 */
+export function isQianwenTokenPlanProvider(provider: ProviderType): boolean {
+  return provider === 'qianwen-token-plan' || provider === 'qianwen-token-plan-openai'
+}
+
+/**
+ * 判断额度凭据是否已过期或即将过期。
+ *
+ * 默认预留 60s 时钟偏移余量，避免边界请求打出去才发现过期；与 Codex 凭据同一套语义。
+ */
+export function isQianwenPlanQuotaCredentialExpired(
+  credentials: QianwenPlanQuotaCredentials,
+  skewMs = 60_000,
+): boolean {
+  return Date.now() >= credentials.expires - skewMs
+}
+
+/**
  * 模型能力手动覆盖。
  *
  * 模型未被内置目录收录、也无法按名称可靠推断时，运行时会回落保守默认值；
@@ -388,6 +461,12 @@ export interface Channel {
   createdAt: number
   /** 更新时间戳 */
   updatedAt: number
+  /**
+   * 加密后的额度查询凭据（QianwenPlanQuotaCredentials JSON 的 safeStorage 密文）。
+   *
+   * 只用于千问 Token Plan 的订阅额度查询，不参与推理；缺省表示未登录。
+   */
+  planQuotaCredential?: string
 }
 
 /**
@@ -414,6 +493,12 @@ export interface ChannelUpdateInput {
   apiKey?: string
   models?: ChannelModel[]
   enabled?: boolean
+  /**
+   * 明文额度查询凭据，仅千问 Token Plan 渠道有效。
+   *
+   * undefined 保留已保存的登录；null 清除登录；字符串表示覆盖为新的登录。
+   */
+  planQuotaCredential?: string | null
 }
 
 /**
@@ -597,6 +682,12 @@ export const CHANNEL_IPC_CHANNELS = {
   XAI_OAUTH_CANCEL: 'channel:xai-oauth-cancel',
   /** xAI device-code 已就绪（主进程推送给发起登录的渲染窗口） */
   XAI_OAUTH_DEVICE_CODE: 'channel:xai-oauth-device-code',
+  /** 发起千问账号登录（device-code + PKCE），用于查询 Token Plan 订阅额度 */
+  QIANWEN_OAUTH_LOGIN: 'channel:qianwen-oauth-login',
+  /** 取消进行中的千问账号登录 */
+  QIANWEN_OAUTH_CANCEL: 'channel:qianwen-oauth-cancel',
+  /** 千问授权链接已就绪（主进程推送给发起登录的渲染窗口） */
+  QIANWEN_OAUTH_DEVICE_CODE: 'channel:qianwen-oauth-device-code',
 } as const
 
 /**
@@ -659,4 +750,28 @@ export interface XaiOAuthDeviceCode {
   verificationUri: string
   /** 可扫码交给另一台可联网设备完成授权。 */
   qrCodeData?: string
+}
+
+/**
+ * 千问账号登录的设备授权信息。
+ *
+ * 千问的 device-code 流程直接把用户码编码进授权链接，因此不单独回传 userCode，
+ * 只提供需要用户打开的地址与可选二维码。
+ */
+export interface QianwenOAuthDeviceCode {
+  verificationUri: string
+  /** 可扫码交给另一台可联网设备完成授权。 */
+  qrCodeData?: string
+}
+
+/** 千问账号登录结果；只用于额度查询，不写入 Channel.apiKey。 */
+export interface QianwenOAuthLoginResult {
+  /** 是否登录成功 */
+  success: boolean
+  /** 序列化后的额度凭据 JSON（明文）；由 channel-manager 加密写入 Channel.planQuotaCredential。 */
+  credentials?: string
+  /** 登录账号标识，用于 UI 展示 */
+  accountId?: string
+  /** 失败或取消时的用户可读原因 */
+  message?: string
 }

@@ -12,7 +12,6 @@ import {
   streamingConversationIdsAtom,
 } from './chat-atoms'
 import {
-  agentRunningSessionIdsAtom,
   agentSessionIndicatorMapAtom,
   unviewedCompletedSessionIdsAtom,
 } from './agent-atoms'
@@ -120,22 +119,6 @@ export const activeTabAtom = atom<TabItem | null>((get) => {
 export const activeSessionIdAtom = atom<string | null>((get) => {
   const activeTab = get(activeTabAtom)
   return activeTab?.sessionId ?? null
-})
-
-/** 标签是否在流式输出中（派生，从现有流式 atoms 计算） */
-export const tabStreamingMapAtom = atom<Map<string, boolean>>((get) => {
-  const tabs = get(tabsAtom)
-  const chatStreaming = get(streamingConversationIdsAtom)
-  const agentRunning = get(agentRunningSessionIdsAtom)
-  const map = new Map<string, boolean>()
-  for (const tab of tabs) {
-    if (tab.type === 'chat') {
-      map.set(tab.id, chatStreaming.has(tab.sessionId))
-    } else if (tab.type === 'agent') {
-      map.set(tab.id, agentRunning.has(tab.sessionId))
-    }
-  }
-  return map
 })
 
 /** 标签页指示点状态（chat 用 running/idle，agent 用完整 SessionIndicatorStatus） */
@@ -308,19 +291,6 @@ export function closeTab(
   }
 
   return { tabs: newTabs, activeTabId: newActiveTabId }
-}
-
-/** 重排标签顺序（保留函数用于兼容旧调用） */
-export function reorderTabs(
-  tabs: TabItem[],
-  fromIndex: number,
-  toIndex: number,
-): TabItem[] {
-  if (fromIndex === toIndex) return tabs
-  const newTabs = [...tabs]
-  const [moved] = newTabs.splice(fromIndex, 1)
-  newTabs.splice(toIndex, 0, moved!)
-  return newTabs
 }
 
 /** 更新标签标题 */

@@ -1,6 +1,5 @@
 import { atom } from 'jotai'
 import type { BrowserViewState } from '@proma/shared'
-import { currentAgentSessionIdAtom } from './agent-atoms'
 
 /** 每个 Agent 会话的受管浏览器面板开关。主进程仍是状态权威。 */
 export const browserPanelOpenMapAtom = atom<Map<string, boolean>>(new Map())
@@ -35,8 +34,3 @@ export const clearBrowserSessionStateAtom = atom(
     set(browserPendingNavigationMapAtom, removeEntry)
   },
 )
-
-export const currentSessionBrowserStateAtom = atom<BrowserViewState | null>((get) => {
-  const sessionId = get(currentAgentSessionIdAtom)
-  return sessionId ? get(browserStateMapAtom).get(sessionId) ?? null : null
-})

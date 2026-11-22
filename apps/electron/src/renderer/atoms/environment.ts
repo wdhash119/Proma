@@ -40,11 +40,6 @@ export const environmentCheckResultAtom = atom<EnvironmentCheckResult | null>(nu
 export const runtimeStatusAtom = atom<RuntimeStatus | null>(null)
 
 /**
- * 是否正在检测环境 Atom
- */
-export const isCheckingEnvironmentAtom = atom(false)
-
-/**
  * 安装包清单 Atom（远程拉取，失败回退内置）
  */
 export const installerManifestAtom = atom<InstallerManifest | null>(null)

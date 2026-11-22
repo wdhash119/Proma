@@ -63,9 +63,6 @@ export const previewFilesMapAtom = atom<Map<string, PreviewFile[]>>(new Map())
 /** 每会话当前预览的文件（兼容旧调用方的激活文件投影）。 */
 export const previewFileMapAtom = atom<Map<string, PreviewFile | null>>(new Map())
 
-/** 分栏比例（对话占比），持久化 */
-export const previewSplitRatioAtom = atomWithStorage<number>('proma-preview-split-ratio', 0.5, undefined, { getOnInit: true })
-
 /** 代码预览换行偏好（默认不换行，保持现有横向滚动行为） */
 export const previewCodeWrapAtom = atomWithStorage<boolean>(
   'proma-preview-code-wrap',
@@ -73,13 +70,6 @@ export const previewCodeWrapAtom = atomWithStorage<boolean>(
   undefined,
   { getOnInit: true },
 )
-
-/** 当前会话的预览面板是否打开（derived） */
-export const currentSessionPreviewOpenAtom = atom<boolean>((get) => {
-  const sessionId = get(currentAgentSessionIdAtom)
-  if (!sessionId) return false
-  return get(previewPanelOpenMapAtom).get(sessionId) ?? false
-})
 
 // ===== 引用选中文本（Quoted Selection）=====
 

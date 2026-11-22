@@ -895,22 +895,6 @@ export const revealChangedWorkspaceComponentAtom = atom(
   },
 )
 
-/** 关闭当前 session 的一个组件；若它正被当前会话查看，回退到文件。 */
-export const closeWorkspaceComponentAtom = atom(
-  null,
-  (get, set, component: WorkspaceComponentTab) => {
-    const sessionId = get(currentAgentSessionIdAtom)
-    if (!sessionId) return
-    set(agentSessionComponentTabsAtomFamily(sessionId), (previous) => previous.filter((item) => item !== component))
-    set(agentDiffPanelTabAtom, (previous) => {
-      if (previous.get(sessionId) !== component) return previous
-      const next = new Map(previous)
-      next.set(sessionId, 'files')
-      return next
-    })
-  },
-)
-
 /** Diff 视图模式：'split' | 'unified'，默认使用统一预览 */
 export const agentDiffViewModeAtom = atom<'split' | 'unified'>('unified')
 
@@ -1023,60 +1007,6 @@ export interface AskUserRequestDraft {
 
 /** 待提交 AskUser 草稿 Map — 以 requestId 为 key，切换预览/会话时保留填写进度 */
 export const askUserDraftsAtom = atom<Map<string, AskUserRequestDraft>>(new Map())
-
-type AskUserRequestsUpdate = readonly AskUserRequest[] | ((prev: readonly AskUserRequest[]) => readonly AskUserRequest[])
-
-/** 当前会话的 AskUser 请求队列（派生读写原子） */
-export const pendingAskUserRequestsAtom = atom(
-  (get): readonly AskUserRequest[] => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return []
-    return get(allPendingAskUserRequestsAtom).get(currentId) ?? []
-  },
-  (get, set, update: AskUserRequestsUpdate) => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return
-    set(allPendingAskUserRequestsAtom, (prev) => {
-      const map = new Map(prev)
-      const current = map.get(currentId) ?? []
-      const newValue = typeof update === 'function' ? update(current) : update
-      if (newValue.length === 0) map.delete(currentId)
-      else map.set(currentId, newValue)
-      return map
-    })
-  }
-)
-
-export const currentAgentSessionAtom = atom<AgentSessionMeta | null>((get) => {
-  const sessions = get(agentSessionsAtom)
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return null
-  return sessions.find((s) => s.id === currentId) ?? null
-})
-
-export const agentStreamingAtom = atom<boolean>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return false
-  return get(agentSessionStreamingStateAtomFamily(currentId))?.running ?? false
-})
-
-export const agentStreamingModelAtom = atom<string | undefined>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return undefined
-  return get(agentSessionStreamingStateAtomFamily(currentId))?.model
-})
-
-export const agentRetryingAtom = atom<AgentStreamState['retrying'] | undefined>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return undefined
-  return get(agentSessionStreamingStateAtomFamily(currentId))?.retrying
-})
-
-export const agentStartedAtAtom = atom<number | undefined>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return undefined
-  return get(agentSessionStreamingStateAtomFamily(currentId))?.startedAt
-})
 
 let lastRunningSessionSignature = ''
 let lastRunningSessionIds = new Set<string>()
@@ -1474,36 +1404,6 @@ export function applyAgentEvent(
   }
 }
 
-/** 上下文使用量状态 */
-export interface AgentContextStatus {
-  isCompacting: boolean
-  inputTokens?: number
-  outputTokens?: number
-  cacheReadTokens?: number
-  cacheCreationTokens?: number
-  costUsd?: number
-  contextWindow?: number
-  /** 当前上下文 token 是否为 Pi 手动压缩后的预估值 */
-  contextUsageIsEstimated?: boolean
-}
-
-/** 当前会话的上下文使用量派生 atom */
-export const agentContextStatusAtom = atom<AgentContextStatus>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return { isCompacting: false }
-  const state = get(agentSessionStreamingStateAtomFamily(currentId))
-  return {
-    isCompacting: state?.isCompacting ?? false,
-    inputTokens: state?.inputTokens,
-    outputTokens: state?.outputTokens,
-    cacheReadTokens: state?.cacheReadTokens,
-    cacheCreationTokens: state?.cacheCreationTokens,
-    costUsd: state?.costUsd,
-    contextWindow: state?.contextWindow,
-    contextUsageIsEstimated: state?.contextUsageIsEstimated,
-  }
-})
-
 /**
  * Agent 流式错误消息 Map — 以 sessionId 为 key
  * 错误发生时写入，下次发送或手动关闭时清除
@@ -1560,13 +1460,6 @@ export function setSessionMessagesCache(
   }
   return next
 }
-
-/** 当前 Agent 会话的错误消息（派生只读原子） */
-export const currentAgentErrorAtom = atom<string | null>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return null
-  return get(agentStreamErrorsAtom).get(currentId) ?? null
-})
 
 /**
  * Agent 会话输入框草稿 Map — 以 sessionId 为 key
@@ -1625,39 +1518,10 @@ export const workspaceAttachedDirectoriesMapAtom = atom<Map<string, string[]>>(n
  */
 export const workspaceAttachedFilesMapAtom = atom<Map<string, string[]>>(new Map())
 
-/** 当前 Agent 会话的草稿内容（派生读写原子） */
-export const currentAgentSessionDraftAtom = atom(
-  (get) => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return ''
-    return get(agentSessionDraftsAtom).get(currentId) ?? ''
-  },
-  (get, set, newDraft: string) => {
-    const currentId = get(currentAgentSessionIdAtom)
-    if (!currentId) return
-    set(agentSessionDraftsAtom, (prev) => {
-      const map = new Map(prev)
-      if (newDraft.trim() === '') {
-        map.delete(currentId)
-      } else {
-        map.set(currentId, newDraft)
-      }
-      return map
-    })
-  }
-)
-
 // ===== 提示建议 Atoms =====
 
 /** Agent 提示建议 Map — 以 sessionId 为 key，存储最近一条建议 */
 export const agentPromptSuggestionsAtom = atom<Map<string, string>>(new Map())
-
-/** 当前 Agent 会话的提示建议（派生只读原子） */
-export const currentAgentSuggestionAtom = atom<string | null>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return null
-  return get(agentPromptSuggestionsAtom).get(currentId) ?? null
-})
 
 // ===== 用户打断状态 =====
 

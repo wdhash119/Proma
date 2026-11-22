@@ -9,7 +9,7 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { BUILTIN_DEFAULT_PERSONA_ID, buildQaSystemMessage, normalizePersonaConfig } from '@proma/shared'
-import type { PersonaConfig, Persona } from '@proma/shared'
+import type { PersonaConfig } from '@proma/shared'
 
 /** 完整人设配置（从主进程加载；初始值为内置种子） */
 export const personaConfigAtom = atom<PersonaConfig>(normalizePersonaConfig(undefined))
@@ -18,11 +18,6 @@ export const personaConfigAtom = atom<PersonaConfig>(normalizePersonaConfig(unde
 export const selectedPersonaIdAtom = atomWithStorage<string>(
   'proma-selected-persona-id',
   BUILTIN_DEFAULT_PERSONA_ID
-)
-
-/** 人设列表（派生只读） */
-export const personaListAtom = atom<Persona[]>(
-  (get) => get(personaConfigAtom).personas
 )
 
 /** 默认人设 ID（派生只读） */

@@ -10,6 +10,7 @@ import {
   type AgentRuntimeRequest,
   type AgentRuntimeResponse,
   type AgentRuntimeState,
+  type ProjectInstructionSessionState,
 } from '@proma/shared'
 import { PiAgentAdapter, type PiAgentQueryOptions } from '../main/lib/adapters/pi-agent-adapter'
 import { getParentRequestTimeoutMs } from './agent-runtime-request-timeout'
@@ -182,6 +183,7 @@ function handleQueryStart(request: RuntimeRequest): void {
     ),
     onSessionId: (sdkSessionId: string, sessionFile?: string) => sendCallback(active, 'session_id', { sdkSessionId, sessionFile }),
     onPiEntryBindings: (bindings: Record<string, string>) => sendCallback(active, 'pi_entry_bindings', { bindings }),
+    onProjectInstructionState: (state: ProjectInstructionSessionState) => sendCallback(active, 'project_instruction_state', { state }),
     onModelResolved: (model: string) => sendCallback(active, 'model_resolved', { model }),
     onContextWindow: (contextWindow: number) => sendCallback(active, 'context_window', { contextWindow }),
     onRetry: (update: unknown) => sendCallback(active, 'retry', { update }),

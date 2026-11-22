@@ -3,6 +3,7 @@ import type {
   AgentRuntimeEvent,
   AgentRuntimeRequest,
   AgentRuntimeError,
+  ProjectInstructionSessionState,
   SDKMessage,
   SDKUserMessageInput,
   SendQueuedMessageOptions,
@@ -297,6 +298,9 @@ export class PiUtilityAdapter {
       case 'pi_entry_bindings':
         pending.input.onPiEntryBindings?.((callbackPayload?.bindings ?? {}) as Record<string, string>)
         break
+      case 'project_instruction_state':
+        pending.input.onProjectInstructionState?.(callbackPayload?.state as ProjectInstructionSessionState)
+        break
       case 'model_resolved':
         pending.input.onModelResolved?.(String(callbackPayload?.model ?? ''))
         break
@@ -323,6 +327,7 @@ function serializeQueryInput(input: PiAgentQueryOptions): Record<string, unknown
     customTools,
     onSessionId: _onSessionId,
     onPiEntryBindings: _onPiEntryBindings,
+    onProjectInstructionState: _onProjectInstructionState,
     onModelResolved: _onModelResolved,
     onContextWindow: _onContextWindow,
     onRetry: _onRetry,

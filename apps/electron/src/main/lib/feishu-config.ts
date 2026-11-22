@@ -16,7 +16,6 @@ import { redactSensitiveLogValue } from './bridge-log-redaction'
 import { normalizeFeishuDomain } from './feishu-domain'
 import type {
   FeishuConfig,
-  FeishuConfigInput,
   FeishuBotConfig,
   FeishuMultiBotConfig,
   FeishuBotConfigInput,
@@ -197,30 +196,6 @@ export function getFeishuConfig(): FeishuConfig {
   }
 }
 
-/** @deprecated 使用 saveFeishuBotConfig() */
-export function saveFeishuConfig(input: FeishuConfigInput): FeishuConfig {
-  const multi = readRawConfig()
-  const first = multi.bots[0]
-  const botInput: FeishuBotConfigInput = {
-    id: first?.id,
-    name: first?.name ?? '飞书助手',
-    enabled: input.enabled,
-    appId: input.appId,
-    appSecret: input.appSecret,
-    domain: input.domain ?? first?.domain,
-    defaultWorkspaceId: input.defaultWorkspaceId,
-    defaultChannelId: first?.defaultChannelId,
-    defaultModelId: first?.defaultModelId,
-  }
-  const saved = saveFeishuBotConfig(botInput)
-  return {
-    enabled: saved.enabled,
-    appId: saved.appId,
-    appSecret: saved.appSecret,
-    defaultWorkspaceId: saved.defaultWorkspaceId,
-  }
-}
-
 /** @deprecated 使用 getDecryptedBotAppSecret(botId) */
 export function getDecryptedAppSecret(): string {
   const multi = readRawConfig()
@@ -229,14 +204,3 @@ export function getDecryptedAppSecret(): string {
   return decryptSecret(first.appSecret)
 }
 
-/** @deprecated */
-export function updateFeishuConfigPartial(updates: Partial<Omit<FeishuConfig, 'appId' | 'appSecret'>>): FeishuConfig {
-  const multi = readRawConfig()
-  const first = multi.bots[0]
-  if (first) {
-    if (updates.enabled !== undefined) first.enabled = updates.enabled
-    if (updates.defaultWorkspaceId !== undefined) first.defaultWorkspaceId = updates.defaultWorkspaceId
-    writeMultiConfig(multi)
-  }
-  return getFeishuConfig()
-}

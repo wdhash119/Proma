@@ -34,11 +34,12 @@ describe('记忆工具契约', () => {
       'readMemoryTarget',
       'searchMemory',
       'listMemoryHistory',
-      'readMemoryRevision',
       'restoreMemoryRevision',
     ]) {
       expect(preload).toContain(api)
     }
+    // 读取历史版本正文没有渲染层调用方，IPC 入口已退役；主进程函数保留供安全回归测试使用。
+    expect(preload).not.toContain('readMemoryRevision')
     expect(preload).toContain('MEMORY_IPC_CHANNELS')
   })
 

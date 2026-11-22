@@ -937,22 +937,6 @@ export class BrowserController {
     }
   }
 
-  /** 用户最小化当前浏览器：保留 WebContents，并隐藏该 Session 的所有可见 Pane。 */
-  minimize(sessionId: string): void {
-    const browserSession = this.getSession(sessionId)
-    const activeTab = this.getDisplayTab(browserSession)
-    activeTab.lastActivityAt = Date.now()
-    const changedSessions = new Set<BrowserSessionRecord>()
-    for (const tab of browserSession.tabs.values()) {
-      if (this.hideTabView(tab)) changedSessions.add(browserSession)
-    }
-    this.clearPresentationsForSession(browserSession.sessionId)
-    if (this.foregroundPresentationSessionId === browserSession.sessionId) this.foregroundPresentationSessionId = null
-    browserSession.preserveSessionOnHide = false
-    this.emitChangedSessions(changedSessions)
-    this.pruneBackgroundSessions()
-  }
-
   setLayout(layout: BrowserViewLayout): void {
     const browserSession = this.sessions.get(layout.sessionId)
     if (!browserSession) return

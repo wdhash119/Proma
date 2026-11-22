@@ -4,13 +4,13 @@
  * 负责注册主进程和渲染进程之间的通信处理器
  */
 
-import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nativeImage } from 'electron'
+import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard } from 'electron'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
-import { realpath, stat, writeFile } from 'node:fs/promises'
+import { existsSync, realpathSync, readFileSync, statSync } from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -53,7 +53,6 @@ import type {
   AgentSendInput,
   AgentThinkingLevel,
   AgentWorkspace,
-  AgentGenerateTitleInput,
   AgentSaveFilesInput,
   AgentSaveWorkspaceFilesInput,
   AgentSavedFile,
@@ -79,10 +78,7 @@ import type {
   SystemProxyDetectResult,
   GitHubRelease,
   GitHubReleaseListOptions,
-  PermissionResponse,
-  PromaPermissionMode,
   AskUserResponse,
-  ExitPlanModeResponse,
   PersonaConfig,
   Persona,
   PersonaCreateInput,
@@ -97,7 +93,6 @@ import type {
   RewindSessionInput,
   RewindSessionResult,
   AgentSessionReferenceSearchInput,
-  FeishuConfigInput,
   FeishuConfig,
   FeishuBridgeState,
   FeishuTestResult,
@@ -107,7 +102,6 @@ import type {
   FeishuRegisterAppQRCode,
   FeishuRegisterAppStatus,
   FeishuRegisterAppResult,
-  DingTalkConfigInput,
   DingTalkConfig,
   DingTalkBridgeState,
   DingTalkTestResult,
@@ -116,7 +110,6 @@ import type {
   WeChatBridgeState,
   SDKMessage,
   GetFileDiffInput,
-  DetachedPreviewWindowInput,
   RevertFileInput,
   FileAccessOptions,
   ResolvedFileUrl,
@@ -169,7 +162,7 @@ import { getCuaUpdateStatus, refreshCuaUpdateStatus } from './lib/computer-use-c
 import { acknowledgeTerminalOutput, closeTerminalsForSession, createTerminal, getTerminalSnapshot, killTerminal, resizeTerminal, writeTerminal } from './lib/terminal-service'
 import { getMainWindow } from './lib/main-window-store'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
-import { getUnstagedChanges, invalidateGitDiffCache, getFileDiff, getUntrackedContent, revertFile, getDiffContents, listWorktrees, getWorktreeChanges, getMainRepoRoot } from './lib/git-diff-service'
+import { getUnstagedChanges, invalidateGitDiffCache, revertFile, getDiffContents, listWorktrees, getWorktreeChanges, getMainRepoRoot } from './lib/git-diff-service'
 import { registerPromaDirectoryPath, registerPromaFilePath } from './lib/local-file-protocol'
 import {
   authorizeDiscoveredVault,
@@ -237,7 +230,6 @@ import {
   listMemoryHistory,
   listMemoryTargets,
   readMemoryDocument,
-  readMemoryRevision,
   restoreMemoryRevision,
   searchMemory,
 } from './lib/memory-service'
@@ -319,7 +311,7 @@ import {
   resolveAgentCwd,
   buildWorktreeClearUpdates,
 } from './lib/agent-session-manager'
-import { runAgent, stopAgent, stopAgentAndDrain, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, isAgentSessionBusy, listActiveAgentSessionSnapshots, listQueuedAgentMessages, reserveAgentSessionStart, queueAgentMessage, submitOrEnqueueAgentMessage, enqueueAgentQueuedMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
+import { runAgent, stopAgent, stopAgentAndDrain, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, isAgentSessionBusy, listActiveAgentSessionSnapshots, listQueuedAgentMessages, reserveAgentSessionStart, submitOrEnqueueAgentMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
 import { permissionService } from './lib/agent-permission-service'
 import { resolvePathAgainstAgentCwd } from './lib/agent-file-path'
 import { askUserService } from './lib/agent-ask-user-service'
@@ -327,7 +319,6 @@ import { exitPlanService } from './lib/agent-exit-plan-service'
 import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir, getScratchPadPath } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
 import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/storage-service'
-import type { CleanupOptions } from './lib/storage-service'
 import {
   listAgentWorkspaces,
   listAgentWorkspacesWithProjectRootStatus,
@@ -349,7 +340,6 @@ import {
   getAgentWorkspace,
   getProjectFilesPath,
   deleteWorkspaceSkill,
-  importSkillFromWorkspace,
   batchImportSkillsFromWorkspaces,
   updateSkillFromSource,
   getWorkspaceSkillFolder,
@@ -376,8 +366,6 @@ import {
   detachWorkspaceDirectory,
   detachWorkspaceFile,
   getWorktreeRepos,
-  addWorktreeRepo,
-  removeWorktreeRepo,
   cleanupStaleWorkspaceAttachedPaths,
 } from './lib/agent-workspace-manager'
 import {
@@ -461,14 +449,12 @@ import {
 } from './lib/persona-manager'
 import { buildSystemPrompt } from './lib/agent-prompt-builder'
 import {
-  getLatestRelease,
   listReleases as listGitHubReleases,
   getReleaseByTag,
 } from './lib/github-release-service'
 import { watchAttachedDirectory, unwatchAttachedDirectory } from './lib/workspace-watcher'
 import {
   getFeishuConfig,
-  saveFeishuConfig,
   getDecryptedAppSecret,
   getFeishuMultiBotConfig,
   saveFeishuBotConfig,
@@ -478,7 +464,7 @@ import {
 import { feishuBridgeManager } from './lib/feishu-bridge-manager'
 import { syncFeishuSyncSleepBlocker } from './lib/feishu-sleep-blocker'
 import { presenceService } from './lib/feishu-presence'
-import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDingTalkMultiBotConfig, saveDingTalkBotConfig, removeDingTalkBot, getDecryptedBotClientSecret } from './lib/dingtalk-config'
+import { getDingTalkConfig, getDecryptedClientSecret, getDingTalkMultiBotConfig, saveDingTalkBotConfig, removeDingTalkBot, getDecryptedBotClientSecret } from './lib/dingtalk-config'
 import { listShallowDirectory } from './lib/directory-listing'
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { redactSensitiveLogValue } from './lib/bridge-log-redaction'
@@ -953,12 +939,6 @@ async function runCliCommand(bin: string, args: string[], opts: { timeoutMs?: nu
   return runCmd(invocation.bin, invocation.args, opts)
 }
 
-interface McpRefreshValidation {
-  name: string
-  fingerprint: string
-  lastTestResult: NonNullable<import('@proma/shared').McpServerEntry['lastTestResult']>
-}
-
 /**
  * 生成 MCP 可运行配置的稳定摘要。摘要只用于内存中比较，绝不记录或返回，避免暴露 headers/env 中的敏感值。
  */
@@ -978,50 +958,6 @@ export function getMcpEntryFingerprint(entry: import('@proma/shared').McpServerE
     isBuiltin: entry.isBuiltin ?? false,
   }
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
-}
-
-/** 在固定上限内并发执行任务，保留输入顺序，避免同时启动过多 MCP 进程或网络连接。 */
-export async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  maxConcurrency: number,
-  mapper: (value: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
-    throw new Error('maxConcurrency 必须是正整数')
-  }
-
-  const results = new Array<R>(values.length)
-  let nextIndex = 0
-  const worker = async (): Promise<void> => {
-    while (nextIndex < values.length) {
-      const index = nextIndex++
-      results[index] = await mapper(values[index]!, index)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(maxConcurrency, values.length) }, worker))
-  return results
-}
-
-/**
- * 只合并仍与验证开始时完全一致的条目。调用方还必须检查 refresh generation，
- * 因而同名服务器被编辑、禁用、删除或被后一次刷新取代时，旧结果不会落盘。
- */
-export function mergeMcpRefreshResults(
-  currentConfig: import('@proma/shared').WorkspaceMcpConfig,
-  validations: readonly McpRefreshValidation[],
-): import('@proma/shared').WorkspaceMcpConfig {
-  const servers = { ...currentConfig.servers }
-  for (const validation of validations) {
-    const currentEntry = servers[validation.name]
-    if (currentEntry?.enabled && getMcpEntryFingerprint(currentEntry) === validation.fingerprint) {
-      servers[validation.name] = {
-        ...currentEntry,
-        enabled: validation.lastTestResult.success,
-        lastTestResult: validation.lastTestResult,
-      }
-    }
-  }
-  return { servers }
 }
 
 /**
@@ -1537,36 +1473,6 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  // 获取单个文件的 diff
-  ipcMain.handle(
-    IPC_CHANNELS.GET_FILE_DIFF,
-    async (_, input: GetFileDiffInput) => {
-      const { dirPath, filePath, gitRoot, sessionId } = input
-      if (!dirPath || !filePath || typeof dirPath !== 'string' || typeof filePath !== 'string') {
-        console.warn('[IPC] git:get-file-diff 收到无效参数')
-        return ''
-      }
-      const access = normalizeFileAccessOptions({ sessionId })
-      if (!(await ensurePathAllowedWithWorktree(dirPath, access)) || (gitRoot && !(await ensurePathAllowedWithWorktree(gitRoot, access)))) return ''
-      return getFileDiff(dirPath, filePath, gitRoot)
-    }
-  )
-
-  // 获取未追踪文件内容
-  ipcMain.handle(
-    IPC_CHANNELS.GET_UNTRACKED_CONTENT,
-    async (_, input: GetFileDiffInput) => {
-      const { dirPath, filePath, gitRoot, sessionId } = input
-      if (!dirPath || !filePath || typeof dirPath !== 'string' || typeof filePath !== 'string') {
-        console.warn('[IPC] git:get-untracked-content 收到无效参数')
-        return ''
-      }
-      const access = normalizeFileAccessOptions({ sessionId })
-      if (!(await ensurePathAllowedWithWorktree(dirPath, access)) || (gitRoot && !(await ensurePathAllowedWithWorktree(gitRoot, access)))) return ''
-      return getUntrackedContent(dirPath, filePath, gitRoot)
-    }
-  )
-
   // 还原文件变更
   ipcMain.handle(
     IPC_CHANNELS.REVERT_FILE,
@@ -1621,20 +1527,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 打开独立预览窗口
-  ipcMain.handle(
-    IPC_CHANNELS.OPEN_DETACHED_PREVIEW,
-    async (event, input: DetachedPreviewWindowInput): Promise<string | null> => {
-      if (!input || typeof input.sessionId !== 'string' || typeof input.filePath !== 'string' || typeof input.dirPath !== 'string') {
-        console.warn('[IPC] preview:open-detached 收到无效参数')
-        return null
-      }
-      const { openDetachedPreviewWindow } = await import('./lib/detached-preview-window')
-      const sourceWindow = BrowserWindow.fromWebContents(event.sender)
-      return openDetachedPreviewWindow(input, sourceWindow)
-    }
-  )
-
   // 获取独立预览窗口数据
   ipcMain.handle(
     IPC_CHANNELS.GET_DETACHED_PREVIEW_DATA,
@@ -1642,15 +1534,6 @@ export function registerIpcHandlers(): void {
       if (!previewId || typeof previewId !== 'string') return null
       const { getDetachedPreviewWindowData } = await import('./lib/detached-preview-window')
       return getDetachedPreviewWindowData(previewId)
-    }
-  )
-
-  // 截图导出
-  ipcMain.handle(
-    IPC_CHANNELS.SCREENSHOT_CAPTURE,
-    async (_, input: { html: string; isDark: boolean; width?: number; mode: 'clipboard' | 'file'; css?: string; themeClass?: string }) => {
-      const { captureScreenshot } = await import('./lib/screenshot-service')
-      return captureScreenshot(input)
     }
   )
 
@@ -1706,28 +1589,6 @@ export function registerIpcHandlers(): void {
       } else {
         await shell.openPath(absPath)
       }
-    }
-  )
-
-  // 扫描系统中的编辑器应用（仅 macOS）
-  ipcMain.handle(
-    IPC_CHANNELS.SCAN_EDITORS,
-    async (): Promise<import('@proma/shared').EditorApp[]> => {
-      if (process.platform !== 'darwin') return []
-      const { existsSync } = await import('node:fs')
-      const { homedir } = await import('node:os')
-      const home = homedir()
-
-      const editors = KNOWN_EDITORS.map((name) => {
-        const searchPaths = name === 'Xcode' || name === 'TextEdit'
-          ? [`/Applications/${name}.app`]
-          : [`/Applications/${name}.app`, `${home}/Applications/${name}.app`]
-        return { name, paths: searchPaths }
-      })
-
-      return editors
-        .filter((e) => e.paths.some((p) => existsSync(p)))
-        .map((e) => ({ name: e.name, path: e.paths.find((p) => existsSync(p))! }))
     }
   )
 
@@ -2288,98 +2149,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 异步保存 scratch-pad.md
-  ipcMain.handle(
-    SCRATCH_PAD_IPC_CHANNELS.SAVE,
-    async (_, content: string): Promise<boolean> => {
-      const path = getScratchPadPath()
-      try {
-        await writeFile(path, content, 'utf-8')
-        return true
-      } catch (err) {
-        console.error('[ScratchPad] 保存失败:', err)
-        return false
-      }
-    }
-  )
-
-  // 同步保存 scratch-pad.md（beforeunload 场景）
-  ipcMain.on(
-    SCRATCH_PAD_IPC_CHANNELS.SAVE_SYNC,
-    (event, content: string) => {
-      try {
-        writeFileSync(getScratchPadPath(), content, 'utf-8')
-        event.returnValue = true
-      } catch (err) {
-        console.error('[ScratchPad] 同步保存失败:', err)
-        event.returnValue = false
-      }
-    }
-  )
-
-  // 导出为 Markdown 到指定目录
-  ipcMain.handle(
-    SCRATCH_PAD_IPC_CHANNELS.EXPORT,
-    async (_, markdown: string, dirPath: string, filename: string): Promise<string> => {
-      let filePath: string
-      if (!filename) {
-        // 完整文件路径模式（来自保存对话框）
-        filePath = dirPath
-        const dir = dirname(filePath)
-        if (!existsSync(dir)) {
-          mkdirSync(dir, { recursive: true })
-        }
-      } else {
-        if (!existsSync(dirPath)) {
-          mkdirSync(dirPath, { recursive: true })
-        }
-        filePath = join(dirPath, filename)
-      }
-      writeFileSync(filePath, markdown, 'utf-8')
-      console.log('[ScratchPad] 已导出:', filePath)
-      return filePath
-    }
-  )
-
-  // 打开保存对话框，返回用户选择的路径
-  ipcMain.handle(
-    SCRATCH_PAD_IPC_CHANNELS.CHOOSE_EXPORT_PATH,
-    async (_, defaultName: string): Promise<string | null> => {
-      const win = BrowserWindow.getFocusedWindow()
-      if (!win) return null
-      const result = await dialog.showSaveDialog(win, {
-        title: '导出 Scratch Pad 为 Markdown',
-        defaultPath: defaultName,
-        filters: [
-          { name: 'Markdown', extensions: ['md'] },
-          { name: '所有文件', extensions: ['*'] },
-        ],
-      })
-      return result.canceled ? null : result.filePath
-    }
-  )
-
-  // 将图片 data URL 写入系统剪贴板
-  ipcMain.handle(
-    SCRATCH_PAD_IPC_CHANNELS.COPY_IMAGE,
-    async (_, dataUrl: string): Promise<{ success: boolean; message?: string }> => {
-      try {
-        if (!dataUrl || typeof dataUrl !== 'string') {
-          return { success: false, message: '无效的图片数据' }
-        }
-        const img = nativeImage.createFromDataURL(dataUrl)
-        if (img.isEmpty()) {
-          return { success: false, message: '该格式图片暂不支持复制' }
-        }
-        clipboard.writeImage(img)
-        return { success: true }
-      } catch (err) {
-        console.error('[ScratchPad] 复制图片到剪贴板失败:', err)
-        return { success: false, message: '复制失败' }
-      }
-    }
-  )
-
   // ===== 应用图标切换 =====
 
   ipcMain.handle(
@@ -2586,13 +2355,6 @@ export function registerIpcHandlers(): void {
     },
   )
   ipcMain.handle(
-    AGENT_IPC_CHANNELS.MINIMIZE_BROWSER,
-    async (event, sessionId: string): Promise<void> => {
-      await assertBrowserSessionAccess(event.sender.id, sessionId)
-      browserController.minimize(sessionId)
-    },
-  )
-  ipcMain.handle(
     AGENT_IPC_CHANNELS.NAVIGATE_BROWSER,
     async (event, input: BrowserNavigateInput): Promise<BrowserViewState> => {
       await assertBrowserSessionAccess(event.sender.id, input.sessionId)
@@ -2614,10 +2376,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(AGENT_IPC_CHANNELS.CLOSE_BROWSER, async (event, sessionId: string): Promise<void> => {
     await assertBrowserSessionAccess(event.sender.id, sessionId)
     await browserController.close(sessionId)
-  })
-  ipcMain.handle(AGENT_IPC_CHANNELS.LIST_BROWSER_TABS, async (event, sessionId: string): Promise<BrowserViewState> => {
-    await assertBrowserSessionAccess(event.sender.id, sessionId)
-    return browserController.listTabs(sessionId)
   })
   ipcMain.handle(AGENT_IPC_CHANNELS.CREATE_BROWSER_TAB, async (event, input: BrowserCreateTabInput): Promise<BrowserViewState> => {
     await assertBrowserSessionAccess(event.sender.id, input.sessionId)
@@ -2828,14 +2586,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 生成 Agent 会话标题
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.GENERATE_TITLE,
-    async (_, input: AgentGenerateTitleInput): Promise<string | null> => {
-      return generateAgentTitle(input)
-    }
-  )
-
   // 删除 Agent 会话
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SESSION,
@@ -3010,16 +2760,6 @@ export function registerIpcHandlers(): void {
         }
       }
       return workspaces
-    }
-  )
-
-  // 创建 Agent 工作区（保留给迁移与低层管理调用；交互式项目创建应使用 CREATE_PROJECT）。
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.CREATE_WORKSPACE,
-    async (_, input: import('@proma/shared').CreateAgentWorkspaceInput): Promise<AgentWorkspace> => {
-      const workspace = await createAgentWorkspace(input)
-      if (workspace.projectRootPath) watchAttachedDirectory(workspace.projectRootPath)
-      return workspace
     }
   )
 
@@ -3321,38 +3061,6 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  // 刷新并持久化工作区 MCP 真实连接状态
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.REFRESH_MCP_CONNECTIONS,
-    async (_, workspaceSlug: string): Promise<WorkspaceMcpConfig> => {
-      const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
-      const config = getWorkspaceMcpConfig(workspaceSlug)
-      const entries = Object.entries(config.servers).filter(([, entry]) => entry.enabled)
-      const { validateMcpServer } = await import('./lib/mcp-validator')
-      const validations = await mapWithConcurrency(entries, 4, async ([name, entry]) => {
-        const result = await validateMcpServer(name, entry, workspaceSlug)
-        return {
-          name,
-          fingerprint: getMcpEntryFingerprint(entry),
-          lastTestResult: {
-            success: result.valid,
-            message: result.valid ? (result.message ?? 'MCP 连接成功') : (result.reason ?? 'MCP 连接失败'),
-            timestamp: Date.now(),
-          },
-        }
-      })
-
-      // 保存或更晚发起的刷新会使本次 generation 过期；直接返回最新完整配置，不写任何旧验证结果。
-      if (!isWorkspaceMcpRefreshCurrent(workspaceSlug, refreshGeneration)) {
-        return getWorkspaceMcpConfig(workspaceSlug)
-      }
-
-      const refreshed = mergeMcpRefreshResults(getWorkspaceMcpConfig(workspaceSlug), validations)
-      saveWorkspaceMcpConfig(workspaceSlug, refreshed)
-      return refreshed
-    },
-  )
-
   ipcMain.handle(
     AGENT_IPC_CHANNELS.START_MCP_OAUTH,
     async (_, input: import('@proma/shared').StartMcpOAuthInput): Promise<import('@proma/shared').McpOAuthStartResult> => {
@@ -3515,14 +3223,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 从其他工作区导入 Skill
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.IMPORT_SKILL_FROM_WORKSPACE,
-    async (_, targetSlug: string, sourceSlug: string, skillSlug: string): Promise<SkillMeta> => {
-      return importSkillFromWorkspace(targetSlug, sourceSlug, skillSlug)
-    }
-  )
-
   // 从其他工作区批量导入多个 Skill
   ipcMain.handle(
     AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_FROM_WORKSPACES,
@@ -3648,17 +3348,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(AGENT_IPC_CHANNELS.OPEN_WORKSPACE_MEMORY_WINDOW, async (_, workspaceSlug: string, relativePath?: string): Promise<void> => {
-    // 先经既有受限访问层核验 slug；若指定文件，也用受限路径解析器验证。
-    getWorkspaceMemorySummary(workspaceSlug)
-    if (relativePath !== undefined) {
-      if (typeof relativePath !== 'string' || !relativePath) throw new Error('记忆文件路径非法')
-      readWorkspaceAutoMemoryFile(workspaceSlug, relativePath)
-    }
-    const { showWorkspaceMemoryWindow } = await import('./lib/workspace-memory-window')
-    showWorkspaceMemoryWindow(workspaceSlug, relativePath)
-  })
-
   ipcMain.handle(
     AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_READY,
     async (event, workspaceSlug: string): Promise<void> => {
@@ -3761,14 +3450,6 @@ export function registerIpcHandlers(): void {
 
   // ===== Agent 队列消息 =====
 
-  // 排队发送消息
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.QUEUE_MESSAGE,
-    async (event, input: import('@proma/shared').AgentQueueMessageInput): Promise<string> => {
-      return queueAgentMessage(input, event.sender)
-    }
-  )
-
   // 主进程原子决定立即注入活跃 Agent 或进入 deferred queue。
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SUBMIT_OR_ENQUEUE_MESSAGE,
@@ -3782,14 +3463,6 @@ export function registerIpcHandlers(): void {
     async (_, sessionId: string): Promise<import('@proma/shared').AgentQueuedMessageSnapshot[]> => {
       if (!sessionId || typeof sessionId !== 'string') return []
       return listQueuedAgentMessages(sessionId)
-    },
-  )
-
-  // 兼容旧调用：将消息交给主进程 deferred queue。
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.ENQUEUE_QUEUED_MESSAGE,
-    async (event, input: import('@proma/shared').AgentDeferredQueueMessageInput): Promise<void> => {
-      enqueueAgentQueuedMessage(input, event.sender)
     },
   )
 
@@ -3807,52 +3480,7 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  // ===== Agent 权限系统 =====
-
-  // 响应权限请求
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.PERMISSION_RESPOND,
-    async (event, response: PermissionResponse): Promise<void> => {
-      const { requestId, behavior, alwaysAllow } = response
-      const sessionId = permissionService.respondToPermission(requestId, behavior, alwaysAllow)
-
-      // 发送 permission_resolved 事件给渲染进程
-      if (sessionId) {
-        event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-          sessionId,
-          payload: { kind: 'proma_event', event: { type: 'permission_resolved', requestId, behavior } },
-        })
-      }
-    }
-  )
-
-  // 热切换指定会话的权限模式（运行中生效，不广播）
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.UPDATE_SESSION_PERMISSION_MODE,
-    async (_, sessionId: string, mode: PromaPermissionMode): Promise<void> => {
-      if (!isPromaPermissionMode(mode)) {
-        throw new Error(`无效的权限模式: ${mode}`)
-      }
-      // 会话不存在时直接抛错（避免 updateAgentSessionMeta 的通用异常被降级为 warn）
-      if (!getAgentSessionMeta(sessionId)) {
-        throw new Error(`Agent 会话不存在: ${sessionId}`)
-      }
-      // 持久化到 session meta（重启后可恢复，即使 session 未运行也要写）。
-      // 这里的 catch 仅用于兜底磁盘 I/O 类异常，不影响后续热切换。
-      try {
-        updateAgentSessionMeta(sessionId, { permissionMode: mode })
-      } catch (err) {
-        console.warn(`[IPC] 持久化 session 权限模式失败: sessionId=${sessionId}`, err)
-      }
-      // 若 session 正在跑，同步热切换运行时模式
-      if (isAgentSessionActive(sessionId)) {
-        await updateAgentPermissionMode(sessionId, mode).catch((err) => {
-          console.warn(`[IPC] 运行中权限模式切换失败: sessionId=${sessionId}`, err)
-          throw err
-        })
-      }
-    }
-  )
+  // ===== Agent 运行时设置 =====
 
   // 切换指定会话的 Agent runtime（空闲后下一轮生效）
   ipcMain.handle(
@@ -3936,58 +3564,6 @@ export function registerIpcHandlers(): void {
           sessionId,
           payload: { kind: 'proma_event', event: { type: 'ask_user_resolved', requestId } },
         })
-      }
-    }
-  )
-
-  // ===== ExitPlanMode 计划审批 =====
-
-  // 响应 ExitPlanMode 请求
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.EXIT_PLAN_MODE_RESPOND,
-    async (event, response: ExitPlanModeResponse): Promise<void> => {
-      const result = exitPlanService.respondToExitPlanMode(response)
-
-      if (result) {
-        const { sessionId, targetMode } = result
-
-        // 通知渲染进程请求已处理
-        event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-          sessionId,
-          payload: { kind: 'proma_event', event: { type: 'exit_plan_mode_resolved', requestId: response.requestId } },
-        })
-
-        // 如果用户选择了新的权限模式，通知渲染进程更新 UI
-        if (targetMode) {
-          const meta = getAgentSessionMeta(sessionId)
-          // 持久化到 session meta，和 cycleMode 路径保持一致（重启后该 session 能恢复）
-          if (meta) {
-            try {
-              updateAgentSessionMeta(sessionId, { permissionMode: targetMode })
-            } catch (err) {
-              console.warn(`[IPC] ExitPlanMode 持久化 session 权限模式失败: sessionId=${sessionId}`, err)
-            }
-          }
-          event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-            sessionId,
-            payload: { kind: 'proma_event', event: { type: 'permission_mode_changed', mode: targetMode } },
-          })
-          console.log(`[IPC] ExitPlanMode 权限模式切换: ${targetMode}`)
-        }
-      }
-    }
-  )
-
-  // ===== 待处理请求恢复 =====
-
-  // 获取所有待处理的交互请求快照（渲染进程重载后恢复状态）
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.GET_PENDING_REQUESTS,
-    async (): Promise<import('@proma/shared').PendingRequestsSnapshot> => {
-      return {
-        permissions: permissionService.getPendingRequests(),
-        askUsers: askUserService.getPendingRequests(),
-        exitPlans: exitPlanService.getPendingRequests(),
       }
     }
   )
@@ -4185,20 +3761,6 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.GET_WORKTREE_REPOS,
     async (_, workspaceSlug: string) => {
       return await getWorktreeRepos(workspaceSlug)
-    }
-  )
-
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.ADD_WORKTREE_REPO,
-    async (_, workspaceSlug: string, repo: import('@proma/shared').WorkspaceWorktreeRepo) => {
-      return addWorktreeRepo(workspaceSlug, repo)
-    }
-  )
-
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.REMOVE_WORKTREE_REPO,
-    async (_, workspaceSlug: string, repoPath: string) => {
-      return removeWorktreeRepo(workspaceSlug, repoPath)
     }
   )
 
@@ -4592,70 +4154,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 读取附加目录文件内容为 base64（限制在已附加目录范围内，用于侧面板添加到聊天）
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.READ_ATTACHED_FILE,
-    async (_, filePath: string, sessionId?: string, workspaceSlug?: string): Promise<string> => {
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error('无效的文件路径')
-      }
-
-      const { resolve, sep } = await import('node:path')
-      const { readFile, stat, realpath } = await import('node:fs/promises')
-
-      // 使用 realpath 解析符号链接，防止 symlink 绕过路径检查
-      const safePath = await realpath(resolve(filePath)).catch(() => {
-        throw new Error(`文件不存在: ${filePath}`)
-      })
-
-      // 收集所有允许的路径：会话/工作区附加目录、附加文件 + 工作区文件目录
-      const allowedDirs: string[] = []
-      const allowedFiles: string[] = []
-
-      if (sessionId) {
-        const meta = getAgentSessionMeta(sessionId)
-        if (meta?.attachedDirectories) {
-          allowedDirs.push(...meta.attachedDirectories)
-        }
-        if (meta?.attachedFiles) {
-          allowedFiles.push(...meta.attachedFiles)
-        }
-      }
-      if (workspaceSlug) {
-        allowedDirs.push(...getWorkspaceAttachedDirectories(workspaceSlug))
-        allowedFiles.push(...getWorkspaceAttachedFiles(workspaceSlug))
-        allowedDirs.push(getProjectFilesPath(workspaceSlug))
-      }
-
-      // 还允许访问 agent-workspaces 根目录下的文件（session 文件等）
-      allowedDirs.push(getAgentWorkspacesDir())
-
-      const resolvedAllowedDirs = await Promise.all(
-        allowedDirs.map((dir) => realpath(resolve(dir)).catch(() => resolve(dir)))
-      )
-      const resolvedAllowedFiles = await Promise.all(
-        allowedFiles.map((file) => realpath(resolve(file)).catch(() => resolve(file)))
-      )
-      const isAllowed = resolvedAllowedDirs.some((dir) => safePath.startsWith(dir + sep) || safePath === dir)
-        || resolvedAllowedFiles.some((file) => safePath === file)
-      if (!isAllowed) {
-        throw new Error('访问路径不在允许范围内')
-      }
-
-      const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
-      const fileStat = await stat(safePath).catch(() => null)
-      if (!fileStat) {
-        throw new Error(`文件不存在: ${filePath}`)
-      }
-      if (fileStat.size > MAX_FILE_SIZE) {
-        throw new Error(`文件过大（${Math.round(fileStat.size / 1024 / 1024)}MB），最大支持 20MB`)
-      }
-
-      const buffer = await readFile(safePath)
-      return buffer.toString('base64')
-    }
-  )
-
   // 在文件管理器中显示附加目录文件
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SHOW_ATTACHED_IN_FOLDER,
@@ -5041,14 +4539,6 @@ export function registerIpcHandlers(): void {
 
   // ===== GitHub Release =====
 
-  // 获取最新 Release
-  ipcMain.handle(
-    GITHUB_RELEASE_IPC_CHANNELS.GET_LATEST_RELEASE,
-    async (): Promise<GitHubRelease | null> => {
-      return getLatestRelease()
-    }
-  )
-
   // 获取 Release 列表
   ipcMain.handle(
     GITHUB_RELEASE_IPC_CHANNELS.LIST_RELEASES,
@@ -5082,41 +4572,6 @@ export function registerIpcHandlers(): void {
     FEISHU_IPC_CHANNELS.GET_DECRYPTED_SECRET,
     async (): Promise<string> => {
       return getDecryptedAppSecret()
-    }
-  )
-
-  // 保存飞书配置（旧格式，操作 bots[0]）
-  ipcMain.handle(
-    FEISHU_IPC_CHANNELS.SAVE_CONFIG,
-    async (_, input: FeishuConfigInput): Promise<FeishuConfig> => {
-      const config = saveFeishuConfig(input)
-      // 配置变更后，重启对应的 Bot
-      const multi = getFeishuMultiBotConfig()
-      const firstBot = multi.bots[0]
-      if (firstBot) {
-        if (input.enabled && input.appId && input.appSecret) {
-          await feishuBridgeManager.restartBot(firstBot.id)
-        } else if (!input.enabled) {
-          feishuBridgeManager.stopBot(firstBot.id)
-        }
-      }
-      return config
-    }
-  )
-
-  // 启动飞书 Bridge（旧格式，启动所有 Bot）
-  ipcMain.handle(
-    FEISHU_IPC_CHANNELS.START_BRIDGE,
-    async (): Promise<void> => {
-      await feishuBridgeManager.startAll()
-    }
-  )
-
-  // 停止飞书 Bridge（旧格式，停止所有 Bot）
-  ipcMain.handle(
-    FEISHU_IPC_CHANNELS.STOP_BRIDGE,
-    async (): Promise<void> => {
-      feishuBridgeManager.stopAll()
     }
   )
 
@@ -5333,35 +4788,11 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 保存钉钉配置（旧 API，向后兼容）
-  ipcMain.handle(
-    DINGTALK_IPC_CHANNELS.SAVE_CONFIG,
-    async (_, input: DingTalkConfigInput): Promise<DingTalkConfig> => {
-      return saveDingTalkConfig(input)
-    }
-  )
-
   // 测试钉钉连接
   ipcMain.handle(
     DINGTALK_IPC_CHANNELS.TEST_CONNECTION,
     async (_, clientId: string, clientSecret: string): Promise<DingTalkTestResult> => {
       return dingtalkBridgeManager.testConnection(clientId, clientSecret)
-    }
-  )
-
-  // 启动钉钉 Bridge（旧 API，启动第一个 Bot）
-  ipcMain.handle(
-    DINGTALK_IPC_CHANNELS.START_BRIDGE,
-    async (): Promise<void> => {
-      await dingtalkBridgeManager.startAll()
-    }
-  )
-
-  // 停止钉钉 Bridge（旧 API，停止所有 Bot）
-  ipcMain.handle(
-    DINGTALK_IPC_CHANNELS.STOP_BRIDGE,
-    async (): Promise<void> => {
-      dingtalkBridgeManager.stopAll()
     }
   )
 
@@ -5605,10 +5036,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.GET_STATS, async () => {
     return calculateStorageStats()
-  })
-
-  ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP, async (_, options: CleanupOptions) => {
-    return cleanupStorage(options)
   })
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_TEMP, async () => {
@@ -6333,13 +5760,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(MEMORY_IPC_CHANNELS.LIST_HISTORY, async (_, target: unknown, workspaceSlug: unknown, limit: unknown) => {
     if (!isNonEmptyString(target)) return []
     return listMemoryHistory(target, readOptionalSlug(workspaceSlug), typeof limit === 'number' ? limit : undefined)
-  })
-
-  ipcMain.handle(MEMORY_IPC_CHANNELS.READ_REVISION, async (_, target: unknown, id: unknown, workspaceSlug: unknown) => {
-    if (!isNonEmptyString(target) || !isNonEmptyString(id)) return null
-    // 快照 ID 参与文件名拼接，入参层先拦掉路径分隔符与跨目标 ID。
-    if (!isValidMemoryRevisionId(target, id)) return null
-    return readMemoryRevision(target, id, readOptionalSlug(workspaceSlug))
   })
 
   ipcMain.handle(MEMORY_IPC_CHANNELS.RESTORE_REVISION, async (_, input: unknown) => {

@@ -36,8 +36,6 @@ export interface GitHubReleaseListOptions {
 
 /** GitHub Release IPC 通道常量 */
 export const GITHUB_RELEASE_IPC_CHANNELS = {
-  /** 获取最新 Release */
-  GET_LATEST_RELEASE: 'github-release:get-latest',
   /** 获取 Release 列表 */
   LIST_RELEASES: 'github-release:list',
   /** 获取指定版本的 Release */

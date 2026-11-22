@@ -17,7 +17,6 @@ import { createStableDingTalkBotId } from './dingtalk-bot-identity'
 import { redactSensitiveLogValue } from './bridge-log-redaction'
 import type {
   DingTalkConfig,
-  DingTalkConfigInput,
   DingTalkBotConfig,
   DingTalkMultiBotConfig,
   DingTalkBotConfigInput,
@@ -273,27 +272,6 @@ export function getDingTalkConfig(): DingTalkConfig {
     clientId: first.clientId,
     clientSecret: first.clientSecret,
     defaultWorkspaceId: first.defaultWorkspaceId,
-  }
-}
-
-/** @deprecated 使用 saveDingTalkBotConfig() */
-export function saveDingTalkConfig(input: DingTalkConfigInput): DingTalkConfig {
-  const multi = readRawConfig()
-  const first = multi.bots[0]
-  const botInput: DingTalkBotConfigInput = {
-    id: first?.id,
-    name: first?.name ?? '钉钉助手',
-    enabled: input.enabled,
-    clientId: input.clientId,
-    clientSecret: input.clientSecret,
-    defaultWorkspaceId: input.defaultWorkspaceId,
-  }
-  const saved = saveDingTalkBotConfig(botInput)
-  return {
-    enabled: saved.enabled,
-    clientId: saved.clientId,
-    clientSecret: saved.clientSecret,
-    defaultWorkspaceId: saved.defaultWorkspaceId,
   }
 }
 

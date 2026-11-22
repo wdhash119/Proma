@@ -21,7 +21,7 @@
     },
     "apps/cli": {
       "name": "@proma/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "proma": "./src/index.ts",
       },
@@ -35,7 +35,7 @@
     },
     "apps/electron": {
       "name": "@proma/electron",
-      "version": "0.19.116",
+      "version": "0.19.118",
       "dependencies": {
         "@codemirror/language": "^6.12.4",
         "@codemirror/state": "^6.7.1",
@@ -103,7 +103,6 @@
         "@types/markdown-it": "^14.1.2",
         "@types/node": "^20.0.0",
         "@types/pdf-parse": "^1.1.5",
-        "@types/pngjs": "^6.0.5",
         "@types/qrcode": "^1.5.6",
         "@types/react": "^18.3.0",
         "@types/react-dom": "^18.3.0",
@@ -128,7 +127,6 @@
         "node-addon-api": "^8.9.1",
         "officeparser": "4.2.0",
         "pdf-parse": "1.1.1",
-        "pngjs": "^7.0.0",
         "postcss": "^8.4.49",
         "qrcode": "^1.5.4",
         "react": "^18.3.1",
@@ -155,7 +153,7 @@
     },
     "packages/core": {
       "name": "@proma/core",
-      "version": "0.2.19",
+      "version": "0.2.20",
       "dependencies": {
         "@proma/shared": "workspace:*",
         "highlight.js": "^11.11.1",
@@ -171,7 +169,7 @@
     },
     "packages/session-core": {
       "name": "@proma/session-core",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@proma/shared": "workspace:*",
       },
@@ -181,14 +179,14 @@
     },
     "packages/shared": {
       "name": "@proma/shared",
-      "version": "0.1.86",
+      "version": "0.1.87",
       "devDependencies": {
         "typescript": "^5.0.0",
       },
     },
     "packages/ui": {
       "name": "@proma/ui",
-      "version": "0.1.11",
+      "version": "0.1.12",
       "dependencies": {
         "@proma/core": "workspace:*",
         "beautiful-mermaid": "1.1.3",
@@ -1057,8 +1055,6 @@
     "@types/pdf-parse": ["@types/pdf-parse@1.1.5", "http://mirrors.cloud.tencent.com/npm/@types/pdf-parse/-/pdf-parse-1.1.5.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-kBfrSXsloMnUJOKi25s3+hRmkycHfLK6A09eRGqF/N8BkQoPUmaCr+q8Cli5FnfohEz/rsv82zAiPz/LXtOGhA=="],
 
     "@types/plist": ["@types/plist@3.0.5", "http://mirrors.cloud.tencent.com/npm/@types/plist/-/plist-3.0.5.tgz", { "dependencies": { "@types/node": "*", "xmlbuilder": ">=11.0.1" } }, "sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA=="],
-
-    "@types/pngjs": ["@types/pngjs@6.0.5", "http://mirrors.cloud.tencent.com/npm/@types/pngjs/-/pngjs-6.0.5.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ=="],
 
     "@types/prop-types": ["@types/prop-types@15.7.15", "http://mirrors.cloud.tencent.com/npm/@types/prop-types/-/prop-types-15.7.15.tgz", {}, "sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw=="],
 
@@ -2186,7 +2182,7 @@
 
     "plist": ["plist@3.1.1", "http://mirrors.cloud.tencent.com/npm/plist/-/plist-3.1.1.tgz", { "dependencies": { "@xmldom/xmldom": "^0.9.10", "base64-js": "^1.5.1", "xmlbuilder": "^15.1.1" } }, "sha512-ZIfcLJC+7E7FBFnDxm9MPmt7D+DidyQ26lewieO75AdhA2ayMtsJSES0iWzqJQbcVRSrTufQoy0DR94xHue0oA=="],
 
-    "pngjs": ["pngjs@7.0.0", "http://mirrors.cloud.tencent.com/npm/pngjs/-/pngjs-7.0.0.tgz", {}, "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow=="],
+    "pngjs": ["pngjs@5.0.0", "http://mirrors.cloud.tencent.com/npm/pngjs/-/pngjs-5.0.0.tgz", {}, "sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw=="],
 
     "points-on-curve": ["points-on-curve@0.2.0", "http://mirrors.cloud.tencent.com/npm/points-on-curve/-/points-on-curve-0.2.0.tgz", {}, "sha512-0mYKnYYe9ZcqMCWhUjItv/oHjvgEsfKvnUTg8sAtnHr3GVy7rGkXCb6d5cSyqrWqL4k81b9CPg3urd+T7aop3A=="],
 
@@ -2754,8 +2750,6 @@
 
     "@types/plist/xmlbuilder": ["xmlbuilder@15.1.1", "http://mirrors.cloud.tencent.com/npm/xmlbuilder/-/xmlbuilder-15.1.1.tgz", {}, "sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg=="],
 
-    "@types/pngjs/@types/node": ["@types/node@25.0.10", "http://mirrors.cloud.tencent.com/npm/@types/node/-/node-25.0.10.tgz", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg=="],
-
     "@types/qrcode/@types/node": ["@types/node@25.0.10", "http://mirrors.cloud.tencent.com/npm/@types/node/-/node-25.0.10.tgz", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg=="],
 
     "@types/responselike/@types/node": ["@types/node@25.0.10", "http://mirrors.cloud.tencent.com/npm/@types/node/-/node-25.0.10.tgz", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg=="],
@@ -2944,8 +2938,6 @@
 
     "protobufjs/@types/node": ["@types/node@25.0.10", "http://mirrors.cloud.tencent.com/npm/@types/node/-/node-25.0.10.tgz", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-zWW5KPngR/yvakJgGOmZ5vTBemDoSqF3AcV/LrO5u5wTWyEAVVh+IT39G4gtyAkh3CtTZs8aX/yRM82OfzHJRg=="],
 
-    "qrcode/pngjs": ["pngjs@5.0.0", "http://mirrors.cloud.tencent.com/npm/pngjs/-/pngjs-5.0.0.tgz", {}, "sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw=="],
-
     "qrcode/yargs": ["yargs@15.4.1", "http://mirrors.cloud.tencent.com/npm/yargs/-/yargs-15.4.1.tgz", { "dependencies": { "cliui": "^6.0.0", "decamelize": "^1.2.0", "find-up": "^4.1.0", "get-caller-file": "^2.0.1", "require-directory": "^2.1.1", "require-main-filename": "^2.0.0", "set-blocking": "^2.0.0", "string-width": "^4.2.0", "which-module": "^2.0.0", "y18n": "^4.0.0", "yargs-parser": "^18.1.2" } }, "sha512-aePbxDmcYW++PaqBsJ+HYUFwCdv4LVvdnhBy78E57PIor8/OVvhMrADFFEDh8DHDFRv/O9i3lPhsENjO7QX0+A=="],
 
     "raw-body/iconv-lite": ["iconv-lite@0.7.2", "http://mirrors.cloud.tencent.com/npm/iconv-lite/-/iconv-lite-0.7.2.tgz", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw=="],
@@ -3027,8 +3019,6 @@
     "@types/pdf-parse/@types/node/undici-types": ["undici-types@7.16.0", "http://mirrors.cloud.tencent.com/npm/undici-types/-/undici-types-7.16.0.tgz", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "@types/plist/@types/node/undici-types": ["undici-types@7.16.0", "http://mirrors.cloud.tencent.com/npm/undici-types/-/undici-types-7.16.0.tgz", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
-
-    "@types/pngjs/@types/node/undici-types": ["undici-types@7.16.0", "http://mirrors.cloud.tencent.com/npm/undici-types/-/undici-types-7.16.0.tgz", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "@types/qrcode/@types/node/undici-types": ["undici-types@7.16.0", "http://mirrors.cloud.tencent.com/npm/undici-types/-/undici-types-7.16.0.tgz", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 

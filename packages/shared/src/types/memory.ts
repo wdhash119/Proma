@@ -64,8 +64,6 @@ export const MEMORY_IPC_CHANNELS = {
   SEARCH: 'memory:search',
   /** 列出某个目标的历史版本 */
   LIST_HISTORY: 'memory:list-history',
-  /** 读取某个历史版本正文 */
-  READ_REVISION: 'memory:read-revision',
   /** 恢复到某个历史版本 */
   RESTORE_REVISION: 'memory:restore-revision',
 } as const

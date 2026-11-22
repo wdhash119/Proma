@@ -2087,29 +2087,6 @@ export async function getWorktreeRepos(workspaceSlug: string): Promise<import('@
   return Array.from(byPath.values()).sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
 }
 
-export function addWorktreeRepo(workspaceSlug: string, repo: import('@proma/shared').WorkspaceWorktreeRepo): import('@proma/shared').WorkspaceWorktreeRepo[] {
-  const config = readWorkspaceConfig(workspaceSlug)
-  const existing = config.worktreeRepos ?? []
-
-  if (existing.some((r) => r.repoPath === repo.repoPath)) {
-    return existing
-  }
-
-  const updated = [...existing, repo]
-  writeWorkspaceConfig(workspaceSlug, { ...config, worktreeRepos: updated })
-  console.log(`[Agent 工作区] 已添加 worktree 仓库: ${repo.name} (${repo.repoPath}) → ${workspaceSlug}`)
-  return updated
-}
-
-export function removeWorktreeRepo(workspaceSlug: string, repoPath: string): import('@proma/shared').WorkspaceWorktreeRepo[] {
-  const config = readWorkspaceConfig(workspaceSlug)
-  const existing = config.worktreeRepos ?? []
-  const updated = existing.filter((r) => r.repoPath !== repoPath)
-  writeWorkspaceConfig(workspaceSlug, { ...config, worktreeRepos: updated })
-  console.log(`[Agent 工作区] 已移除 worktree 仓库: ${repoPath} ← ${workspaceSlug}`)
-  return updated
-}
-
 /**
  * 清理所有工作区中不存在的附加目录和附加文件
  * @returns 清理的条目总数

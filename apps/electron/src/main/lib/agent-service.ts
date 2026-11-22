@@ -19,7 +19,6 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { AGENT_IPC_CHANNELS, MAX_ATTACHMENT_SIZE } from '@proma/shared'
 import type {
   AgentSendInput,
-  AgentGenerateTitleInput,
   AgentSaveFilesInput,
   AgentSaveWorkspaceFilesInput,
   AgentSavedFile,
@@ -544,13 +543,6 @@ export async function runAgentHeadless(
 }
 
 /**
- * 生成 Agent 会话标题
- */
-export async function generateAgentTitle(input: AgentGenerateTitleInput): Promise<string | null> {
-  return orchestrator.generateTitle(input)
-}
-
-/**
  * 中止指定会话的 Agent 执行
  */
 export function stopAgent(sessionId: string): void {
@@ -681,12 +673,6 @@ export async function submitOrEnqueueAgentMessage(
 
   const disposition = agentQueueCoordinator.enqueue(input)
   return { disposition: disposition === 'started' ? 'started' : 'queued' }
-}
-
-/** 兼容旧调用：仅将消息追加到主进程 deferred queue。 */
-export function enqueueAgentQueuedMessage(input: AgentDeferredQueueMessageInput, webContents: WebContents): void {
-  rebindWebContents(input.sessionId, webContents)
-  agentQueueCoordinator.enqueue(input)
 }
 
 export function cancelAgentQueuedMessage(input: AgentQueuedMessageControlInput): boolean {

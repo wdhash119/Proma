@@ -24,17 +24,6 @@ export interface FeishuConfig {
   defaultWorkspaceId?: string
 }
 
-/** 飞书配置保存输入（App Secret 为明文，主进程负责加密）— 旧格式，向后兼容 */
-export interface FeishuConfigInput {
-  enabled: boolean
-  appId: string
-  /** 明文 App Secret */
-  appSecret: string
-  /** 飞书平台域名；缺省时按国内飞书处理 */
-  domain?: FeishuDomain
-  defaultWorkspaceId?: string
-}
-
 // ===== 多 Bot 配置（v2） =====
 
 /** 单个飞书 Bot 配置 */
@@ -277,16 +266,10 @@ export interface FeishuChatMessage {
 export const FEISHU_IPC_CHANNELS = {
   /** 获取飞书配置（旧格式，向后兼容） */
   GET_CONFIG: 'feishu:get-config',
-  /** 保存飞书配置（旧格式，向后兼容） */
-  SAVE_CONFIG: 'feishu:save-config',
   /** 获取解密后的 App Secret（旧格式，向后兼容） */
   GET_DECRYPTED_SECRET: 'feishu:get-decrypted-secret',
   /** 测试飞书连接 */
   TEST_CONNECTION: 'feishu:test-connection',
-  /** 启动 Bridge（旧格式，向后兼容） */
-  START_BRIDGE: 'feishu:start-bridge',
-  /** 停止 Bridge（旧格式，向后兼容） */
-  STOP_BRIDGE: 'feishu:stop-bridge',
   /** 获取 Bridge 状态（旧格式，向后兼容） */
   GET_STATUS: 'feishu:get-status',
   /** Bridge 状态变化（主进程 → 渲染进程推送） */
@@ -316,8 +299,6 @@ export const FEISHU_IPC_CHANNELS = {
   STOP_BOT: 'feishu:stop-bot',
   /** 获取多 Bot Bridge 状态 */
   GET_MULTI_STATUS: 'feishu:get-multi-status',
-  /** 多 Bot 状态变化推送 */
-  MULTI_STATUS_CHANGED: 'feishu:multi-status-changed',
 
   // ===== 扫码注册（v3）=====
 

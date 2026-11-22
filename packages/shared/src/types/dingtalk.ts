@@ -19,15 +19,6 @@ export interface DingTalkConfig {
   defaultWorkspaceId?: string
 }
 
-/** 钉钉配置保存输入（Client Secret 为明文，主进程负责加密）— 旧格式，向后兼容 */
-export interface DingTalkConfigInput {
-  enabled: boolean
-  clientId: string
-  /** 明文 Client Secret */
-  clientSecret: string
-  defaultWorkspaceId?: string
-}
-
 // ===== 多 Bot 配置（v2） =====
 
 /** 单个钉钉 Bot 配置 */
@@ -117,16 +108,10 @@ export interface DingTalkTestResult {
 export const DINGTALK_IPC_CHANNELS = {
   /** 获取钉钉配置 */
   GET_CONFIG: 'dingtalk:get-config',
-  /** 保存钉钉配置 */
-  SAVE_CONFIG: 'dingtalk:save-config',
   /** 获取解密后的 Client Secret */
   GET_DECRYPTED_SECRET: 'dingtalk:get-decrypted-secret',
   /** 测试钉钉连接 */
   TEST_CONNECTION: 'dingtalk:test-connection',
-  /** 启动 Bridge */
-  START_BRIDGE: 'dingtalk:start-bridge',
-  /** 停止 Bridge */
-  STOP_BRIDGE: 'dingtalk:stop-bridge',
   /** 获取 Bridge 状态 */
   GET_STATUS: 'dingtalk:get-status',
   /** Bridge 状态变化（主进程 → 渲染进程推送） */
@@ -148,6 +133,4 @@ export const DINGTALK_IPC_CHANNELS = {
   STOP_BOT: 'dingtalk:stop-bot',
   /** 获取多 Bot Bridge 状态 */
   GET_MULTI_STATUS: 'dingtalk:get-multi-status',
-  /** 多 Bot 状态变化推送 */
-  MULTI_STATUS_CHANGED: 'dingtalk:multi-status-changed',
 } as const

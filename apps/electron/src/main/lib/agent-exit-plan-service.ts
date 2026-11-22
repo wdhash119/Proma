@@ -22,7 +22,7 @@ import type {
 } from '@proma/shared'
 
 /** ExitPlanMode 审批结果（扩展 SDK PermissionResult，附加 targetMode） */
-export type ExitPlanPermissionResult = {
+type ExitPlanPermissionResult = {
   behavior: 'allow'
   updatedInput: Record<string, unknown>
   /** 用户选择的目标权限模式 */
@@ -39,12 +39,6 @@ interface PendingExitPlan {
   toolInput: Record<string, unknown>
   /** 审批前复核路径归属与内容版本，防止符号链接或文件替换绕过初始校验。 */
   planDirectory?: string
-}
-
-/** ExitPlanMode 审批结果回调（通知编排层切换权限模式） */
-export interface ExitPlanModeCallbacks {
-  /** 切换权限模式 */
-  onPermissionModeChange: (mode: PromaPermissionMode) => void
 }
 
 /**

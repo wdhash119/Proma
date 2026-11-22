@@ -398,10 +398,6 @@ export const IPC_CHANNELS = {
   GET_UNSTAGED_CHANGES: 'git:get-unstaged-changes',
   /** 失效 Git Diff 扫描缓存；可按文件/目录定向失效 */
   INVALIDATE_GIT_DIFF_CACHE: 'git:invalidate-diff-cache',
-  /** 获取单个文件的 diff */
-  GET_FILE_DIFF: 'git:get-file-diff',
-  /** 获取未追踪文件内容 */
-  GET_UNTRACKED_CONTENT: 'git:get-untracked-content',
   /** 还原文件变更 */
   REVERT_FILE: 'git:revert-file',
   GET_DIFF_CONTENTS: 'git:get-diff-contents',
@@ -415,12 +411,8 @@ export const IPC_CHANNELS = {
   SYSTEM_OPEN_FILE: 'shell:system-open-file',
   /** 在系统文件管理器（访达/资源管理器）中显示文件 */
   SHOW_ITEM_IN_FOLDER: 'shell:show-item-in-folder',
-  /** 扫描系统中可用的编辑器应用 */
-  SCAN_EDITORS: 'shell:scan-editors',
   /** 查询某个文件在本机系统中的默认打开应用信息（带图标） */
   GET_DEFAULT_APP_FOR_FILE: 'shell:get-default-app-for-file',
-  /** 打开独立预览窗口 */
-  OPEN_DETACHED_PREVIEW: 'preview:open-detached',
   /** 获取独立预览窗口数据 */
   GET_DETACHED_PREVIEW_DATA: 'preview:get-detached-data',
   /** 最小化窗口 */
@@ -435,28 +427,5 @@ export const IPC_CHANNELS = {
   WINDOW_IS_FOCUSED: 'window:is-focused',
   /** 在系统剪贴板中写入纯文本 */
   WRITE_CLIPBOARD_TEXT: 'clipboard:write-text',
-  /** 截图导出：将 HTML 渲染为 PNG 图片 */
-  SCREENSHOT_CAPTURE: 'screenshot:capture',
 } as const
 
-/**
- * 截图导出的统一配额。
- *
- * 渲染端做廉价预检（元素数 / 原始 HTML 字节数），失败立即向用户反馈，避免昂贵的
- * inlineComputedStyles + IPC 传输后才被主进程拒绝。主进程兜底拦截（含 inline 样式
- * 后的 HTML 字节数、最终像素预算），构成纵深防御。
- */
-export const SCREENSHOT_LIMITS = {
-  /** 渲染端预检：编辑器 DOM 元素数上限。超过会导致 inlineComputedStyles 卡顿明显 */
-  MAX_ELEMENTS: 3000,
-  /** 渲染端预检：原始 outerHTML 字节数上限（不含 inline 样式）。膨胀系数 5-10× 对应主进程 12MB */
-  MAX_RAW_HTML_BYTES: 2 * 1024 * 1024,
-  /** 主进程兜底：含 inline 样式的 HTML 字节数上限 */
-  MAX_HTML_BYTES: 12 * 1024 * 1024,
-  /** 主进程兜底：渲染像素预算（width × height × scale²）。4 字节/像素 ≈ 400MB */
-  MAX_PIXELS: 100_000_000,
-  /** 输出图片宽度下限 */
-  MIN_WIDTH: 480,
-  /** 输出图片宽度上限。渲染端与主进程统一 */
-  MAX_WIDTH: 1600,
-} as const

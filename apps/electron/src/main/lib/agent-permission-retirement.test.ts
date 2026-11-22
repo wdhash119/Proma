@@ -5,6 +5,8 @@ import { resolvePlanningDeletionPermission } from './planning-permission-policy'
 
 const mainLib = import.meta.dir
 const adaptersDirectory = join(mainLib, 'adapters')
+const preloadPath = join(mainLib, '../../preload/index.ts')
+const ipcPath = join(mainLib, '../ipc.ts')
 
 describe('权限模式退役后的工具契约', () => {
   test('Given Pi 产品工具定义 When 检查 Then 不再注册 EnterPlanMode / ExitPlanMode', () => {
@@ -26,6 +28,36 @@ describe('权限模式退役后的工具契约', () => {
     expect(source).not.toContain('PLAN_MODE_ALLOWED_TOOLS')
     expect(source).not.toContain('PLAN_MODE_READ_ONLY_PLANNING_TOOLS')
     expect(source).not.toContain('isBashCommandReadOnly')
+  })
+})
+
+describe('权限交互 IPC 退役', () => {
+  test('Given preload 桥接层 When 检查 Then 四个权限交互方法已移除', () => {
+    const preload = readFileSync(preloadPath, 'utf8')
+
+    for (const bridge of [
+      'respondPermission',
+      'updateSessionPermissionMode',
+      'respondExitPlanMode',
+      'getPendingRequests',
+    ]) {
+      expect(preload).not.toContain(`${bridge}:`)
+    }
+  })
+
+  test('Given 主进程 IPC When 检查 Then 权限交互 handler 与通道常量已移除', () => {
+    const ipc = readFileSync(ipcPath, 'utf8')
+
+    expect(ipc).not.toContain('AGENT_IPC_CHANNELS.PERMISSION_RESPOND')
+    expect(ipc).not.toContain('AGENT_IPC_CHANNELS.UPDATE_SESSION_PERMISSION_MODE')
+    expect(ipc).not.toContain('AGENT_IPC_CHANNELS.EXIT_PLAN_MODE_RESPOND')
+    expect(ipc).not.toContain('AGENT_IPC_CHANNELS.GET_PENDING_REQUESTS')
+  })
+
+  test('Given AskUser 问答链仍在使用 When 检查 Then 应答 bridge 保留', () => {
+    const preload = readFileSync(preloadPath, 'utf8')
+
+    expect(preload).toContain('respondAskUser:')
   })
 })
 

@@ -726,21 +726,6 @@ async function findGitRoot(baseDir: string): Promise<string | null> {
 }
 
 /**
- * 获取单个文件的 unified diff
- */
-export async function getFileDiff(dirPath: string, filePath: string, gitRoot?: string): Promise<string> {
-  const root = gitRoot || await findGitRoot(dirPath)
-  if (!root) return ''
-  const safePath = normalizeSafePath(root, filePath)
-  if (!safePath) {
-    console.warn('[git-diff-service] getFileDiff 拒绝不安全路径:', filePath)
-    return ''
-  }
-  const diff = await runGitCommand(['diff', '--', safePath], root)
-  return diff || ''
-}
-
-/**
  * 获取文件的旧版本（git HEAD 或指定 baseRef）和新版本（磁盘）内容
  */
 export async function getDiffContents(dirPath: string, filePath: string, gitRoot?: string, baseRef?: string): Promise<{ oldContent: string; newContent: string } | null> {
@@ -805,33 +790,6 @@ export async function getDiffContents(dirPath: string, filePath: string, gitRoot
   }
 
   return { oldContent: normalizeLineEndings(oldContent), newContent: normalizeLineEndings(newContent) }
-}
-
-/**
- * 获取未追踪文件的内容（用于显示全绿新增 diff）
- *
- * filePath 应为相对于 gitRoot 或 dirPath 的相对路径。
- * 拒绝绝对路径和 `..` 穿越。
- */
-export async function getUntrackedContent(dirPath: string, filePath: string, gitRoot?: string): Promise<string> {
-  if (!filePath || typeof filePath !== 'string') return ''
-  const root = gitRoot || await findGitRoot(dirPath) || dirPath
-  const safePath = normalizeSafePath(root, filePath)
-  if (!safePath) {
-    console.warn('[git-diff-service] getUntrackedContent 拒绝不安全路径:', filePath)
-    return ''
-  }
-  const fullPath = resolve(root, safePath)
-  try {
-    const st = statSync(fullPath)
-    if (st.size > MAX_FILE_SIZE_BYTES) {
-      console.warn('[git-diff-service] 未追踪文件超过大小上限:', fullPath, st.size)
-      return ''
-    }
-    return normalizeLineEndings(readFileSync(fullPath, 'utf-8'))
-  } catch {
-    return ''
-  }
 }
 
 /**

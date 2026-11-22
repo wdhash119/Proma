@@ -112,8 +112,6 @@ export interface WeChatIncomingMessage {
 export const WECHAT_IPC_CHANNELS = {
   /** 获取微信配置 */
   GET_CONFIG: 'wechat:get-config',
-  /** 保存微信配置 */
-  SAVE_CONFIG: 'wechat:save-config',
   /** 开始扫码登录 */
   START_LOGIN: 'wechat:start-login',
   /** 登出 */

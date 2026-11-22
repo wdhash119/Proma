@@ -74,22 +74,6 @@ async function fetchFromGitHub<T>(endpoint: string): Promise<T> {
 }
 
 /**
- * 获取最新的 Release
- *
- * @returns 最新的 Release，如果没有则返回 null
- */
-export async function getLatestRelease(): Promise<GitHubRelease | null> {
-  try {
-    const release = await fetchFromGitHub<GitHubRelease>('/releases/latest')
-    console.log(`[GitHub Release] 获取最新 Release: v${release.tag_name}`)
-    return release
-  } catch (error) {
-    console.error('[GitHub Release] 获取最新 Release 失败:', error)
-    return null
-  }
-}
-
-/**
  * 获取 Release 列表
  *
  * @param options - 查询选项

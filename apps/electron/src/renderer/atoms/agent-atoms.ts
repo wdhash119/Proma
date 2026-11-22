@@ -1380,11 +1380,11 @@ export function applyAgentEvent(
     }
 
     case 'permission_request':
-      // 权限请求事件由 PermissionBanner 处理，不影响流式状态
+      // 权限事件当前没有 UI 消费者；保留分支以维持流式状态不变
       return prev
 
     case 'permission_resolved':
-      // 权限解决事件由 PermissionBanner 处理，不影响流式状态
+      // 权限事件当前没有 UI 消费者；保留分支以维持流式状态不变
       return prev
 
     case 'ask_user_request':

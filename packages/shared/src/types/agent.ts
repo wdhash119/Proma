@@ -1804,14 +1804,6 @@ export interface PermissionRequest {
   sdkDescription?: string
 }
 
-/** 权限响应（渲染进程 → 主进程） */
-export interface PermissionResponse {
-  requestId: string
-  behavior: 'allow' | 'deny'
-  /** 是否记住选择（加入会话白名单） */
-  alwaysAllow: boolean
-}
-
 // ===== IPC 通道常量 =====
 
 /**
@@ -1872,8 +1864,6 @@ export const AGENT_IPC_CHANNELS = {
   // 工作区管理
   /** 获取工作区列表 */
   LIST_WORKSPACES: 'agent:list-workspaces',
-  /** 创建工作区 */
-  CREATE_WORKSPACE: 'agent:create-workspace',
   /** 创建项目及其首个 Agent 会话 */
   CREATE_PROJECT: 'agent:create-project',
   /** 更新工作区 */
@@ -1887,10 +1877,6 @@ export const AGENT_IPC_CHANNELS = {
   /** 重排工作区顺序 */
   REORDER_WORKSPACES: 'agent:reorder-workspaces',
 
-  // 标题生成
-  /** 生成 Agent 会话标题 */
-  GENERATE_TITLE: 'agent:generate-title',
-
   // 消息发送
   /** 发送消息（触发 Agent 流式响应） */
   SEND_MESSAGE: 'agent:send-message',
@@ -1899,13 +1885,11 @@ export const AGENT_IPC_CHANNELS = {
 
   // Pi 受管浏览器（网页内容与 CDP 仅驻留主进程）
   OPEN_BROWSER: 'agent:open-browser',
-  LIST_BROWSER_TABS: 'agent:list-browser-tabs',
   CREATE_BROWSER_TAB: 'agent:create-browser-tab',
   SELECT_BROWSER_TAB: 'agent:select-browser-tab',
   CLOSE_BROWSER_TAB: 'agent:close-browser-tab',
   GET_BROWSER_STATE: 'agent:get-browser-state',
   SET_BROWSER_LAYOUT: 'agent:set-browser-layout',
-  MINIMIZE_BROWSER: 'agent:minimize-browser',
   NAVIGATE_BROWSER: 'agent:navigate-browser',
   GO_BACK_BROWSER: 'agent:go-back-browser',
   GO_FORWARD_BROWSER: 'agent:go-forward-browser',
@@ -1923,8 +1907,6 @@ export const AGENT_IPC_CHANNELS = {
   SAVE_MCP_CONFIG: 'agent:save-mcp-config',
   /** 原子删除单个 MCP，保留其他条目的当前状态。 */
   DELETE_MCP: 'agent:delete-mcp',
-  /** 刷新并持久化工作区 MCP 真实连接状态 */
-  REFRESH_MCP_CONNECTIONS: 'agent:refresh-mcp-connections',
   /** 原子切换 MCP 启用状态，并在启用时条件持久化真实验证结果。 */
   SET_MCP_ENABLED_AND_VALIDATE: 'agent:set-mcp-enabled-and-validate',
   /** 原子新增 MCP，并在初始启用时条件持久化真实验证结果。 */
@@ -1963,8 +1945,6 @@ export const AGENT_IPC_CHANNELS = {
   GET_OTHER_WORKSPACE_SKILLS: 'agent:get-other-workspace-skills',
   /** 获取默认 Skills 的 slug 列表（来自 ~/.proma/default-skills/） */
   GET_DEFAULT_SKILL_SLUGS: 'agent:get-default-skill-slugs',
-  /** 从其他工作区导入 Skill 到当前工作区 */
-  IMPORT_SKILL_FROM_WORKSPACE: 'agent:import-skill-from-workspace',
   /** 从其他工作区批量导入多个 Skill 到当前工作区 */
   BATCH_IMPORT_SKILLS_FROM_WORKSPACES: 'agent:batch-import-skills-from-workspaces',
   /** 从源工作区同步更新已导入的 Skill */
@@ -1997,8 +1977,6 @@ export const AGENT_IPC_CHANNELS = {
   READ_WORKSPACE_AUTO_MEMORY_FILE: 'agent:read-workspace-auto-memory-file',
   /** 写入工作区长期记忆文件 */
   WRITE_WORKSPACE_AUTO_MEMORY_FILE: 'agent:write-workspace-auto-memory-file',
-  /** 打开或聚焦当前 workspace 的独立 Memory 编辑窗口。 */
-  OPEN_WORKSPACE_MEMORY_WINDOW: 'agent:open-workspace-memory-window',
   /** 主进程要求已打开的独立 Memory 窗口定位到指定文件。 */
   WORKSPACE_MEMORY_WINDOW_OPEN_FILE: 'agent:workspace-memory-window-open-file',
   /** 独立记忆窗口请求 renderer 决定是否关闭未保存编辑。 */
@@ -2057,10 +2035,6 @@ export const AGENT_IPC_CHANNELS = {
   GET_WORKSPACE_ATTACHED_FILES: 'agent:get-workspace-attached-files',
   /** 获取工作区 worktree 仓库配置列表 */
   GET_WORKTREE_REPOS: 'agent:get-worktree-repos',
-  /** 添加 worktree 仓库到工作区配置 */
-  ADD_WORKTREE_REPO: 'agent:add-worktree-repo',
-  /** 从工作区配置移除 worktree 仓库 */
-  REMOVE_WORKTREE_REPO: 'agent:remove-worktree-repo',
 
   // 文件系统操作
   /** 获取 session 工作路径 */
@@ -2089,8 +2063,6 @@ export const AGENT_IPC_CHANNELS = {
   MOVE_ATTACHED_FILE: 'agent:move-attached-file',
   /** 检查路径类型（文件 or 目录），用于拖拽检测 */
   CHECK_PATHS_TYPE: 'agent:check-paths-type',
-  /** 读取附加目录文件内容为 base64（限制在已附加目录范围内，用于侧面板添加到聊天） */
-  READ_ATTACHED_FILE: 'agent:read-attached-file',
   /** 搜索工作区文件（用于 @ 引用） */
   SEARCH_WORKSPACE_FILES: 'agent:search-workspace-files',
   /** 将文本内容写入临时预览文件并返回绝对路径 */
@@ -2106,11 +2078,6 @@ export const AGENT_IPC_CHANNELS = {
   /** 工作区文件变化（session 目录文件监听触发，用于文件浏览器刷新） */
   WORKSPACE_FILES_CHANGED: 'agent:workspace-files-changed',
 
-  // 权限系统
-  /** 权限响应（渲染进程 → 主进程） */
-  PERMISSION_RESPOND: 'agent:permission:respond',
-  /** 热切换指定会话的权限模式（运行中生效，不广播到其他会话） */
-  UPDATE_SESSION_PERMISSION_MODE: 'agent:update-session-permission-mode',
   /** 切换指定会话的 Agent runtime（下一轮生效，跨 runtime 时清空 SDK resume ID） */
   /** 切换指定会话的 ChatGPT Codex Fast Mode（下一轮 Pi 请求生效） */
   UPDATE_SESSION_CODEX_FAST_MODE: 'agent:update-session-codex-fast-mode',
@@ -2123,42 +2090,16 @@ export const AGENT_IPC_CHANNELS = {
   /** AskUser 响应（渲染进程 → 主进程） */
   ASK_USER_RESPOND: 'agent:ask-user:respond',
 
-  // ExitPlanMode 计划审批
-  /** ExitPlanMode 响应（渲染进程 → 主进程） */
-  EXIT_PLAN_MODE_RESPOND: 'agent:exit-plan-mode:respond',
-
   // 队列消息（Agent 运行中排队发送）
-  /** 流式追加发送消息 */
-  QUEUE_MESSAGE: 'agent:queue-message',
   /** 原子提交消息：注入当前运行或交由主进程 deferred queue。 */
   SUBMIT_OR_ENQUEUE_MESSAGE: 'agent:submit-or-enqueue-message',
-  /** 排队发送消息（兼容旧调用；主进程 deferred queue） */
-  ENQUEUE_QUEUED_MESSAGE: 'agent:enqueue-queued-message',
   /** 取消队列消息 */
   CANCEL_QUEUED_MESSAGE: 'agent:cancel-queued-message',
   /** 调整队列顺序 */
   MOVE_QUEUED_MESSAGE: 'agent:move-queued-message',
-  /** 提升队列消息为立即发送 */
-  PROMOTE_QUEUED_MESSAGE: 'agent:promote-queued-message',
   /** 队列消息状态变更通知（主进程 → 渲染进程推送） */
   QUEUED_MESSAGE_STATUS: 'agent:queued-message-status',
-
-  // 待处理请求恢复（渲染进程重载后查询主进程状态）
-  /** 获取所有待处理的交互请求快照 */
-  GET_PENDING_REQUESTS: 'agent:get-pending-requests',
 } as const
-
-/**
- * 待处理交互请求快照（用于渲染进程重载后恢复状态）
- */
-export interface PendingRequestsSnapshot {
-  /** 待处理的权限请求 */
-  permissions: PermissionRequest[]
-  /** 待处理的 AskUser 请求 */
-  askUsers: AskUserRequest[]
-  /** 待处理的 ExitPlanMode 请求 */
-  exitPlans: ExitPlanModeRequest[]
-}
 
 /** Agent 通过 Present 工具登记到会话顶部的最终交付物。 */
 export interface SessionArtifact {

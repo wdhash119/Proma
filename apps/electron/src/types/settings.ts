@@ -439,16 +439,6 @@ export const SETTINGS_IPC_CHANNELS = {
 export const SCRATCH_PAD_IPC_CHANNELS = {
   /** 从磁盘加载 scratch-pad.md 内容 */
   LOAD: 'scratch-pad:load',
-  /** 保存内容到 scratch-pad.md */
-  SAVE: 'scratch-pad:save',
-  /** 同步保存（beforeunload 场景） */
-  SAVE_SYNC: 'scratch-pad:save-sync',
-  /** 导出为 Markdown 到指定目录 */
-  EXPORT: 'scratch-pad:export',
-  /** 打开保存对话框选择导出路径 */
-  CHOOSE_EXPORT_PATH: 'scratch-pad:choose-export-path',
-  /** 将图片写入系统剪贴板 */
-  COPY_IMAGE: 'scratch-pad:copy-image',
 } as const
 
 /** 应用图标 IPC 通道 */
@@ -583,8 +573,6 @@ export const TRAY_IPC_CHANNELS = {
 export const STORAGE_IPC_CHANNELS = {
   /** 计算各目录存储统计 */
   GET_STATS: 'storage:get-stats',
-  /** 按选项清理存储 */
-  CLEANUP: 'storage:cleanup',
   /** 仅清理临时文件（启动时/快速清理） */
   CLEANUP_TEMP: 'storage:cleanup-temp',
 } as const

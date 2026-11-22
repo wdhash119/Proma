@@ -83,5 +83,7 @@ export function getPlanQuotaDisplay(
     .map((window) => formatWindow(window, now))
     .join(' · ')
   const details = quota.windows.map((window) => `${window.label}: ${formatPlanQuotaWindowValue(window, provider)}`).join('\n')
-  return { summary, title: `${quota.planName ?? '订阅额度'}\n${details}`, muted: false }
+  const title = `${quota.planName ?? '订阅额度'}\n${details}`
+  // 部分成功（一个版本失败、另一个成功）只把脱敏提示追加到 tooltip 末尾，不改 summary。
+  return { summary, title: quota.message ? `${title}\n${quota.message}` : title, muted: false }
 }

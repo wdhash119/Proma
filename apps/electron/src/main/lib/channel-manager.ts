@@ -26,6 +26,7 @@ import type {
   FetchModelsInput,
   FetchModelsResult,
   ProviderType,
+  QianwenPlanQuotaCredentials,
 } from '@proma/shared'
 import {
   extractZhipuCodingTeamApiToken,
@@ -41,6 +42,8 @@ import {
   parseXaiCredentials,
   serializeXaiCredentials,
   isXaiCredentialExpired,
+  isQianwenTokenPlanProvider,
+  parseQianwenPlanQuotaCredentials,
 } from '@proma/shared'
 import { refreshCodexOAuth } from './codex-oauth-service'
 import { refreshGithubCopilotOAuth } from './github-copilot-oauth-service'
@@ -48,6 +51,7 @@ import { refreshXaiOAuth } from './xai-oauth-service'
 import { refreshXaiOAuthCredentialsSerial, rememberXaiOAuthCredentials } from './xai-oauth-credentials'
 import { parseCodexPlanQuotaResponse } from './codex-plan-quota'
 import { queryGithubCopilotPlanQuota } from './github-copilot-plan-quota'
+import { queryQianwenPlanQuota, invalidateQianwenDerivedToken } from './qianwen-plan-quota'
 import { listCodexModels, listGithubCopilotModels, listXaiModels } from './adapters/pi-model-registry'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
@@ -656,16 +660,38 @@ export function updateChannel(id: string, input: ChannelUpdateInput): Channel {
   const existing = config.channels[index]!
 
   assertSupportedProvider(input.provider ?? existing.provider)
+
+  // 额度查询凭据只属于千问 Token Plan：provider 改为其他类型时自动移除，
+  // 非千问渠道显式传入非空凭据则直接拒绝，避免它被秘密写进无关渠道。
+  const nextProvider = input.provider ?? existing.provider
+  const requestedPlanQuotaCredential = input.planQuotaCredential
+  if (requestedPlanQuotaCredential !== undefined
+    && requestedPlanQuotaCredential !== null
+    && requestedPlanQuotaCredential !== ''
+    && !isQianwenTokenPlanProvider(nextProvider)) {
+    throw new Error('只有千问 Token Plan 渠道可以保存额度查询凭据')
+  }
+  const planQuotaCredential: string | undefined = requestedPlanQuotaCredential === null
+    || requestedPlanQuotaCredential === ''
+    || !isQianwenTokenPlanProvider(nextProvider)
+    ? undefined
+    : requestedPlanQuotaCredential !== undefined
+      ? encryptApiKey(requestedPlanQuotaCredential)
+      // undefined 保留已保存的登录，避免表单自动保存意外清除。
+      : existing.planQuotaCredential
+
   const updated: Channel = {
     ...existing,
     name: input.name ?? existing.name,
-    provider: input.provider ?? existing.provider,
+    provider: nextProvider,
     baseUrl: input.baseUrl ?? existing.baseUrl,
     apiKey: input.apiKey ? encryptApiKey(input.apiKey) : existing.apiKey,
     models: input.models ? sanitizeChannelModels(input.models) : existing.models,
     enabled: input.enabled ?? existing.enabled,
     updatedAt: Date.now(),
   }
+  if (planQuotaCredential !== undefined) updated.planQuotaCredential = planQuotaCredential
+  else delete updated.planQuotaCredential
 
   config.channels[index] = updated
   writeConfig(config)
@@ -687,6 +713,8 @@ export function deleteChannel(id: string): void {
 
   const removed = config.channels.splice(index, 1)[0]!
   writeConfig(config)
+  // 派生额度凭证只驻留内存：删除渠道时一并清除，避免旧 access token 留到进程结束。
+  invalidateQianwenDerivedToken(removed.id)
 
   console.log(`[渠道管理] 已删除渠道: ${removed.name} (${removed.id})`)
 }
@@ -1835,6 +1863,32 @@ async function queryZhipuPlanQuota(
   return lastUnsupported ?? createUnsupportedPlanQuota(provider, '智谱 Coding Plan 未返回窗口额度数据')
 }
 
+async function queryQianwenChannelPlanQuota(
+  channel: Channel,
+  provider: 'qianwen-token-plan' | 'qianwen-token-plan-openai',
+): Promise<ChannelPlanQuotaResult> {
+  if (!channel.planQuotaCredential) {
+    return createUnsupportedPlanQuota(provider, '请先在编辑渠道中登录千问账号')
+  }
+
+  let credentials: QianwenPlanQuotaCredentials | null
+  try {
+    credentials = parseQianwenPlanQuotaCredentials(decryptKey(channel.planQuotaCredential))
+  } catch {
+    credentials = null
+  }
+  if (!credentials) {
+    return createUnsupportedPlanQuota(provider, '千问登录凭据无效，请重新登录')
+  }
+
+  try {
+    const proxyUrl = await getEffectiveProxyUrl()
+    return await queryQianwenPlanQuota(channel.id, provider, credentials, proxyUrl)
+  } catch {
+    return createUnsupportedPlanQuota(provider, '千问额度查询失败，请稍后重试')
+  }
+}
+
 export async function getChannelPlanQuota(channelId: string): Promise<ChannelPlanQuotaResult> {
   const channel = getChannelById(channelId)
   if (!channel) {
@@ -1847,6 +1901,13 @@ export async function getChannelPlanQuota(channelId: string): Promise<ChannelPla
   } catch {
     provider = channel.provider
   }
+
+  // 千问 Token Plan 的额度来自账号 OAuth 登录，与推理用的 sk-sp Key 完全独立：
+  // 必须在解密 apiKey 之前分流，避免把推理 Key 送进额度查询。
+  if (provider === 'qianwen-token-plan' || provider === 'qianwen-token-plan-openai') {
+    return queryQianwenChannelPlanQuota(channel, provider)
+  }
+
   let apiKey: string
   try {
     apiKey = decryptKey(channel.apiKey)

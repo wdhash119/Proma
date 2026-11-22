@@ -38,6 +38,7 @@ import {
   parseCodexCredentials,
   parseGithubCopilotCredentials,
   parseXaiCredentials,
+  isQianwenTokenPlanProvider,
 } from '@proma/shared'
 import type {
   Channel,
@@ -50,6 +51,7 @@ import type {
   ModelCapabilityOverrides,
   ModelCapabilitySummary,
   ProviderType,
+  QianwenOAuthDeviceCode,
   XaiOAuthDeviceCode,
 } from '@proma/shared'
 import {
@@ -293,11 +295,17 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const [githubCopilotEnterpriseUrl, setGithubCopilotEnterpriseUrl] = React.useState('')
   const [xaiLoggingIn, setXaiLoggingIn] = React.useState(false)
   const [xaiDeviceCode, setXaiDeviceCode] = React.useState<XaiOAuthDeviceCode | null>(null)
+  const [qianwenLoggingIn, setQianwenLoggingIn] = React.useState(false)
+  const [qianwenDeviceCode, setQianwenDeviceCode] = React.useState<QianwenOAuthDeviceCode | null>(null)
+  // undefined = 未改动（沿用已保存状态）；string = 本次登录的新凭据；null = 已清除。
+  // 只保存明文以立即写入主进程，界面状态只读布尔值。
+  const [qianwenCredential, setQianwenCredential] = React.useState<string | null | undefined>(undefined)
 
   const setChannelFormDirty = useSetAtom(channelFormDirtyAtom)
   const codexLoggingInRef = React.useRef(false)
   const githubCopilotLoggingInRef = React.useRef(false)
   const xaiLoggingInRef = React.useRef(false)
+  const qianwenLoggingInRef = React.useRef(false)
 
   React.useEffect(() => {
     codexLoggingInRef.current = codexLoggingIn
@@ -312,6 +320,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   }, [xaiLoggingIn])
 
   React.useEffect(() => {
+    qianwenLoggingInRef.current = qianwenLoggingIn
+  }, [qianwenLoggingIn])
+
+  React.useEffect(() => {
     return window.electronAPI.onCodexOAuthDeviceCode(setCodexDeviceCode)
   }, [])
 
@@ -323,11 +335,17 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     return window.electronAPI.onXaiOAuthDeviceCode(setXaiDeviceCode)
   }, [])
 
+  // 千问 device-code 只回传授权链接（用户码已编码在链接里）。
+  React.useEffect(() => {
+    return window.electronAPI.onQianwenOAuthDeviceCode(setQianwenDeviceCode)
+  }, [])
+
   // 关闭或放弃表单时取消仍在轮询的 device-code 授权，避免后台孤立请求。
   React.useEffect(() => () => {
     if (codexLoggingInRef.current) void window.electronAPI.codexOAuthCancel()
     if (githubCopilotLoggingInRef.current) void window.electronAPI.githubCopilotOAuthCancel()
     if (xaiLoggingInRef.current) void window.electronAPI.xaiOAuthCancel()
+    if (qianwenLoggingInRef.current) void window.electronAPI.qianwenOAuthCancel()
   }, [])
 
   /** 编辑模式下加载明文 API Key */
@@ -354,6 +372,13 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const isGithubCopilotProvider = provider === 'github-copilot'
   const isXaiProvider = provider === 'xai'
   const isSubscriptionProvider = isCodexProvider || isGithubCopilotProvider || isXaiProvider
+  const isQianwenTokenPlan = isQianwenTokenPlanProvider(provider)
+  // 千问额度登录只属于编辑模式：新建渠道不显示入口，也不接收额度凭据。
+  const showQianwenQuotaLogin = isEdit && isQianwenTokenPlan
+  // 已保存的额度凭据只读取布尔存在性，不把密文带到界面状态。
+  const qianwenLoggedIn = qianwenCredential === undefined
+    ? Boolean(channel?.planQuotaCredential)
+    : qianwenCredential !== null
   const effectiveApiKey = isZhipuTeamProvider ? buildZhipuTeamSecret(zhipuTeamSecret) : apiKey
   // 订阅渠道的 apiKey state 存的是登录后拿到的凭据 JSON；能解析出有效凭据即视为已登录。
   const codexCredentials = isCodexProvider ? parseCodexCredentials(apiKey) : null
@@ -811,6 +836,60 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       xaiLoggingInRef.current = false
       setXaiLoggingIn(false)
       setXaiDeviceCode(null)
+    }
+  }
+
+  const handleCancelQianwenLogin = (): void => {
+    qianwenLoggingInRef.current = false
+    void window.electronAPI.qianwenOAuthCancel()
+    setQianwenDeviceCode(null)
+  }
+
+  /**
+   * 登录千问账号，仅用于读取 Token Plan 订阅额度。
+   *
+   * 成功后立即保存：只写 provider/baseUrl/planQuotaCredential，不传 apiKey，
+   * 避免覆盖推理用的 sk-sp Key；带上当前 provider/baseUrl 以覆盖「刚切换成千问、
+   * auto-save 还没落库」的窗口。
+   */
+  const handleQianwenLogin = async (): Promise<void> => {
+    if (!isEdit || !channel) return
+    qianwenLoggingInRef.current = true
+    setQianwenLoggingIn(true)
+    setQianwenDeviceCode(null)
+    try {
+      const result = await window.electronAPI.qianwenOAuthLogin()
+      if (!result.success || !result.credentials) {
+        toast.error(result.message ?? '千问账号登录失败，请重试')
+        return
+      }
+      await window.electronAPI.updateChannel(channel.id, {
+        provider,
+        baseUrl,
+        planQuotaCredential: result.credentials,
+      })
+      setQianwenCredential(result.credentials)
+      toast.success('千问账号登录成功，订阅额度已启用')
+    } catch (error) {
+      console.error('[模型配置表单] 千问账号登录失败:', error)
+      toast.error('千问账号登录失败，请重试')
+    } finally {
+      qianwenLoggingInRef.current = false
+      setQianwenLoggingIn(false)
+      setQianwenDeviceCode(null)
+    }
+  }
+
+  /** 清除千问额度登录：保留 API Key，仅移除额度查询凭据。 */
+  const handleClearQianwenLogin = async (): Promise<void> => {
+    if (!isEdit || !channel) return
+    try {
+      await window.electronAPI.updateChannel(channel.id, { planQuotaCredential: null })
+      setQianwenCredential(null)
+      toast.success('已清除千问账号登录')
+    } catch (error) {
+      console.error('[模型配置表单] 清除千问账号登录失败:', error)
+      toast.error('清除千问账号登录失败，请重试')
     }
   }
 
@@ -1386,6 +1465,85 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           />
         </SettingsCard>
       </SettingsSection>
+
+      {/* 千问 Token Plan 订阅额度登录：严格只在编辑模式出现 */}
+      {showQianwenQuotaLogin && (
+        <SettingsSection
+          title="订阅额度（可选）"
+          description="登录千问账号后，可在该渠道的额度徽标中查看个人版/团队版订阅额度"
+        >
+          <SettingsCard divided={false}>
+            <div className="space-y-3 px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                该登录只用于读取订阅额度，模型调用仍使用上方 API Key；两者分开加密保存，登录不会覆盖 sk-sp Key。
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => void handleQianwenLogin()}
+                  disabled={qianwenLoggingIn}
+                >
+                  {qianwenLoggingIn ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                  <span>{qianwenLoggingIn ? '等待授权完成…' : qianwenLoggedIn ? '重新登录千问账号' : '登录千问账号'}</span>
+                </Button>
+                {qianwenLoggingIn ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={handleCancelQianwenLogin}
+                    className="text-muted-foreground"
+                  >
+                    取消登录
+                  </Button>
+                ) : qianwenLoggedIn ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={() => void handleClearQianwenLogin()}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    清除登录
+                  </Button>
+                ) : null}
+              </div>
+              {qianwenDeviceCode && (
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-2">
+                  <div>在浏览器中打开以下链接完成千问账号授权：</div>
+                  <a
+                    href={qianwenDeviceCode.verificationUri}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block break-all text-primary hover:underline"
+                  >
+                    打开千问授权页面
+                  </a>
+                  {qianwenDeviceCode.qrCodeData && (
+                    <img
+                      src={qianwenDeviceCode.qrCodeData}
+                      alt="千问账号授权二维码"
+                      className="h-28 w-28 rounded bg-white p-1"
+                    />
+                  )}
+                </div>
+              )}
+              {qianwenLoggedIn ? (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                  <CheckCircle2 size={12} className="shrink-0" />
+                  <span>已登录千问账号，额度徽标将显示个人版/团队版订阅额度</span>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  未登录时额度徽标会提示先登录；凭据过期后需要重新登录。
+                </div>
+              )}
+            </div>
+          </SettingsCard>
+        </SettingsSection>
+      )}
 
       {/* 已启用模型 */}
       <SettingsSection

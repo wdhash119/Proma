@@ -196,10 +196,11 @@ import {
 import { loginCodexOAuth, cancelCodexOAuthLogin } from './lib/codex-oauth-service'
 import { loginGithubCopilotOAuth, cancelGithubCopilotOAuthLogin } from './lib/github-copilot-oauth-service'
 import { loginXaiOAuth, cancelXaiOAuthLogin } from './lib/xai-oauth-service'
+import { loginQianwenOAuth, cancelQianwenOAuthLogin, sanitizeQianwenLoginError } from './lib/qianwen-oauth-service'
 import { resolvePiReasoningCapability, resolveModelCapabilitySummary } from './lib/adapters/pi-model-registry'
-import { serializeCodexCredentials, serializeGithubCopilotCredentials, serializeXaiCredentials } from '@proma/shared'
+import { serializeCodexCredentials, serializeGithubCopilotCredentials, serializeQianwenPlanQuotaCredentials, serializeXaiCredentials } from '@proma/shared'
 import type { ChangeRequestsActionInput } from '@proma/shared'
-import type { CodexOAuthDeviceCode, CodexOAuthLoginMethod, GithubCopilotOAuthDeviceCode, XaiOAuthDeviceCode } from '@proma/shared'
+import type { CodexOAuthLoginMethod, QianwenOAuthDeviceCode } from '@proma/shared'
 import {
   listConversations,
   createConversation,
@@ -1351,7 +1352,13 @@ function releaseAttachedFileWatchers(filePaths: readonly string[] | undefined): 
   }
 }
 
-async function withOAuthDeviceCodeQr<T extends CodexOAuthDeviceCode | GithubCopilotOAuthDeviceCode | XaiOAuthDeviceCode>(deviceCode: T): Promise<T> {
+/**
+ * 为 device-code 登录补充二维码。
+ *
+ * 千问的设备授权只回传授权链接（用户码已编码在链接里），因此这里用结构约束而不是
+ * 某一个具体类型，避免每接一家 OAuth 就扩一次联合类型。
+ */
+async function withOAuthDeviceCodeQr<T extends { verificationUri: string; qrCodeData?: string }>(deviceCode: T): Promise<T> {
   try {
     const QRCode = (await import('qrcode')).default
     return { ...deviceCode, qrCodeData: await QRCode.toDataURL(deviceCode.verificationUri, { width: 240, margin: 1 }) }
@@ -1812,6 +1819,40 @@ export function registerIpcHandlers(): void {
     async (): Promise<void> => {
       cancelXaiOAuthLogin()
     }
+  )
+
+  // 发起千问账号登录（device-code + PKCE）。
+  // 该登录只用于查询 Token Plan 订阅额度，不会写入或覆盖推理用的 sk-sp API Key。
+  ipcMain.handle(
+    CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_LOGIN,
+    async (event): Promise<import('@proma/shared').QianwenOAuthLoginResult> => {
+      try {
+        const credentials = await loginQianwenOAuth({
+          onDeviceCode: (deviceCode: QianwenOAuthDeviceCode) => {
+            void withOAuthDeviceCodeQr(deviceCode).then((payload) => {
+              if (!event.sender.isDestroyed()) {
+                event.sender.send(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_DEVICE_CODE, payload)
+              }
+            }).catch(() => console.warn('[OAuth] 发送千问授权链接失败'))
+          },
+        })
+        return {
+          success: true,
+          credentials: serializeQianwenPlanQuotaCredentials(credentials),
+          ...(credentials.accountId ? { accountId: credentials.accountId } : {}),
+        }
+      } catch (error) {
+        // 只返回固定文案：登录服务已在本层脱敏，这里再拦一次避免原始异常/路径回显。
+        return { success: false, message: sanitizeQianwenLoginError(error) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_CANCEL,
+    async (): Promise<void> => {
+      cancelQianwenOAuthLogin()
+    },
   )
 
   // ===== 对话管理相关 =====

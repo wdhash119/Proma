@@ -382,6 +382,17 @@ export interface ElectronAPI {
   /** 订阅登录期间，接收 xAI device code 与授权链接。返回取消订阅函数。 */
   onXaiOAuthDeviceCode: (callback: (deviceCode: XaiOAuthDeviceCode) => void) => () => void
 
+  /** 发起千问账号登录；仅用于读取 Token Plan 订阅额度，不参与模型推理。 */
+  qianwenOAuthLogin: () => Promise<import('@proma/shared').QianwenOAuthLoginResult>
+
+  /** 取消进行中的千问账号登录 */
+  qianwenOAuthCancel: () => Promise<void>
+
+  /** 千问登录期间，接收需要用户打开的授权链接。返回取消订阅函数。 */
+  onQianwenOAuthDeviceCode: (
+    callback: (deviceCode: import('@proma/shared').QianwenOAuthDeviceCode) => void,
+  ) => () => void
+
   // ===== 对话管理相关 =====
 
   /** 获取对话列表 */
@@ -1567,6 +1578,25 @@ const electronAPI: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, deviceCode: XaiOAuthDeviceCode) => callback(deviceCode)
     ipcRenderer.on(CHANNEL_IPC_CHANNELS.XAI_OAUTH_DEVICE_CODE, listener)
     return () => ipcRenderer.removeListener(CHANNEL_IPC_CHANNELS.XAI_OAUTH_DEVICE_CODE, listener)
+  },
+
+  qianwenOAuthLogin: () => {
+    return ipcRenderer.invoke(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_LOGIN)
+  },
+
+  qianwenOAuthCancel: () => {
+    return ipcRenderer.invoke(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_CANCEL)
+  },
+
+  onQianwenOAuthDeviceCode: (
+    callback: (deviceCode: import('@proma/shared').QianwenOAuthDeviceCode) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      deviceCode: import('@proma/shared').QianwenOAuthDeviceCode,
+    ) => callback(deviceCode)
+    ipcRenderer.on(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_DEVICE_CODE, listener)
+    return () => ipcRenderer.removeListener(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_DEVICE_CODE, listener)
   },
 
   // 对话管理

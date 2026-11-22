@@ -1,15 +1,37 @@
 import type { Channel, ChannelPlanQuotaResult, ProviderType } from '@proma/shared'
 
 const PLAN_QUOTA_PROVIDERS = new Set<ProviderType>([
+  'anthropic',
+  'openai',
+  'openai-responses',
   'deepseek',
+  'google',
+  'kimi-api',
   'kimi-coding',
   'minimax',
+  'doubao-api',
+  'qwen',
+  'qwen-anthropic',
+  'qwen-token-plan',
+  'qianwen',
+  'qianwen-anthropic',
+  'qianwen-token-plan',
+  'qianwen-token-plan-openai',
+  'xiaomi',
+  'xiaomi-token-plan',
   'zhipu',
   'zhipu-coding',
   'zhipu-coding-team',
   'openai-codex',
   'github-copilot',
+  'xai',
 ])
+
+/**
+ * 内置付费/订阅渠道都展示独立额度状态。
+ * 有官方查询接口的渠道返回真实余额；其余渠道由主进程返回明确的不可用原因，
+ * 不根据本地用量伪造余额。custom/兼容网关无法判断是否计费，默认不展示。
+ */
 
 export function supportsChannelPlanQuota(channel: Pick<Channel, 'provider' | 'baseUrl'> | null | undefined): boolean {
   if (!channel) return false

@@ -1831,7 +1831,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 查询订阅 Plan 额度（用于 Agent Context 圆环 hover 信息）
+  // 查询渠道余额 / 订阅 Plan 额度（用于 Agent 输入工具栏独立额度徽标）
   ipcMain.handle(
     CHANNEL_IPC_CHANNELS.GET_PLAN_QUOTA,
     async (_, channelId: string): Promise<import('@proma/shared').ChannelPlanQuotaResult> => {

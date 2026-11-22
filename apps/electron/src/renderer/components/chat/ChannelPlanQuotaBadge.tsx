@@ -6,23 +6,43 @@ import { currentPlanQuota, getPlanQuotaDisplay, planQuotaChannelKey } from '@/li
 import type { LoadedPlanQuota } from '@/lib/channel-plan-quota-display'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-export function ChannelPlanQuotaBadge({ channel }: { channel: Channel }): React.ReactElement | null {
+const QUOTA_REFRESH_INTERVAL_MS = 60_000
+
+interface ChannelPlanQuotaBadgeProps {
+  channel: Channel
+  /** model-list 用于渠道分组；toolbar 用于 Agent 输入框圆圈旁。 */
+  variant?: 'model-list' | 'toolbar'
+}
+
+export function ChannelPlanQuotaBadge({
+  channel,
+  variant = 'model-list',
+}: ChannelPlanQuotaBadgeProps): React.ReactElement | null {
   const [loaded, setLoaded] = React.useState<LoadedPlanQuota | null>(null)
   const channelKey = planQuotaChannelKey(channel)
+  const supported = supportsChannelPlanQuota(channel)
 
   React.useEffect(() => {
-    if (!supportsChannelPlanQuota(channel)) return
+    if (!supported) return
 
     let cancelled = false
-    fetchChannelPlanQuota(channel.id, channel.updatedAt)
-      .then((result) => {
-        if (!cancelled) setLoaded({ channelKey, result })
-      })
+    const load = (): void => {
+      void fetchChannelPlanQuota(channel.id, channel.updatedAt)
+        .then((result) => {
+          if (!cancelled) setLoaded({ channelKey, result })
+        })
+    }
 
-    return () => { cancelled = true }
-  }, [channel.id, channel.provider, channel.baseUrl, channel.updatedAt, channelKey])
+    load()
+    // toolbar 会长期挂载；按统一缓存周期刷新，模型选择器打开时也能取得新值。
+    const timer = window.setInterval(load, QUOTA_REFRESH_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [supported, channel.id, channel.provider, channel.baseUrl, channel.updatedAt, channelKey])
 
-  if (!supportsChannelPlanQuota(channel)) return null
+  if (!supported) return null
   const quota = currentPlanQuota(loaded, channelKey)
   const display = getPlanQuotaDisplay(quota, channel.provider)
   if (!display) return null
@@ -34,16 +54,21 @@ export function ChannelPlanQuotaBadge({ channel }: { channel: Channel }): React.
           tabIndex={0}
           aria-label={display.title}
           className={cn(
-            'ml-auto shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            variant === 'toolbar'
+              ? 'h-8 max-w-[280px] rounded-md border border-transparent px-2 text-[11px] leading-none hover:bg-muted/50'
+              : 'ml-auto rounded border px-1.5 py-0.5 text-[10px] leading-none',
             display.muted
-              ? 'border-transparent bg-transparent text-muted-foreground/70'
-              : 'border-foreground/10 bg-background/70 text-foreground/70',
+              ? 'bg-transparent text-muted-foreground/70'
+              : variant === 'toolbar'
+                ? 'text-foreground/70'
+                : 'border-foreground/10 bg-background/70 text-foreground/70',
           )}
         >
-          {display.summary}
+          <span className="min-w-0 truncate">{display.summary}</span>
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-sm whitespace-pre-line">{display.title}</TooltipContent>
+      <TooltipContent side="top" className="max-w-sm whitespace-pre-line">{display.title}</TooltipContent>
     </Tooltip>
   )
 }

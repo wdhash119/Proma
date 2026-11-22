@@ -1,3 +1,4 @@
+import { PROVIDER_LABELS } from '@proma/shared'
 import type { Channel, ChannelPlanQuotaResult, ChannelPlanQuotaWindow, ProviderType } from '@proma/shared'
 
 export interface LoadedPlanQuota {
@@ -24,9 +25,32 @@ export function planQuotaChannelKey(channel: Pick<Channel, 'id' | 'updatedAt' | 
   return JSON.stringify([channel.id, channel.updatedAt, channel.provider, channel.baseUrl])
 }
 
-function formatWindow(window: ChannelPlanQuotaWindow): string {
+/** 将重置时间转换为工具栏可承载的紧凑时长；不拿本地时间冒充供应商重置时间。 */
+export function formatPlanQuotaResetDuration(resetAt: number | undefined, now = Date.now()): string | undefined {
+  if (resetAt === undefined) return undefined
+  const remainingMs = resetAt - now
+  if (remainingMs <= 0) return '已到期'
+  const minutes = Math.max(1, Math.ceil(remainingMs / 60_000))
+  if (minutes < 60) return `${minutes}分钟`
+  const hours = Math.ceil(minutes / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.ceil(hours / 24)}天`
+}
+
+/** 金额、积分等自身就是完整值的展示标签，不再重复“账户余额”等窗口名。 */
+function hasStandaloneRemainingValue(window: ChannelPlanQuotaWindow): boolean {
+  if (window.type !== 'custom' || !window.remainingLabel) return false
+  return /^[\p{Sc}\d]/u.test(window.remainingLabel.trim())
+}
+
+function formatWindow(window: ChannelPlanQuotaWindow, now: number): string {
+  const value = window.remainingLabel ?? `${window.remainingPercent}%`
+  const reset = formatPlanQuotaResetDuration(window.resetAt, now)
+  if (hasStandaloneRemainingValue(window)) {
+    return `${value}${reset ? ` · ${reset}` : ''}`
+  }
   const label = window.type === '5h' ? '5H' : window.type === 'weekly' ? '周' : window.label.replace(/\s+/g, '')
-  return `${label} ${window.remainingLabel ?? `${window.remainingPercent}%`}`
+  return `${label} ${value}${reset ? ` · ${reset}` : ''}`
 }
 
 export function formatPlanQuotaWindowValue(window: ChannelPlanQuotaWindow, provider: ProviderType): string {
@@ -40,20 +64,28 @@ export function formatPlanQuotaWindowValue(window: ChannelPlanQuotaWindow, provi
   return `${window.showProgress === false ? value : `剩余 ${value}`}${reset}`
 }
 
-export function getPlanQuotaDisplay(quota: ChannelPlanQuotaResult | null, provider: ProviderType): PlanQuotaDisplay | null {
-  const copilot = provider === 'github-copilot'
-  if (!quota) return copilot ? { summary: '额度加载中', title: '正在读取 GitHub Copilot 订阅额度', muted: true } : null
+export function getPlanQuotaDisplay(
+  quota: ChannelPlanQuotaResult | null,
+  provider: ProviderType,
+  now = Date.now(),
+): PlanQuotaDisplay | null {
+  const providerLabel = PROVIDER_LABELS[provider]
+  if (!quota) {
+    return { summary: '额度加载中', title: `正在读取${providerLabel}余额 / 订阅额度`, muted: true }
+  }
   if (!quota.supported || quota.windows.length === 0) {
-    return copilot ? {
-      summary: quota.supported ? '额度未知' : '额度不可用',
-      title: quota.message ?? 'GitHub Copilot 未提供可用额度数据',
+    return {
+      summary: '额度不可用',
+      title: quota.message ?? `${providerLabel}未提供可用的余额或订阅额度数据`,
       muted: true,
-    } : null
+    }
   }
 
   const primary = [quota.windows.find((window) => window.type === '5h'), quota.windows.find((window) => window.type === 'weekly')]
     .filter((window): window is ChannelPlanQuotaWindow => Boolean(window))
-  const summary = (primary.length > 0 ? primary : quota.windows.slice(0, 2)).map(formatWindow).join(' · ')
+  const summary = (primary.length > 0 ? primary : quota.windows.slice(0, 2))
+    .map((window) => formatWindow(window, now))
+    .join(' · ')
   const details = quota.windows.map((window) => `${window.label}: ${formatPlanQuotaWindowValue(window, provider)}`).join('\n')
   return { summary, title: `${quota.planName ?? '订阅额度'}\n${details}`, muted: false }
 }

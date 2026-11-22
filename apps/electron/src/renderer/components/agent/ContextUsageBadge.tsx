@@ -20,12 +20,7 @@ import { agentSessionViewStreamStateAtomFamily } from '@/atoms/agent-atoms'
 import { cn } from '@/lib/utils'
 import {
   calculatePiAutoCompactionThresholdTokens,
-  type ChannelPlanQuotaWindow,
-  type ProviderType,
 } from '@proma/shared'
-import { fetchChannelPlanQuota } from '@/lib/channel-plan-quota'
-import { currentPlanQuota, formatPlanQuotaWindowValue, planQuotaAccountKey } from '@/lib/channel-plan-quota-display'
-import type { LoadedPlanQuota } from '@/lib/channel-plan-quota-display'
 
 /** 显示警告的阈值（压缩阈值的 80%） */
 const WARNING_RATIO = 0.80
@@ -33,7 +28,6 @@ const WARNING_RATIO = 0.80
 const HOVER_CLOSE_DELAY = 150
 /** 手动压缩二次确认后自动重置确认态的超时（ms），与归档按钮一致 */
 const CONFIRM_RESET_DELAY = 3000
-const UNSUPPORTED_PLAN_QUOTA_MESSAGE = '当前渠道不支持订阅 Plan 额度查询'
 
 interface ContextUsageBadgeProps {
   inputTokens?: number
@@ -52,10 +46,6 @@ interface ContextUsageBadgeProps {
    * 避免新会话尚未发消息时仍显示上一个会话的 token 数。
    */
   sessionId?: string
-  /** 当前 Agent 渠道 ID，用于 hover 时查询订阅 Plan 剩余额度 */
-  channelId?: string | null
-  /** 渠道保存时间；凭据变更后用于使旧额度缓存失效。 */
-  channelUpdatedAt?: number
 }
 
 /** 格式化 token 数为可读字符串（如 1234 → "1.2k"） */
@@ -134,30 +124,6 @@ function DetailRow({ label, value, emphasized }: DetailRowProps): React.ReactEle
   )
 }
 
-function PlanQuotaRow({ quotaWindow, provider }: { quotaWindow: ChannelPlanQuotaWindow; provider: ProviderType }): React.ReactElement {
-  const value = formatPlanQuotaWindowValue(quotaWindow, provider)
-  return (
-    <div className="space-y-1">
-      <DetailRow
-        label={quotaWindow.label}
-        value={value}
-        emphasized={quotaWindow.showProgress !== false && quotaWindow.remainingPercent <= 20}
-      />
-      {quotaWindow.showProgress !== false ? (
-        <div className="h-1 overflow-hidden rounded-full bg-foreground/10">
-          <div
-            className={cn(
-              'h-full rounded-full',
-              quotaWindow.remainingPercent <= 20 ? 'bg-amber-500' : 'bg-foreground/60',
-            )}
-            style={{ width: `${Math.max(0, Math.min(100, quotaWindow.remainingPercent))}%` }}
-          />
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export function ContextUsageBadge({
   inputTokens,
   outputTokens,
@@ -169,8 +135,6 @@ export function ContextUsageBadge({
   isProcessing,
   onCompact,
   sessionId,
-  channelId,
-  channelUpdatedAt,
 }: ContextUsageBadgeProps): React.ReactElement | null {
   // usage 高频更新只唤醒这个小组件，不再让 AgentView 和输入框参与 reconciliation。
   const sessionStreamState = useAtomValue(agentSessionViewStreamStateAtomFamily(sessionId ?? ''))
@@ -215,10 +179,6 @@ export function ContextUsageBadge({
   const [open, setOpen] = React.useState(false)
   const closeTimerRef = React.useRef<number | null>(null)
   const popoverReceivedFocusRef = React.useRef(false)
-  // 同账号刷新可保留旧值；切换账号或清空渠道时立即隐藏旧结果。
-  const [loadedQuota, setLoadedQuota] = React.useState<LoadedPlanQuota | null>(null)
-  const quotaKey = planQuotaAccountKey(channelId, channelUpdatedAt)
-  const quota = currentPlanQuota(loadedQuota, quotaKey)
 
   const cancelClose = React.useCallback(() => {
     if (closeTimerRef.current != null) {
@@ -249,21 +209,6 @@ export function ContextUsageBadge({
     if (!nextOpen) setConfirming(false)
     setOpen(nextOpen)
   }
-
-  React.useEffect(() => {
-    if (!open || !channelId || !quotaKey) return
-
-    let cancelled = false
-
-    fetchChannelPlanQuota(channelId, channelUpdatedAt)
-      .then((result) => {
-        if (!cancelled) setLoadedQuota({ channelKey: quotaKey, result })
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [open, channelId, channelUpdatedAt, quotaKey])
 
   // 压缩中 → 按钮位置显示 spinner
   if (displayIsCompacting) {
@@ -305,12 +250,6 @@ export function ContextUsageBadge({
   const percent = displayWindow
     ? Math.round((displayTokens / displayWindow) * 100)
     : undefined
-
-  const shouldShowPlanQuota = quota != null && (
-    quota.supported
-    || quota.windows.length > 0
-    || quota.message !== UNSUPPORTED_PLAN_QUOTA_MESSAGE
-  )
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -379,26 +318,6 @@ export function ContextUsageBadge({
               ) : null}
             </>
           )}
-
-          {shouldShowPlanQuota ? (
-            <>
-              <div className="h-px bg-border my-0.5" />
-              <div className="text-[11px] font-medium text-foreground/70">
-                订阅额度{quota?.planName ? ` · ${quota.planName}` : ''}
-              </div>
-              {quota?.supported && quota.windows.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
-                  {quota.windows.map((quotaWindow) => (
-                    <PlanQuotaRow key={`${quotaWindow.type}-${quotaWindow.label}`} quotaWindow={quotaWindow} provider={quota.provider} />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-[11px] text-foreground/50">
-                  {quota?.message ?? '订阅额度查询失败'}
-                </div>
-              )}
-            </>
-          ) : null}
 
           <div className="h-px bg-border my-0.5" />
           <Button

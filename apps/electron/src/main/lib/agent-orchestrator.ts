@@ -29,7 +29,6 @@ import {
   isPersistableSDKSystemMessage,
   normalizePathForCompare,
   normalizeMcpTransportType,
-  inferContextWindow,
   inferReasoningTransport,
   resolveReasoningProfile,
   collectSkillActivations,
@@ -1385,12 +1384,10 @@ export class AgentOrchestrator {
         console.log(`[Agent 编排] SDK 确认模型: ${resolvedModel}`)
         this.eventBus.emit(sessionId, { kind: 'proma_event', event: { type: 'model_resolved', model: resolvedModel } })
       }
-      const handleContextWindow = (cw: number): void => {
-        const inferredWindow = inferContextWindow(modelId)
-        const contextWindow = Math.max(cw, inferredWindow ?? 0) || cw
-        console.log(`[Agent 编排] 缓存 contextWindow: ${contextWindow}`)
-        // result 消息里的真实 contextWindow 透传到 renderer，
-        // 覆盖流式过程中按模型名推断的 fallback 值（智谱等端点会把 [1m] 等后缀剥掉，导致 fallback 不准）
+      const handleContextWindow = (contextWindow: number): void => {
+        console.log(`[Agent 编排] 运行时 contextWindow: ${contextWindow}`)
+        // Pi 模型注册后的确定值（含渠道手动覆盖）透传到 renderer，
+        // 不再与模型名推断值取 max，避免手动调小窗口后被推回 1M。
         this.eventBus.emit(sessionId, {
           kind: 'proma_event',
           event: { type: 'context_window', contextWindow },

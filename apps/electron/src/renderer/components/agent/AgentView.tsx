@@ -25,6 +25,7 @@ import { SkillMentionNamesProvider } from './SkillMentionNamesProvider'
 import { ContextUsageBadge } from './ContextUsageBadge'
 import { AskUserBanner } from './AskUserBanner'
 import { ModelSelector } from '@/components/chat/ModelSelector'
+import { ChannelPlanQuotaBadge } from '@/components/chat/ChannelPlanQuotaBadge'
 import { AttachmentPreviewItem } from '@/components/chat/AttachmentPreviewItem'
 import { QuotedSelectionChip } from '@/components/diff/QuotedSelectionChip'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ai-elements/rich-text-input'
@@ -59,7 +60,6 @@ import {
 import { cn } from '@/lib/utils'
 import { getActiveAccelerator, getAcceleratorDisplay } from '@/lib/shortcut-registry'
 import { registerShortcut } from '@/lib/shortcut-registry'
-import { supportsChannelPlanQuota } from '@/lib/channel-plan-quota'
 import {
   clearStopGenerationTarget,
   getStopGenerationTarget,
@@ -762,10 +762,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     () => stableChannelId ? globalChannels.find((channel) => channel.id === stableChannelId) : undefined,
     [globalChannels, stableChannelId],
   )
-  const planQuotaChannelId = stableChannel && supportsChannelPlanQuota(stableChannel)
-    ? stableChannel.id
-    : null
-  const planQuotaChannelUpdatedAt = planQuotaChannelId ? stableChannel?.updatedAt : undefined
   const agentChannelProvider = React.useMemo(
     () => globalChannels.find((c) => c.id === agentChannelId)?.provider,
     [globalChannels, agentChannelId],
@@ -1159,6 +1155,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
                 cacheReadTokens: state.cacheReadTokens,
                 cacheCreationTokens: state.cacheCreationTokens,
                 contextWindow: state.contextWindow,
+                contextWindowSource: state.contextWindowSource,
                 contextUsageIsEstimated: state.contextUsageIsEstimated,
                 model: state.model,
                 contextCompaction: state.contextCompaction,
@@ -1913,7 +1910,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         const state = prev.get(sessionId)
         if (!state) return prev
         const map = new Map(prev)
-        map.set(sessionId, { ...state, contextWindow: undefined })
+        map.set(sessionId, { ...state, contextWindow: undefined, contextWindowSource: undefined })
         return map
       })
     }
@@ -2871,15 +2868,16 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         <ContextUsageBadge
           isProcessing={streaming}
           sessionId={sessionId}
-          channelId={planQuotaChannelId}
-          channelUpdatedAt={planQuotaChannelUpdatedAt}
           onCompact={handleCompact}
         />
       ),
     },
+    ...(stableChannel ? [{
+      key: 'channel-plan-quota',
+      node: <ChannelPlanQuotaBadge channel={stableChannel} variant="toolbar" />,
+    }] : []),
   ], [
-    planQuotaChannelId,
-    planQuotaChannelUpdatedAt,
+    stableChannel,
     isCodexFastModeAvailable,
     codexFastModeEnabled,
     handleCodexFastModeChange,

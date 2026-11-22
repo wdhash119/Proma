@@ -490,6 +490,8 @@ export interface AgentEventUsage {
   cacheCreationTokens?: number
   costUsd?: number
   contextWindow?: number
+  /** 上下文窗口来源；runtime 是运行时已确定值（含手动覆盖），优先于模型名 inferred 兜底。 */
+  contextWindowSource?: 'inferred' | 'runtime'
 }
 
 /** SDK 子任务 / SubAgent 用量统计 */

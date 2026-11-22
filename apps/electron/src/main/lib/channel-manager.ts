@@ -1874,7 +1874,7 @@ export async function getChannelPlanQuota(channelId: string): Promise<ChannelPla
     if (provider === 'zhipu' || provider === 'zhipu-coding' || provider === 'zhipu-coding-team') {
       return await queryZhipuPlanQuota(apiKey, channel.baseUrl, proxyUrl, provider)
     }
-    return createUnsupportedPlanQuota(provider, '当前渠道不支持订阅 Plan 额度查询')
+    return createUnsupportedPlanQuota(provider, '当前渠道未提供可用的余额或订阅额度查询接口')
   } catch (error) {
     const message = provider === 'github-copilot'
       ? 'GitHub Copilot 额度查询失败，请检查网络或代理后重试'

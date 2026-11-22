@@ -9,7 +9,7 @@ import { atom } from 'jotai'
 import type { Getter } from 'jotai'
 import { atomWithStorage, selectAtom } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
-import type { AgentSessionMeta, AgentEvent, AgentWorkspace, AgentPendingFile, RetryAttempt, PromaPermissionMode, PermissionRequest, AskUserRequest, ExitPlanModeRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@proma/shared'
+import type { AgentSessionMeta, AgentEvent, AgentEventUsage, AgentWorkspace, AgentPendingFile, RetryAttempt, PromaPermissionMode, PermissionRequest, AskUserRequest, ExitPlanModeRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@proma/shared'
 import { PROMA_DEFAULT_PERMISSION_MODE } from '@proma/shared'
 import { calculateDockBadgeCount, countPendingRequests } from '@/lib/dock-badge-count'
 import type { AgentQueuedMessage } from '@/lib/agent-message-queue'
@@ -100,6 +100,8 @@ export interface AgentStreamState {
   costUsd?: number
   /** 模型上下文窗口大小 */
   contextWindow?: number
+  /** runtime 值（含手动覆盖）优先；缺失时按 inferred 兜底处理。 */
+  contextWindowSource?: AgentEventUsage['contextWindowSource']
   /** 当前上下文 token 是 Pi 手动压缩后的预估值 */
   contextUsageIsEstimated?: boolean
   /** 当前 thinking block 的 token 估算值（SDK 实时估算，非计费值） */
@@ -1173,6 +1175,29 @@ export const agentSessionIndicatorMapAtom = atom<Map<string, SessionIndicatorSta
 })
 
 /**
+ * 合并上下文窗口：模型名推断之间沿用取最大值的兼容策略；运行时已确定值
+ * （包括用户手动覆盖）可以向上或向下校正，并不再被后续推断事件覆盖。
+ */
+function resolveContextWindowUpdate(
+  previous: Pick<AgentStreamState, 'contextWindow' | 'contextWindowSource'>,
+  usage: AgentEventUsage,
+): Partial<Pick<AgentStreamState, 'contextWindow' | 'contextWindowSource'>> {
+  const nextWindow = usage.contextWindow
+  if (nextWindow == null || nextWindow <= 0) return {}
+  const nextSource = usage.contextWindowSource ?? 'inferred'
+  if (nextSource === 'runtime') {
+    return { contextWindow: nextWindow, contextWindowSource: 'runtime' }
+  }
+  if (previous.contextWindowSource === 'runtime' && previous.contextWindow != null) return {}
+  return {
+    contextWindow: previous.contextWindow != null
+      ? Math.max(previous.contextWindow, nextWindow)
+      : nextWindow,
+    contextWindowSource: 'inferred',
+  }
+}
+
+/**
  * 处理 AgentEvent 并更新流式状态（纯函数）
  */
 export function applyAgentEvent(
@@ -1222,8 +1247,8 @@ export function applyAgentEvent(
       //
       // 折中：仅当「整个 query 期间从未收到流式 usage_update」（prev.inputTokens 为空/0）
       // 才从 result.usage 兜底写入 token 字段；已有流式真实值时不动。
-      // - contextWindow：取流式与 result 的较大值（result 未必更权威——多 entry 时
-      //   子 Agent 的小窗口可能拉低值，Fix 1/2 已从源头取 max，此处作为安全网）。
+      // - contextWindow：模型名推断之间取较大值；runtime 已确定值优先，
+      //   防止手动调小窗口后又被 Qwen 等模型的 1M 推断值覆盖。
       // - costUsd：始终覆盖（本就该是整轮累计成本）
       const needResultFallback = !prev.inputTokens || prev.inputTokens <= 0 || prev.contextUsageIsEstimated === true
       const shouldUseResultUsage = needResultFallback
@@ -1233,11 +1258,7 @@ export function applyAgentEvent(
         ...prev,
         ...(event.usage ? {
           ...(event.usage.costUsd != null && { costUsd: event.usage.costUsd }),
-          ...(event.usage.contextWindow != null && {
-            contextWindow: prev.contextWindow != null
-              ? Math.max(prev.contextWindow, event.usage.contextWindow)
-              : event.usage.contextWindow,
-          }),
+          ...resolveContextWindowUpdate(prev, event.usage),
           ...(shouldUseResultUsage && {
             inputTokens: event.usage.inputTokens,
             outputTokens: event.usage.outputTokens,
@@ -1277,13 +1298,9 @@ export function applyAgentEvent(
         ...(event.usage.cacheReadTokens != null && { cacheReadTokens: event.usage.cacheReadTokens }),
         ...(event.usage.cacheCreationTokens != null && { cacheCreationTokens: event.usage.cacheCreationTokens }),
         ...(event.usage.costUsd != null && { costUsd: event.usage.costUsd }),
-        // contextWindow 取 max：本分支同时承载「流式 assistant 消息按模型名推断的窗口」
-        // 与「后端从 SDK result 透传的真实窗口（context_window 事件）」两个来源。
-        // 模型窗口在同一会话内不会缩小，取更大值可兼顾两类端点——既不会让推断偏小的
-        // 端点（如 GLM 剥掉 [1m] 后缀）挡住真实的 1M，也不会让回报偏小的端点覆盖正确的 1M。
-        ...(event.usage.contextWindow && {
-          contextWindow: Math.max(resumed.contextWindow ?? 0, event.usage.contextWindow),
-        }),
+        // 未标来源的 contextWindow 均为 assistant/result 的模型名推断 fallback；
+        // 已由 runtime 确定的窗口（含手动覆盖）不能被这些后续事件改写。
+        ...resolveContextWindowUpdate(resumed, event.usage),
       }
     }
 

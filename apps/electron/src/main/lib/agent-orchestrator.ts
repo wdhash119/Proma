@@ -70,6 +70,7 @@ import { exitPlanService } from './agent-exit-plan-service'
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
+import { shouldForceVisionRelayRead } from './vision-relay-policy'
 import { resolveInstructionContext } from './adapters/pi-instruction-migration-tools'
 import type { PromaSelfApprovalRequester } from './proma-self-controller'
 import { PROMA_SELF_PROJECT_CONSENT_LABEL, hasPromaSelfProjectConsent } from './proma-self-control-policy'
@@ -1063,6 +1064,11 @@ export class AgentOrchestrator {
         workspaceSlug ? getProjectFilesPath(workspaceSlug) : undefined,
         ...allAdditionalDirectories,
       ].filter((root): root is string => typeof root === 'string' && root.length > 0))]
+      // 模型 ID 在运行时按大小写不敏感匹配；手动能力覆盖随渠道配置持久化。
+      // 视觉助手注入与 reasoning 解析共用这一结果，避免重复查询。
+      const selectedChannelModel = channel.models.find(
+        (model) => model.id.trim().toLowerCase() === selectedModelId.trim().toLowerCase(),
+      )
       // 原因：listSessions({ dir }) 基于 cwd 路径哈希查找，但 session 级别的 cwd
       // （如 ~/.proma/agent-workspaces/workspace-xxx/sessionId）与 SDK 内部存储的路径哈希可能不匹配，
       // 导致 listSessions 始终返回 0 个会话，误杀有效的 resume。
@@ -1112,6 +1118,8 @@ export class AgentOrchestrator {
         sessionId,
         channelId,
         modelId: selectedModelId,
+        provider: channel.provider,
+        modelCapabilities: selectedChannelModel?.capabilities,
         workspaceId,
         workspaceSlug,
         agentCwd,
@@ -1256,10 +1264,6 @@ export class AgentOrchestrator {
       const maxTurns = appSettings.agentMaxTurns && appSettings.agentMaxTurns > 0
         ? appSettings.agentMaxTurns
         : undefined
-      // 模型 ID 在运行时按大小写不敏感匹配；手动能力覆盖随渠道配置持久化。
-      const selectedChannelModel = channel.models.find(
-        (model) => model.id.trim().toLowerCase() === selectedModelId.trim().toLowerCase(),
-      )
       const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId, selectedChannelModel?.capabilities)
       const piThinkingLevel = resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
       const projectInstructions = workspaceSlug
@@ -1391,6 +1395,13 @@ export class AgentOrchestrator {
         modelCapabilities: selectedChannelModel?.capabilities,
         configDir: getConfigDir(),
       })
+      // 视觉助手强制档：无人值守来源与未开启挡位都不得接管 Read。
+      const visionRelayRead = shouldForceVisionRelayRead({
+        settings: appSettings.visionRelay,
+        triggeredBy: input.triggeredBy,
+      })
+        ? { allowedRoots: browserAllowedRoots }
+        : undefined
       const queryOptions: PiAgentQueryOptions = {
         sessionId,
         prompt: finalPrompt,
@@ -1408,6 +1419,7 @@ export class AgentOrchestrator {
         proxyUrl,
         runtimeEnv,
         ...(maxTurns != null && { maxTurns }),
+        ...(visionRelayRead && { visionRelayRead }),
         permissionMode: initialPermissionMode,
         canUseTool,
         systemPrompt: systemPromptAppend + buildPiAdditionalDirectoriesPrompt(allAdditionalDirectories),

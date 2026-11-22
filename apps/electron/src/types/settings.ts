@@ -267,11 +267,21 @@ export type MarkdownFontSize = 'small' | 'medium' | 'large'
 export const DEFAULT_MARKDOWN_FONT_SIZE: MarkdownFontSize = 'medium'
 
 /**
+ * 视觉助手挡位。
+ *
+ * - `off`：完全不参与，不注入工具、不接管 Read 图片。
+ * - `auto`：仅在当前模型图片输入能力不是 `supported` 时注入视觉助手工具。
+ * - `force`：不依赖当前模型能力，注入工具并接管 Read 的全部图片结果。
+ */
+export type VisionRelayMode = 'off' | 'auto' | 'force'
+
+/**
  * 给无视觉输入能力的 Agent 使用的独立视觉模型路由。
  * 仅保存用户已有渠道和模型的 ID，凭据继续由渠道加密存储管理。
  */
 export interface VisionRelaySettings {
-  enabled: boolean
+  /** 有效挡位；旧配置的 `enabled: true` 迁移为 `auto`，其余为 `off`。 */
+  mode: VisionRelayMode
   channelId?: string
   modelId?: string
 }

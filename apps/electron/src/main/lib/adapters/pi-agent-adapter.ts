@@ -94,6 +94,8 @@ import {
 import { DEFAULT_CONTEXT_WINDOW, buildModel } from './pi-model-registry'
 import { PendingPromptSkillActivationTracker } from './pi-skill-activation-tracker'
 import { normalizePiToolResultDetails, serializePiToolResultPayload } from './pi-tool-result-json'
+import { createVisionRelayReadToolDefinition } from './pi-vision-relay-read'
+import { inspectImageWithVisionRelay } from '../vision-relay-service'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
 import { createLiveCompactExtension } from './pi-live-compact-extension'
 import { resolveLiveCompactAlgorithm } from './live-compact-algorithm-loader'
@@ -215,6 +217,14 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   onXaiOAuthCredentialsRefreshed?: (credentials: XaiOAuthCredentials) => void | Promise<void>
   /** 会话级 OpenAI（Codex OAuth / Responses API）思考深度。 */
   openAIThinkingLevel?: AgentThinkingLevel
+  /**
+   * 视觉助手强制挡位：存在时用视觉中转包装 Read 的图片结果。
+   * 只能由编排层在 user/external 来源且 mode=force、路由完整时传入。
+   */
+  visionRelayRead?: {
+    /** 图片外发前必须校验在这些已授权目录内。 */
+    allowedRoots: string[]
+  }
   /**
    * Live Compact 参数。仅在会话生效开关为 true 时由主进程组装后下发（见 live-compact-settings）；
    * 缺省时不会加载第五个 extension factory，也不会注入 SPINE_* env。
@@ -1302,10 +1312,18 @@ function buildBuiltinToolDefinitions(
   cwd: string,
   canUseTool: PiAgentQueryOptions['canUseTool'],
   runtimeEnv: AgentRuntimeEnv | undefined,
+  visionRelayRead: PiAgentQueryOptions['visionRelayRead'],
 ): ToolDefinition[] {
   const shellTool = selectPiBuiltinShellTool(process.platform, runtimeEnv)
+  // 强制档下 Read 的图片结果必须先经视觉模型转成文本，才允许进入 transcript。
+  const readTool = visionRelayRead
+    ? createVisionRelayReadToolDefinition(sdk, cwd, {
+        allowedRoots: visionRelayRead.allowedRoots,
+        inspectImage: inspectImageWithVisionRelay,
+      })
+    : sdk.createReadToolDefinition(cwd)
   const definitions = [
-    sdk.createReadToolDefinition(cwd),
+    readTool,
     ...(shellTool === 'bash'
       ? [sdk.createBashToolDefinition(cwd, createPromaBashToolOptions(sdk, runtimeEnv))]
       : []),
@@ -1532,6 +1550,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           cwd,
           input.canUseTool,
           input.runtimeEnv,
+          input.visionRelayRead,
         ),
         ...buildPromaProductToolDefinitions(sdk, input.canUseTool, input.skillWorkspaceSlug, input.sessionId),
         ...wrapCustomToolDefinitions(input.customTools, input.canUseTool),

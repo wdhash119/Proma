@@ -15,6 +15,7 @@ import { getSettings } from './settings-service'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { resolvePiVisionRelayRoute } from './adapters/pi-model-registry'
+import { isVisionRelayRouteConfigured, normalizeVisionRelaySettings } from './vision-relay-policy'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_RESULT_CHARS = 12_000
@@ -36,11 +37,11 @@ type VisionRelayFailureCode =
   | 'VISION_PROVIDER_ERROR'
   | 'VISION_OUTPUT_INVALID'
 
-type VisionRelayResult =
+export type VisionRelayResult =
   | { ok: true; result: Record<string, unknown> }
   | { ok: false; code: VisionRelayFailureCode; message: string }
 
-interface InspectImageInput {
+export interface InspectImageInput {
   imagePath: string
   instruction?: string
   allowedRoots: string[]
@@ -156,28 +157,19 @@ function parseVisionResult(content: string, filename: string): VisionRelayResult
   }
 }
 
-export function isVisionRelayEligibleForModel(modelId: string | undefined): boolean {
-  // Flash 与 Flash Vision Exp 已支持原生视觉；仅 Pro 仍需经独立视觉模型转发。
-  return /^deepseek-v4-pro$/i.test(modelId?.trim() ?? '')
-}
-
-export function isVisionRelayConfigured(): boolean {
-  const configured = getSettings().visionRelay
-  return Boolean(configured?.enabled && configured.channelId && configured.modelId)
-}
-
 /** 用于工具描述的非敏感目标说明。 */
 export function getVisionRelayRouteLabel(): string | undefined {
-  const configured = getSettings().visionRelay
-  if (!configured?.channelId || !configured.modelId) return undefined
+  const configured = normalizeVisionRelaySettings(getSettings().visionRelay)
+  if (!configured.channelId || !configured.modelId) return undefined
   const channel = getChannelById(configured.channelId)
   return channel ? `${channel.name} · ${configured.modelId}` : configured.modelId
 }
 
 export async function inspectImageWithVisionRelay(input: InspectImageInput): Promise<VisionRelayResult> {
-  const configured = getSettings().visionRelay
-  if (!configured?.enabled || !configured.channelId || !configured.modelId) {
-    return failure('VISION_NOT_CONFIGURED', '视觉助手尚未配置。请在设置 → 视觉助手中选择支持图片输入的模型。')
+  // 工具注入与 Read 接管是两层独立入口，这里再校验一次，避免绕过注入直接调用。
+  const configured = normalizeVisionRelaySettings(getSettings().visionRelay)
+  if (configured.mode === 'off' || !isVisionRelayRouteConfigured(configured) || !configured.channelId || !configured.modelId) {
+    return failure('VISION_NOT_CONFIGURED', '视觉助手未启用或未配置。请在设置 → 视觉助手中选择挡位与支持图片输入的模型。')
   }
 
   const image = await resolveAuthorizedImagePath(input.imagePath, input.allowedRoots)

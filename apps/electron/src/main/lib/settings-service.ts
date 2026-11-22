@@ -11,6 +11,7 @@ import { writeJsonFileAtomic } from './safe-file'
 import { DEFAULT_THEME_MODE, normalizeDisabledUserSkillSlugs, normalizeProductivityToolsSettings } from '../../types'
 import type { AppSettings, LiveCompactSettings } from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
+import { normalizeVisionRelaySettings } from './vision-relay-policy'
 
 /**
  * 容错读取 Live Compact 设置：只有显式 true 才启用，未知/损坏值一律视为关闭。
@@ -44,7 +45,7 @@ export function getSettings(): AppSettings {
       longTextPasteAsAttachmentEnabled: false,
       richTextRenderingEnabled: false,
       feishuSessionMirror: { mode: 'off' },
-      visionRelay: { enabled: false },
+      visionRelay: normalizeVisionRelaySettings(undefined),
       liveCompact: { enabled: false },
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
@@ -84,7 +85,8 @@ export function getSettings(): AppSettings {
       longTextPasteAsAttachmentEnabled: data.longTextPasteAsAttachmentEnabled ?? false,
       richTextRenderingEnabled: data.richTextRenderingEnabled ?? false,
       feishuSessionMirror: data.feishuSessionMirror ?? { mode: 'off' },
-      visionRelay: data.visionRelay ?? { enabled: false },
+      // 旧 enabled 设置只在此归一化边界迁移为 mode，运行逻辑不再读取 enabled。
+      visionRelay: normalizeVisionRelaySettings(data.visionRelay),
       // 缺省关闭：老配置文件没有该字段时，Live Compact 不参与任何会话。
       liveCompact: normalizeLiveCompactSettings(data.liveCompact),
       windowsShellPreference: settings.windowsShellPreference ?? 'auto',
@@ -110,7 +112,7 @@ export function getSettings(): AppSettings {
       longTextPasteAsAttachmentEnabled: false,
       richTextRenderingEnabled: false,
       feishuSessionMirror: { mode: 'off' },
-      visionRelay: { enabled: false },
+      visionRelay: normalizeVisionRelaySettings(undefined),
       liveCompact: { enabled: false },
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
@@ -142,6 +144,10 @@ export function updateSettings(updates: Partial<AppSettings>): AppSettings {
     liveCompact: updates.liveCompact === undefined
       ? normalizeLiveCompactSettings(current.liveCompact)
       : normalizeLiveCompactSettings({ ...current.liveCompact, ...updates.liveCompact }),
+    // 视觉助手：本次部分更新与已存路由合并后统一归一化，非法 mode 不可能经 IPC 落盘。
+    visionRelay: updates.visionRelay === undefined
+      ? normalizeVisionRelaySettings(current.visionRelay)
+      : normalizeVisionRelaySettings({ ...current.visionRelay, ...updates.visionRelay }),
   }
   const filePath = getSettingsPath()
 

@@ -169,7 +169,7 @@ async function loadOverride(
   deps: LiveCompactAlgorithmLoaderDeps,
   warn: (message: string) => void,
 ): Promise<{ algorithm: LiveCompactAlgorithm } | { error: string }> {
-  const loadOverrideModule = deps.loadOverrideModule ?? loadOverrideModuleWithJiti
+  const loadOverrideModule = deps.loadOverrideModule ?? loadLiveCompactSourceModule
   const errors: string[] = []
   for (const candidate of OVERRIDE_ENTRY_CANDIDATES) {
     const entryPath = join(manifest.path, candidate)
@@ -276,8 +276,11 @@ async function loadBundledModule(): Promise<unknown> {
  * 这里按最小结构取工厂，避免把某个具体版本的导出名钉进类型。
  * 参数不用 `import.meta.url`：agent-runtime 是 esbuild 的 CJS 产物，`import.meta` 不可用；
  * 入口路径本身是绝对路径，jiti 的解析基点对相对 `./plan.ts` 的解析没有影响。
+ *
+ * 导出给 P3a 同步服务的导出形状闸复用：staging 里的上游源码必须与覆盖层用同一套
+ * jiti 配置编译，否则“闸里能加载、装上跑不了”这类偏差无从发现。
  */
-async function loadOverrideModuleWithJiti(entryPath: string): Promise<unknown> {
+export async function loadLiveCompactSourceModule(entryPath: string): Promise<unknown> {
   const module = (await import('jiti')) as unknown as {
     createJiti?: JitiFactory
     default?: JitiFactory

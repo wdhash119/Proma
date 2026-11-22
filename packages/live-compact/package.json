@@ -12,7 +12,9 @@
       "types": "./types/index.d.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./package.json": "./package.json",
+    "./UPSTREAM.json": "./UPSTREAM.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

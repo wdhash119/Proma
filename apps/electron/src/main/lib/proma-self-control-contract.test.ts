@@ -76,15 +76,13 @@ describe('Proma 自操作契约', () => {
     const richTextInput = readAppFile('src/renderer/components/ai-elements/rich-text-input.tsx')
     const askUserBanner = readAppFile('src/renderer/components/agent/AskUserBanner.tsx')
     const leftSidebar = readAppFile('src/renderer/components/app-shell/LeftSidebar.tsx')
-    const workspaceSelector = readAppFile('src/renderer/components/agent/WorkspaceSelector.tsx')
     const collapsedWorkspacePopover = readAppFile('src/renderer/components/agent/CollapsedWorkspacePopover.tsx')
 
     // Agent 与 Chat 共用 RichTextInput，标记放在其根节点即可同时覆盖两条编辑器路径。
     expect(richTextInput).toContain('data-proma-self-control="deny"')
     expect(askUserBanner).toContain('data-proma-self-control="deny"')
-    // 三个「新建空白项目」入口的最终提交输入行都必须需要批准。
+    // 「新建空白项目」的提交输入行都必须需要批准；原 WorkspaceSelector 死岛已退役。
     expect(leftSidebar).toContain('data-proma-self-control="create-project"')
-    expect(workspaceSelector).toContain('data-proma-self-control="create-project"')
     expect(collapsedWorkspacePopover).toContain('data-proma-self-control="create-project"')
   })
 

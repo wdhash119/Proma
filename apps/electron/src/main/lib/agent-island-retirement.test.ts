@@ -22,6 +22,7 @@ describe('Agent 灵动岛退役', () => {
       'apps/electron/src/main/lib/windows-agent-island-surface.ts',
       'apps/electron/src/main/lib/macos-version.ts',
       'apps/electron/src/main/agent-status-hover-window.ts',
+      'apps/electron/src/main/agent-status-hover-bounds.ts',
       'apps/electron/src/renderer/components/agent-status-hover/HoverPanel.tsx',
       'packages/shared/src/types/agent-island.ts',
       'apps/electron/native/agent-island/macos-agent-island-helper.swift',

@@ -7,7 +7,6 @@
  * 包含：
  * - Conversation — 根容器（StickToBottom）
  * - ConversationContent — 内容区域
- * - ConversationEmptyState — 空状态
  * - ConversationScrollButton — 滚动到底部按钮
  */
 
@@ -44,45 +43,6 @@ export function ConversationContent({ className, ...props }: ConversationContent
       className={cn('flex flex-col gap-1 py-4 px-8', className)}
       {...props}
     />
-  )
-}
-
-// ===== ConversationEmptyState 空状态 =====
-
-export interface ConversationEmptyStateProps extends ComponentProps<'div'> {
-  title?: string
-  description?: string
-  icon?: React.ReactNode
-}
-
-export function ConversationEmptyState({
-  className,
-  title = '暂无消息',
-  description = '在下方输入框开始对话',
-  icon,
-  children,
-  ...props
-}: ConversationEmptyStateProps): React.ReactElement {
-  return (
-    <div
-      className={cn(
-        'flex size-full flex-col items-center justify-center gap-3 p-8 text-center',
-        className
-      )}
-      {...props}
-    >
-      {children ?? (
-        <>
-          {icon && <div className="text-muted-foreground">{icon}</div>}
-          <div className="space-y-1">
-            <h3 className="font-medium text-sm">{title}</h3>
-            {description && (
-              <p className="text-muted-foreground text-sm">{description}</p>
-            )}
-          </div>
-        </>
-      )}
-    </div>
   )
 }
 

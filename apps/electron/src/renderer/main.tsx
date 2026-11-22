@@ -82,7 +82,6 @@ import { GlobalShortcuts } from './components/shortcuts/GlobalShortcuts'
 import { VoiceDictationApp } from './components/voice-dictation/VoiceDictationApp'
 import { TabSwitcher } from './components/tabs/TabSwitcher'
 import { PromaLogo } from './lib/model-logo'
-import { initShortcutRegistry, updateShortcutOverrides } from './lib/shortcut-registry'
 import { triggerLegacyScratchPadMigration } from './lib/legacy-scratch-pad-migration'
 import { initializePerformanceMonitor } from './lib/performance-monitor'
 import { createUpdateReminderScheduler, type UpdateReminderScheduler } from './lib/update-reminder-scheduler'
@@ -472,23 +471,6 @@ function UpdaterInitializer(): null {
     if (scheduledToastIdRef.current !== null) toast.dismiss(scheduledToastIdRef.current)
   }, [])
 
-  return null
-}
-
-/**
- * 定时任务初始化组件
- *
- * 加载全部定时任务，并订阅主进程的变更事件（运行完成/状态变化）刷新列表。
- */
-function PlanningShortcutInitializer(): null {
-  useEffect(() => {
-    initShortcutRegistry()
-    void window.electronAPI.getSettings().then((settings) => {
-      updateShortcutOverrides(settings.shortcutOverrides ?? {})
-    }).catch((error) => {
-      console.error('[任务/日程] 加载快捷键设置失败:', error)
-    })
-  }, [])
   return null
 }
 

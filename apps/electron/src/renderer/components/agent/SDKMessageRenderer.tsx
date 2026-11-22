@@ -1,9 +1,9 @@
 /**
  * SDKMessageRenderer — 渲染 SDKMessage 对象
  *
- * 支持两种渲染模式：
- * 1. 单条消息：SDKMessageRenderer（用于实时流式消息）
- * 2. Turn 分组：AssistantTurnRenderer（用于持久化消息，一个 turn 一个 header）
+ * 支持 Turn 分组渲染：AssistantTurnRenderer（用于持久化消息，一个 turn 一个 header）
+ *
+ * 单条消息的逐条渲染组件（原 SDKMessageRenderer）已退役，实时流与历史统一走 MessageGroupRenderer。
  *
  * Turn 分组规则：
  * - 用户消息后到下一条用户消息之间的所有 assistant 消息组成一个 turn
@@ -87,21 +87,6 @@ import {
   isThinkingSignatureError,
 } from '@proma/shared'
 import type { ToolActivity } from '@/atoms/agent-atoms'
-
-// ===== SDKMessageRenderer Props =====
-
-export interface SDKMessageRendererProps {
-  /** 要渲染的消息 */
-  message: SDKMessage
-  /** 所有消息（用于 ContentBlock 内查找工具结果） */
-  allMessages: SDKMessage[]
-  /** 相对路径解析基准 */
-  basePath?: string
-  /** 是否显示消息头部（模型 icon + 名称），默认 true */
-  showHeader?: boolean
-  /** 用户在前端选择的模型 ID（优先用于显示名称） */
-  sessionModelId?: string
-}
 
 // ===== system 消息：上下文压缩分割线 =====
 
@@ -240,10 +225,6 @@ function extractTurnUsage(turnMessages: SDKMessage[]): { durationMs?: number; us
 }
 
 // extractUserText 已迁移至 @proma/session-core
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
 
 // isUserInputMessage 已迁移至 @proma/session-core
 
@@ -530,115 +511,6 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
       })()}
     </Message>
   )
-}
-
-// ===== SDKMessageRenderer 主组件（用于实时消息逐条渲染） =====
-
-export function SDKMessageRenderer({
-  message,
-  allMessages,
-  basePath,
-  showHeader = true,
-  sessionModelId,
-}: SDKMessageRendererProps): React.ReactElement | null {
-  const channels = useAtomValue(channelsAtom)
-  const msgType = message.type
-
-  // assistant 消息：遍历内容块渲染
-  if (msgType === 'assistant') {
-    const aMsg = message as SDKAssistantMessage
-
-    // 跳过重放消息
-    if (aMsg.isReplay) return null
-
-    // 错误消息分发：
-    // - Orchestrator 造的纯错误消息（带 _errorCode）：直接走 ErrorMessage 组件
-    // - Pi 混合消息（只带 error、无 _errorCode）：走下方正常渲染 + 末尾挂 tail
-    //   与 AssistantTurnRenderer 对齐：不检查 hasRenderableContent，有 blocks 就正常渲染正文，
-    //   没有 blocks 才回退到 ErrorMessage
-    if (aMsg.error) {
-      const msgAny = aMsg as unknown as Record<string, unknown>
-      const isPureErrorSummary = typeof msgAny._errorCode === 'string'
-      if (isPureErrorSummary) {
-        return <ErrorMessage message={aMsg} />
-      }
-      // Pi 混合消息：下面按正常路径收集 content blocks，末尾挂 AssistantErrorTail
-    }
-
-    const rawBlocks = aMsg.message?.content
-    if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) {
-      if (aMsg.error) return <ErrorMessage message={aMsg} />
-      return null
-    }
-    const blocks = normalizeThinkTagsInContentBlocks(rawBlocks)
-    if (blocks.length === 0) {
-      if (aMsg.error) return <ErrorMessage message={aMsg} />
-      return null
-    }
-
-    const model = aMsg._channelModelId || aMsg.message?.model || sessionModelId
-    const meta = extractMeta(message)
-
-    // 检测是否有主要内容（text 块）
-    const hasTextContent = blocks.some(
-      (b) => b.type === 'text' && 'text' in b && !!(b as { text: string }).text
-    )
-
-    return (
-      <Message from="assistant">
-        {showHeader && (
-          <MessageHeader
-            model={model ? resolveModelDisplayName(model, channels) : undefined}
-            time={meta.createdAt ? formatMessageTime(meta.createdAt) : undefined}
-            logo={<AssistantLogo model={model} />}
-          />
-        )}
-        <MessageContent>
-          <div className={cn('space-y-2')}>
-            {blocks.map((block, i) => (
-              <ContentBlock
-                key={i}
-                block={block}
-                allMessages={allMessages}
-                basePath={basePath}
-                index={i}
-                dimmed={hasTextContent && block.type !== 'text'}
-              />
-            ))}
-          </div>
-          {/* Pi runtime 下「provider 已吐正文 + 收尾报错」的混合消息：末尾挂错误横幅 */}
-          {aMsg.error && (
-            <AssistantErrorTail message={aMsg} />
-          )}
-        </MessageContent>
-      </Message>
-    )
-  }
-
-  // user 消息
-  if (msgType === 'user') {
-    const uMsg = message as SDKUserMessage
-    if (isUserInputMessage(uMsg)) {
-      return <UserInputMessage message={uMsg} />
-    }
-    return null
-  }
-
-  // system 消息
-  if (msgType === 'system') {
-    const sysMsg = message as SDKSystemMessage
-    const subtype = sysMsg.subtype
-    const compactStatus = getSDKCompactStatus(sysMsg)
-
-    if (compactStatus) return <CompactStatusNotice message={sysMsg} />
-    if (subtype === 'permission_denied') {
-      return <PermissionDeniedNotice message={sysMsg} />
-    }
-
-    return null
-  }
-
-  return null
 }
 
 // ===== 附件解析 =====

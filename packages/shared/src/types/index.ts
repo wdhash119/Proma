@@ -75,3 +75,6 @@ export * from './vault'
 
 // Computer Use 窗口镜像预览相关类型
 export * from './computer-use'
+
+// Live Compact 上游同步与设置页相关类型
+export * from './live-compact'

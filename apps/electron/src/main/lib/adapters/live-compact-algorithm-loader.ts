@@ -17,6 +17,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { LiveCompactActiveManifest } from '@proma/shared'
 
 /**
  * 胶层实际消费的算法导出清单。
@@ -55,14 +56,10 @@ export type LiveCompactAlgorithm = Pick<
   LiveCompactAlgorithmExportName
 >
 
-/** `active.json` 的形状：P3a 写它，本批只读。 */
-export interface LiveCompactActiveManifest {
-  version: string
-  sha: string
-  syncedAt: string
-  /** 已激活版本目录的绝对路径（内含 src/ 四件与 Proma 的 index.ts 再导出）。 */
-  path: string
-}
+/**
+ * `active.json` 的形状（P3b 提取到 `@proma/shared`，主进程写、加载器与设置页读同一份）。
+ */
+export type { LiveCompactActiveManifest }
 
 export type LiveCompactAlgorithmSource = 'bundled' | 'override'
 

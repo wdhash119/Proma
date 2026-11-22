@@ -26,6 +26,7 @@ import {
   HardDrive,
   Sparkles,
   Monitor,
+  Layers,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ShortcutKeycaps } from "@/components/shortcuts/ShortcutKeycaps";
@@ -52,6 +53,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ChannelSettings } from "./ChannelSettings";
 import { ComputerUseSettings } from "./ComputerUseSettings";
+import { LiveCompactSettings } from "./LiveCompactSettings";
 import { VisionRelaySettings } from "./VisionRelaySettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { ProxySettings } from "./ProxySettings";
@@ -82,11 +84,19 @@ const COMPUTER_USE_TAB: TabItem = {
   icon: <Monitor size={16} />,
 };
 
+/** Live Compact 独立标签页：全局主闸、上游同步与版本回退 */
+const LIVE_COMPACT_TAB: TabItem = {
+  id: "live-compact",
+  label: "Live Compact",
+  icon: <Layers size={16} />,
+};
+
 /** 基础 Tabs（所有模式都有） */
 const BASE_TABS: TabItem[] = [
   { id: "general", label: "通用设置", icon: <Settings size={16} /> },
   { id: "channels", label: "模型配置", icon: <Radio size={16} /> },
   COMPUTER_USE_TAB,
+  LIVE_COMPACT_TAB,
   { id: "vision-relay", label: "视觉助手", icon: <Eye size={16} /> },
   { id: "personas", label: "人设管理", icon: <Bot size={16} /> },
   { id: "about-you", label: "关于你", icon: <Sparkles size={16} /> },
@@ -131,6 +141,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <ChannelSettings />;
     case "computer-use":
       return <ComputerUseSettings />;
+    case "live-compact":
+      return <LiveCompactSettings />;
     case "vision-relay":
       return <VisionRelaySettings />;
     case "personas":

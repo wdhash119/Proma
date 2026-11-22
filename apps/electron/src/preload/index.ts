@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -289,6 +289,17 @@ export interface ElectronAPI {
   getComputerUseUpdateStatus: () => Promise<import('@proma/shared').CuaUpdateStatus>
   /** 订阅更新检查结论变化；返回取消订阅函数 */
   onComputerUseUpdateStatusChanged: (callback: (status: import('@proma/shared').CuaUpdateStatus) => void) => () => void
+
+  // ===== Live Compact 算法同步 =====
+
+  /** 读取版本状态快照（内置版本 / 已同步覆盖层 / 最近一次上游检查）；不触发网络请求 */
+  getLiveCompactState: () => Promise<import('@proma/shared').LiveCompactState>
+  /** 主动检查上游 HEAD；失败时抛出带中文原因的异常 */
+  checkLiveCompactUpstream: () => Promise<import('@proma/shared').LiveCompactCheckResult>
+  /** 下载上游 HEAD 并经三重闸激活；失败时返回 {ok:false,error,state} 而不是抛异常 */
+  syncLiveCompactUpstream: () => Promise<import('@proma/shared').LiveCompactSyncResult>
+  /** 删除激活标记回退到内置算法；版本目录保留 */
+  resetLiveCompactToBundled: () => Promise<import('@proma/shared').LiveCompactState>
 
   // ===== 通用工具 =====
 
@@ -1421,6 +1432,17 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on(COMPUTER_USE_IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
     return () => ipcRenderer.removeListener(COMPUTER_USE_IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
   },
+
+  // Live Compact 算法同步：renderer 只接收版本状态与同步结论，
+  // 下载、解包、三重闸与激活全部留在主进程。
+  getLiveCompactState: () =>
+    ipcRenderer.invoke(LIVE_COMPACT_IPC_CHANNELS.GET_STATE),
+  checkLiveCompactUpstream: () =>
+    ipcRenderer.invoke(LIVE_COMPACT_IPC_CHANNELS.CHECK_UPSTREAM),
+  syncLiveCompactUpstream: () =>
+    ipcRenderer.invoke(LIVE_COMPACT_IPC_CHANNELS.SYNC),
+  resetLiveCompactToBundled: () =>
+    ipcRenderer.invoke(LIVE_COMPACT_IPC_CHANNELS.RESET),
 
   // 通用工具
   openExternal: (url: string) => {

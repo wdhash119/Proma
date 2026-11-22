@@ -17,6 +17,7 @@ const SETTINGS_TAB_IDS = [
   'general',
   'channels',
   'computer-use',
+  'live-compact',
   'vision-relay',
   'proxy',
   'appearance',

@@ -33,13 +33,19 @@ import { spawn } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { valid as validSemver } from 'semver'
+import type {
+  LiveCompactActiveManifest,
+  LiveCompactCheckRecord,
+  LiveCompactCheckResult,
+  LiveCompactState,
+  LiveCompactSyncResult,
+} from '@proma/shared'
 import bundledPackage from '@proma/live-compact/package.json' with { type: 'json' }
 import bundledUpstream from '@proma/live-compact/UPSTREAM.json' with { type: 'json' }
 import {
   loadLiveCompactSourceModule,
   validateAlgorithmShape,
 } from './adapters/live-compact-algorithm-loader'
-import type { LiveCompactActiveManifest } from './adapters/live-compact-algorithm-loader'
 import { writeJsonFileAtomic } from './safe-file'
 import {
   downloadUpstreamTarball,
@@ -49,7 +55,17 @@ import {
   type LiveCompactFetcher,
 } from './live-compact-upstream'
 
-export type { LiveCompactActiveManifest }
+/**
+ * 类型出口：契约形状已在 P3b 提取到 `@proma/shared`（IPC 四层共用同一份定义），
+ * 这里保留再导出，避免既有调用方与测试改导入路径。
+ */
+export type {
+  LiveCompactActiveManifest,
+  LiveCompactCheckRecord,
+  LiveCompactCheckResult,
+  LiveCompactState,
+  LiveCompactSyncResult,
+}
 
 /** 上游算法模块名（staging 里位于 `extensions/`，激活后位于 `src/`）。 */
 export const LIVE_COMPACT_ALGORITHM_MODULES = ['plan', 'select', 'cooldown', 'recall'] as const
@@ -103,47 +119,11 @@ export const OVERRIDE_INDEX_SOURCE = [
   '',
 ].join('\n')
 
-/** 持久化的上游检查记录。 */
-export interface LiveCompactCheckRecord {
-  sha: string
-  /** commit.author.date（ISO 8601，UTC）。 */
-  date: string
-  /** 本机执行检查的时间。 */
-  checkedAt: string
-}
-
 /** `state.json` 的落盘形状。 */
 interface LiveCompactPersistedState {
   lastCheck?: LiveCompactCheckRecord
   lastError?: string
 }
-
-/** 给设置页（P3b）用的状态快照。 */
-export interface LiveCompactState {
-  /** 随 App 发版的算法版本（读 `@proma/live-compact/package.json`）。 */
-  bundledVersion: string
-  /** 随 App 发版对应的上游 commit sha（读 `@proma/live-compact/UPSTREAM.json`）。 */
-  bundledSha?: string
-  /** 当前生效的覆盖层；不存在或清单不可用时缺省。 */
-  active?: LiveCompactActiveManifest
-  /** 最近一次上游检查结果。 */
-  upstream?: LiveCompactCheckRecord
-  /** 是否正在同步（进程内实时状态，不落盘）。 */
-  syncing: boolean
-  /** 最近一次同步失败的原因（中文）。 */
-  lastError?: string
-}
-
-/** 上游检查结果。 */
-export interface LiveCompactCheckResult extends LiveCompactCheckRecord {
-  /** 上游 HEAD 与本机基线（覆盖层 sha，否则随包 sha）不同。 */
-  updateAvailable: boolean
-}
-
-/** 同步结果：失败时也带最新状态，调用方可直接渲染。 */
-export type LiveCompactSyncResult =
-  | { ok: true; state: LiveCompactState }
-  | { ok: false; error: string; state: LiveCompactState }
 
 /** Bun 运行时探测结果（只取行为闸需要的三个字段）。 */
 export interface LiveCompactBunRuntime {

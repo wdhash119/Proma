@@ -10,7 +10,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -150,6 +150,9 @@ import type {
   ComputerUsePreviewState,
   ComputerUseInstallation,
   CuaUpdateStatus,
+  LiveCompactState,
+  LiveCompactCheckResult,
+  LiveCompactSyncResult,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
@@ -157,6 +160,8 @@ import { browserController } from './lib/browser-controller'
 import { computerUsePreview } from './lib/computer-use-preview'
 import { getComputerUseInstallationStatus } from './lib/computer-use-installation'
 import { getCuaUpdateStatus, refreshCuaUpdateStatus } from './lib/computer-use-cdn-runtime'
+import { createLiveCompactSyncService } from './lib/live-compact-sync'
+import type { LiveCompactSyncService } from './lib/live-compact-sync'
 import { acknowledgeTerminalOutput, closeTerminalsForSession, createTerminal, getTerminalSnapshot, killTerminal, resizeTerminal, writeTerminal } from './lib/terminal-service'
 import { getMainWindow } from './lib/main-window-store'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
@@ -1356,6 +1361,20 @@ async function withOAuthDeviceCodeQr<T extends CodexOAuthDeviceCode | GithubCopi
   }
 }
 
+/**
+ * Live Compact 同步服务单例。
+ *
+ * 服务内部持有「进行中的同步 Promise + syncing 标记」：重复实例化会让设置页显示
+ * 一份状态、主进程实际跑另一份同步。configDir 延迟到首次调用才解析，避免模块加载
+ * 早于 app ready 时提前创建配置目录。
+ */
+let liveCompactSyncService: LiveCompactSyncService | undefined
+
+function getLiveCompactSyncService(): LiveCompactSyncService {
+  liveCompactSyncService ??= createLiveCompactSyncService({ configDir: getConfigDir() })
+  return liveCompactSyncService
+}
+
 export function registerIpcHandlers(): void {
   // ===== 本地终端（仅主 renderer 可操作，不能指定可执行文件） =====
   const assertMainTerminalRenderer = (senderId: number): void => {
@@ -2435,6 +2454,51 @@ export function registerIpcHandlers(): void {
     async (event): Promise<CuaUpdateStatus> => {
       await assertMainRenderer(event.sender.id)
       return getCuaUpdateStatus()
+    },
+  )
+
+  // Live Compact 上游同步：下载、解包、三重闸与激活全部留在主进程，
+  // renderer 只拿到版本状态、检查结论与同步结果。
+  const assertLiveCompactMainRenderer = async (senderId: number): Promise<void> => {
+    const mainWindow = getMainWindow()
+    if (!mainWindow || mainWindow.webContents.id !== senderId) {
+      throw new Error('仅主窗口可以管理 Live Compact。')
+    }
+  }
+  ipcMain.handle(
+    LIVE_COMPACT_IPC_CHANNELS.GET_STATE,
+    async (event): Promise<LiveCompactState> => {
+      await assertLiveCompactMainRenderer(event.sender.id)
+      return getLiveCompactSyncService().getState()
+    },
+  )
+  ipcMain.handle(
+    LIVE_COMPACT_IPC_CHANNELS.CHECK_UPSTREAM,
+    async (event): Promise<LiveCompactCheckResult> => {
+      await assertLiveCompactMainRenderer(event.sender.id)
+      try {
+        return await getLiveCompactSyncService().checkUpstream()
+      } catch (error) {
+        // 网络/解析异常在设置页需要可读原因，统一加中文前缀而不是把英文原文抛给用户。
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new Error(`检查上游失败：${reason}`)
+      }
+    },
+  )
+  ipcMain.handle(
+    LIVE_COMPACT_IPC_CHANNELS.SYNC,
+    async (event): Promise<LiveCompactSyncResult> => {
+      await assertLiveCompactMainRenderer(event.sender.id)
+      // 同步服务把三重闸失败转成 {ok:false,error,state}，这里不再抛异常：
+      // 设置页据返回值渲染原因，避免 renderer 侧把可预期失败当成崩溃。
+      return getLiveCompactSyncService().syncUpstream()
+    },
+  )
+  ipcMain.handle(
+    LIVE_COMPACT_IPC_CHANNELS.RESET,
+    async (event): Promise<LiveCompactState> => {
+      await assertLiveCompactMainRenderer(event.sender.id)
+      return getLiveCompactSyncService().resetToBundled()
     },
   )
 

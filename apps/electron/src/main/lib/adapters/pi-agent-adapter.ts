@@ -31,6 +31,7 @@ import {
   calculatePiAutoCompactionReserveTokens,
   inferReasoningTransport,
   isCodexFastModeSupportedModel,
+  normalizeProjectInstructionSessionState,
   resolveReasoningProfile,
   createSkillActivationFromPath,
 } from '@proma/shared'
@@ -148,6 +149,8 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   projectInstructionScope?: {
     projectRoot: string
     initialSources: ProjectInstructionSource[]
+    /** 上一轮持久化的作用域状态；跨 run 去重与待注入来源恢复。 */
+    resumeState?: import('@proma/shared').ProjectInstructionSessionState
   }
   resumeSessionId?: string
   piAgentDir: string
@@ -156,6 +159,8 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   onSessionId?: (sdkSessionId: string, sessionFile?: string) => void
   /** Pi final assistant UI UUID → 持久树状 session entry ID。 */
   onPiEntryBindings?: (bindings: Record<string, string>) => void
+  /** 项目指令作用域状态变化；orchestrator 据此写入会话 meta（跨 run 去重）。 */
+  onProjectInstructionState?: (state: import('@proma/shared').ProjectInstructionSessionState) => void
   onModelResolved?: (model: string) => void
   onContextWindow?: (contextWindow: number) => void
   onRetry?: (update: import('./pi-retry-control').PiRetryUpdate) => void
@@ -1371,9 +1376,25 @@ export class PiAgentAdapter implements AgentProviderAdapter {
     active.onSkillActivated = input.onSkillActivated
     let unsubscribe: (() => void) | undefined
     let requestProxyDispatcher: Dispatcher | undefined
+    // 项目指令作用域状态：声明早于 cleanup，保证任何退出路径都能安全持久化。
+    let projectInstructionScope: ProjectInstructionScopeController | undefined
+    let lastInstructionStateJson: string | undefined
+    const persistProjectInstructionState = (): void => {
+      if (!projectInstructionScope || !input.onProjectInstructionState) return
+      try {
+        const state = normalizeProjectInstructionSessionState(projectInstructionScope.exportState())
+        const json = JSON.stringify(state)
+        if (json === lastInstructionStateJson) return
+        lastInstructionStateJson = json
+        if (state) input.onProjectInstructionState(state)
+      } catch (error) {
+        console.warn('[Pi 项目指令] 作用域状态持久化失败，下一轮将重新激活:', error)
+      }
+    }
 
     const cleanupActiveSession = (): void => {
       try {
+        persistProjectInstructionState()
         unsubscribe?.()
         unsubscribe = undefined
         if (!active.disposed) {
@@ -1468,11 +1489,13 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           transport: 'anthropic-messages',
         })
         : undefined
-      const projectInstructionScope = input.projectInstructionScope
+      projectInstructionScope = input.projectInstructionScope
         ? new ProjectInstructionScopeController({
             projectRoot: input.projectInstructionScope.projectRoot,
             cwd,
             initialSources: input.projectInstructionScope.initialSources,
+            resumeState: input.projectInstructionScope.resumeState,
+            onStateChange: () => persistProjectInstructionState(),
           })
         : undefined
       const extensionFactories = [

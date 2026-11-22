@@ -1,9 +1,7 @@
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import type {
-  BoundaryResult,
-  ExtensionAPI,
-  SessionBoundaryDraft,
-} from '@earendil-works/pi-coding-agent'
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
+import { normalizeProjectInstructionSessionState } from '@proma/shared'
+import type { ProjectInstructionSessionState, ProjectInstructionSourceSnapshot } from '@proma/shared'
 import {
   normalizeProjectPathForComparison,
   resolveProjectInstructions,
@@ -17,6 +15,10 @@ interface ProjectInstructionScopeOptions {
   projectRoot: string
   cwd: string
   initialSources: ProjectInstructionSource[]
+  /** 上一轮持久化的会话状态；用于跨 run 去重与待注入来源恢复。 */
+  resumeState?: ProjectInstructionSessionState
+  /** 状态变化（flush 注入后）回调；adapter 据此持久化到会话 meta。 */
+  onStateChange?: (state: ProjectInstructionSessionState) => void
 }
 
 interface ScopedToolCall {
@@ -71,17 +73,32 @@ function formatLegacyMigrationSection(reminder: string): string {
   return `## 项目指令迁移建议\n\n${reminder}`
 }
 
+function toSourceSnapshot(source: ProjectInstructionSource): ProjectInstructionSourceSnapshot {
+  return {
+    path: source.path,
+    relativePath: source.relativePath,
+    scopeRoot: source.scopeRoot,
+    kind: source.kind,
+    content: source.content,
+    contentHash: source.contentHash,
+  }
+}
+
 /**
  * Holds only session-local scope state. Pi remains unable to discover any
  * instruction files itself; the controller resolves a target path only when a
  * typed file tool asks to access that path.
  *
- * 正常工具调用（read/edit/write/grep/find/ls）一律放行，绝不 block/terminate：
- * 指令激活与 legacy 迁移要求都改为本轮结束后的透明注入。
+ * 正常工具调用（read/edit/write/grep/find/ls）一律放行，绝不 block/terminate。
+ * 轮中激活的指令不再以 custom_message + continue 在 settle 时续跑注入
+ *（那会被 Pi 转成 role:"user" 伪装成用户消息，并在总结后多跑一轮）；
+ * 改为持久化到会话状态，由下一轮 before_agent_start 静默拼进 system prompt。
+ * 已交付状态跨 run 持久，同一来源（path+hash）每会话只注入一次。
  */
 export class ProjectInstructionScopeController {
   private readonly projectRoot: string
   private readonly cwd: string
+  private readonly onStateChange?: (state: ProjectInstructionSessionState) => void
   private readonly delivered = new Set<string>()
   private readonly pending = new Map<string, ProjectInstructionSource>()
   /**
@@ -98,8 +115,26 @@ export class ProjectInstructionScopeController {
   constructor(options: ProjectInstructionScopeOptions) {
     this.projectRoot = canonicalizeProjectPath(options.projectRoot)
     this.cwd = options.cwd
+    this.onStateChange = options.onStateChange
     for (const source of options.initialSources) {
       this.delivered.add(sourceKey(source))
+    }
+    // 跨 run 恢复：已交付键去重、待注入来源与 legacy 守卫延续上一轮状态。
+    const resumeState = normalizeProjectInstructionSessionState(options.resumeState)
+    if (resumeState) {
+      for (const key of resumeState.deliveredKeys) this.delivered.add(key)
+      for (const source of resumeState.pendingSources) {
+        const key = sourceKey(source)
+        if (!this.delivered.has(key)) this.pending.set(key, source)
+      }
+      for (const legacyPath of resumeState.consumedLegacyMigrations) {
+        this.consumedLegacyMigrations.add(legacyPath)
+      }
+      for (const reminder of resumeState.pendingLegacyReminders) {
+        if (!this.consumedLegacyMigrations.has(reminder.sourcePath)) {
+          this.legacyMigrationReminders.set(reminder.sourcePath, reminder.text)
+        }
+      }
     }
   }
 
@@ -110,18 +145,31 @@ export class ProjectInstructionScopeController {
         toolName: event.toolName,
         input: event.input as Record<string, unknown>,
       }))
-      // Pi 1.6 的 before_agent_start 每轮（每次从 prompt 开始的运行）只触发一次，
-      // 透明注入后的续跑是同一运行循环内的低层请求，不会再次触发它。因此新增
-      // agent_before_settle：在这轮真正结束前把 pending 指令与 legacy 迁移建议
-      // 作为不可见会话条目补进会话，并请求一次续跑。
-      pi.on('agent_before_settle', (event) => this.buildSettleContinuation(event.entries))
-      // 下一次由用户消息触发的运行仍走系统提示词注入兜底；与 settle 共用消费
-      // 逻辑，同一来源只注入一次。
+      // 唯一注入点：每轮运行开始前把上一轮激活的指令与 legacy 迁移建议
+      // 静默拼进 system prompt。不再注册 agent_before_settle：避免 custom_message
+      // 被 Pi 转成用户角色消息，也避免总结后续跑。
       pi.on('before_agent_start', (event) => {
         const systemPrompt = this.appendPendingInstructions(event.systemPrompt)
-        return systemPrompt === event.systemPrompt ? undefined : { systemPrompt }
+        if (systemPrompt === event.systemPrompt) return undefined
+        this.emitState()
+        return { systemPrompt }
       })
     }
+  }
+
+  /** 导出当前会话状态，供 adapter 持久化到会话 meta。 */
+  exportState(): ProjectInstructionSessionState {
+    return {
+      deliveredKeys: [...this.delivered],
+      pendingSources: [...this.pending.values()].map(toSourceSnapshot),
+      consumedLegacyMigrations: [...this.consumedLegacyMigrations],
+      pendingLegacyReminders: [...this.legacyMigrationReminders.entries()]
+        .map(([sourcePath, text]) => ({ sourcePath, text })),
+    }
+  }
+
+  private emitState(): void {
+    this.onStateChange?.(this.exportState())
   }
 
   /**
@@ -151,32 +199,6 @@ export class ProjectInstructionScopeController {
     this.queueLegacyMigrationReminder(call, manifest)
   }
 
-  /**
-   * 本轮 settle 前是否需要请求一次续跑。
-   * 激活路径以 pending 是否非空为准：settle 时会 flush 并清空，天然收敛。
-   * legacy 路径每个来源最多消费一次续跑预算。
-   */
-  shouldContinueAfterSettle(): boolean {
-    if (this.pending.size > 0) return true
-    for (const legacyPath of this.legacyMigrationReminders.keys()) {
-      if (!this.consumedLegacyMigrations.has(legacyPath)) return true
-    }
-    return false
-  }
-
-  /**
-   * 构造 agent_before_settle 的续跑结果：把待注入指令与 legacy 迁移建议写成
-   * 不可见会话条目，让同一轮结束后的续跑请求能直接看到；同时消费触发续跑
-   * 的状态。没有待处理工作时返回 undefined，由 Pi 正常结束本轮。
-   */
-  buildSettleContinuation(entries: SessionBoundaryDraft[]): BoundaryResult | undefined {
-    if (!this.shouldContinueAfterSettle()) return undefined
-
-    const drafts = this.flushTransparentDrafts()
-    if (drafts.length === 0) return undefined
-    return { entries: [...entries, ...drafts], continue: true }
-  }
-
   appendPendingInstructions(systemPrompt: string): string {
     const sections: string[] = []
     const instructionSection = this.flushPendingInstructionsSection()
@@ -185,32 +207,6 @@ export class ProjectInstructionScopeController {
       sections.push(formatLegacyMigrationSection(reminder))
     }
     return sections.length === 0 ? systemPrompt : `${systemPrompt}\n\n${sections.join('\n\n')}`
-  }
-
-  /**
-   * 消费 pending 指令与未消费的 legacy 迁移提醒，生成透明的会话条目草稿。
-   * settle 专用；before_agent_start 走文本兜底版本 appendPendingInstructions。
-   */
-  private flushTransparentDrafts(): SessionBoundaryDraft[] {
-    const drafts: SessionBoundaryDraft[] = []
-    const instructionSection = this.flushPendingInstructionsSection()
-    if (instructionSection) {
-      drafts.push({
-        type: 'custom_message',
-        customType: 'proma-project-instruction',
-        content: instructionSection,
-        display: false,
-      })
-    }
-    for (const reminder of this.consumeLegacyMigrationReminders()) {
-      drafts.push({
-        type: 'custom_message',
-        customType: 'proma-legacy-project-instruction',
-        content: formatLegacyMigrationSection(reminder),
-        display: false,
-      })
-    }
-    return drafts
   }
 
   /**
@@ -263,7 +259,7 @@ export class ProjectInstructionScopeController {
 
   /**
    * flush 全部 pending 指令：标记为 delivered 并清空 pending，返回可注入的
-   * 文本段落（含 legacy 迁移任务）。before_agent_start 与 settle 续跑共用，
+   * 文本段落（含 legacy 迁移任务）。before_agent_start 注入专用，
    * 保证同一来源只注入一次。
    */
   private flushPendingInstructionsSection(): string | undefined {

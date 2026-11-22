@@ -98,3 +98,4 @@ export {
   normalizeModelCapabilityOverrides,
   hasModelCapabilityOverrides,
 } from './model-capabilities'
+export { normalizeProjectInstructionSessionState } from './project-instruction-state'

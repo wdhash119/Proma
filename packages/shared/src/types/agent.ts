@@ -755,6 +755,39 @@ export interface SetAgentSessionActiveWorktreeInput {
  * 存储在 ~/.proma/agent-sessions.json 中，
  * 类似 ConversationMeta，独立存储。
  */
+/**
+ * 项目指令来源快照；结构与主进程 resolver 的 ProjectInstructionSource 一致，
+ * 用于会话级激活状态的跨 run 持久化。
+ */
+export interface ProjectInstructionSourceSnapshot {
+  /** 规范路径，作为可审计的来源标识 */
+  path: string
+  /** 相对项目根的路径 */
+  relativePath: string
+  /** 生效的子树根 */
+  scopeRoot: string
+  kind: 'agents' | 'claude'
+  content: string
+  contentHash: string
+}
+
+/**
+ * 项目指令作用域的会话级状态。
+ *
+ * 控制器每次 query 新建；已交付/待注入状态随会话 meta 持久化，
+ * 避免同一份子树指令在每个回合重复注入。
+ */
+export interface ProjectInstructionSessionState {
+  /** 已注入来源键：normalize(path)\0contentHash */
+  deliveredKeys: string[]
+  /** 已激活、待下一轮 system prompt 注入的来源快照 */
+  pendingSources: ProjectInstructionSourceSnapshot[]
+  /** 已提醒过的 legacy 来源规范路径（每会话一次守卫） */
+  consumedLegacyMigrations: string[]
+  /** 待注入的 legacy 迁移提醒 */
+  pendingLegacyReminders: { sourcePath: string; text: string }[]
+}
+
 export interface AgentSessionMeta {
   /** 会话唯一标识 */
   id: string
@@ -770,6 +803,8 @@ export interface AgentSessionMeta {
   piSessionFile?: string
   /** Proma assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
   piEntryBindings?: Record<string, string>
+  /** 项目指令作用域的跨 run 状态；缺失时兼容旧会话（视为全新激活）。 */
+  projectInstructionState?: ProjectInstructionSessionState
   /** 已退役 Claude runtime 的只读 transcript；必须新建 Pi 会话才能继续。 */
   legacyTranscript?: {
     sourceRuntime: 'claude'

@@ -1424,6 +1424,7 @@ export class AgentOrchestrator {
           projectInstructionScope: {
             projectRoot: projectInstructions.projectRoot,
             initialSources: projectInstructions.sources,
+            resumeState: sessionMeta?.projectInstructionState,
           },
         }),
         resumeSessionId: existingSdkSessionId,
@@ -1487,6 +1488,11 @@ export class AgentOrchestrator {
           updateAgentSessionMeta(sessionId, {
             piEntryBindings: { ...(latest?.piEntryBindings ?? {}), ...bindings },
           })
+        },
+        onProjectInstructionState: (state) => {
+          const latest = getAgentSessionMeta(sessionId)
+          if (!latest || latest.legacyTranscript?.continuationRequired) return
+          updateAgentSessionMeta(sessionId, { projectInstructionState: state })
         },
         onModelResolved: handleModelResolved,
         onContextWindow: handleContextWindow,

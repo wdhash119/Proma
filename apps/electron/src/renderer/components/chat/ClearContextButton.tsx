@@ -16,7 +16,7 @@ import { inputToolbarButtonClass } from '@/components/ai-elements/input-toolbar-
 import { Eraser } from 'lucide-react'
 import type { ComponentProps } from 'react'
 
-export interface ClearContextButtonProps
+interface ClearContextButtonProps
   extends Omit<ComponentProps<typeof Button>, 'onClick'> {
   /** 点击回调 */
   onClick?: () => void

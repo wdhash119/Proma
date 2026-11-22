@@ -65,7 +65,7 @@ export function serializeAgentRuntimeError(error: unknown, fallbackCode = 'runti
   }
 }
 
-export function isAgentRuntimeError(value: unknown): value is AgentRuntimeError {
+function isAgentRuntimeError(value: unknown): value is AgentRuntimeError {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Record<string, unknown>
   return typeof candidate.code === 'string' && typeof candidate.message === 'string'

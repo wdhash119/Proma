@@ -3,7 +3,7 @@
  * 自定义 MIME 用于可靠识别来源，text/plain 仅作为宿主兼容兜底。
  */
 
-export const SESSION_REFERENCE_DRAG_MIME = 'application/x-proma-session-reference'
+const SESSION_REFERENCE_DRAG_MIME = 'application/x-proma-session-reference'
 
 export interface SessionReferenceDragItem {
   sessionId: string

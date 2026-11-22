@@ -59,7 +59,7 @@ function normalizeActivation(value: unknown): SkillActivation | null {
 }
 
 /** Return the Skill directory slug when a path points at skills/<slug>/SKILL.md. */
-export function getSkillSlugFromEntryPath(path: string): string | null {
+function getSkillSlugFromEntryPath(path: string): string | null {
   return path.replace(/\\/g, '/').match(/(?:^|\/)skills\/([^/]+)\/SKILL\.md$/i)?.[1] ?? null
 }
 
@@ -132,7 +132,7 @@ function getReadPath(input: Record<string, unknown>): string | null {
   return typeof path === 'string' ? path : null
 }
 
-export interface SkillActivationCollectionOptions {
+interface SkillActivationCollectionOptions {
   workspaceSlug?: string
   workspaceSkillsRoot?: string
 }
@@ -148,7 +148,7 @@ function isWorkspaceSkillEntryPath(path: string, options?: SkillActivationCollec
  * Find successful Read -> tool_result pairs that loaded a Proma Skill entry file.
  * A bare tool_use is intentionally insufficient: failed reads must not become chips.
  */
-export function collectSuccessfulSkillReadActivations(
+function collectSuccessfulSkillReadActivations(
   messages: SDKMessage[],
   options?: SkillActivationCollectionOptions,
 ): SkillActivation[] {

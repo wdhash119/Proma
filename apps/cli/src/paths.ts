@@ -22,7 +22,7 @@ export interface PathOptions {
   dev?: boolean
 }
 
-export function resolveConfigDir(opts: PathOptions = {}): string {
+function resolveConfigDir(opts: PathOptions = {}): string {
   if (opts.configDir) return opts.configDir
   const useDev = opts.dev || process.env.PROMA_DEV === '1'
   return join(homedir(), useDev ? '.proma-dev' : '.proma')
@@ -32,7 +32,7 @@ export function getSessionsIndexPath(opts: PathOptions = {}): string {
   return join(resolveConfigDir(opts), 'agent-sessions.json')
 }
 
-export function getSessionsDir(opts: PathOptions = {}): string {
+function getSessionsDir(opts: PathOptions = {}): string {
   return join(resolveConfigDir(opts), 'agent-sessions')
 }
 

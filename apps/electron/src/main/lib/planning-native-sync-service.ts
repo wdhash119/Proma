@@ -93,7 +93,7 @@ export async function listPlanningNativeConnectionTargets(entity: PlanningNative
   try { return await callMacEventKitNativeAddon<PlanningNativeSyncTarget[]>('listTargets', entity) } catch { return [] }
 }
 
-export interface PlanningNativeSyncItem {
+interface PlanningNativeSyncItem {
   targetId: string
   /** Proma UUID；仅用于新建项目的 crash-recovery marker，不覆盖用户已有 URL。 */
   identity: string
@@ -112,7 +112,7 @@ export interface PlanningNativeSyncItem {
   completedAt?: number
 }
 
-export interface PlanningNativeExternalItem {
+interface PlanningNativeExternalItem {
   calendarItemIdentifier: string
   calendarItemExternalIdentifier?: string
   title: string
@@ -129,7 +129,7 @@ export interface PlanningNativeExternalItem {
   lastModifiedAt: number
 }
 
-export interface PlanningNativeSyncIdentifiers {
+interface PlanningNativeSyncIdentifiers {
   calendarItemIdentifier?: string
   calendarItemExternalIdentifier?: string
 }

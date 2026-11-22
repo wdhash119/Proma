@@ -38,7 +38,7 @@ type PendingRequest = {
 
 type RuntimeRequestHandler = (request: AgentRuntimeRequest) => Promise<unknown>
 
-export interface AgentRuntimeClientOptions {
+interface AgentRuntimeClientOptions {
   sessionId: string
   entryPath?: string
   env?: NodeJS.ProcessEnv
@@ -46,7 +46,7 @@ export interface AgentRuntimeClientOptions {
   requestTimeoutMs?: number
 }
 
-export interface AgentRuntimeRequestOptions {
+interface AgentRuntimeRequestOptions {
   queryId?: string
   signal?: AbortSignal
   timeoutMs?: number

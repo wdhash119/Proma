@@ -284,7 +284,7 @@ function WorkspaceComponentSidebarEntry({ label, icon, active, onClick, badge }:
   )
 }
 
-export interface LeftSidebarProps {
+interface LeftSidebarProps {
   /** 可选固定宽度，默认使用 CSS 响应式宽度 */
   width?: number
   /** 拖拽过程中禁用 CSS transition，保证即时响应 */

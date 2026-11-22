@@ -1,6 +1,6 @@
 // 受管浏览器对所有 Agent 会话开放；会话来源只影响 UI 标识。
 
-export interface BrowserViewBounds {
+interface BrowserViewBounds {
   x: number
   y: number
   width: number
@@ -48,7 +48,7 @@ export interface BrowserTabState {
   trace: BrowserTraceItem[]
 }
 
-export interface BrowserTabSummary {
+interface BrowserTabSummary {
   tabId: string
   url: string
   title: string

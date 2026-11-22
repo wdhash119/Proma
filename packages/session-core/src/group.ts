@@ -19,7 +19,7 @@ import { normalizeThinkTagsInContentBlocks } from './thinking-tags'
 
 // ===== 辅助：从 SDKMessage 提取元数据 =====
 
-export interface MessageMeta {
+interface MessageMeta {
   createdAt?: number
 }
 

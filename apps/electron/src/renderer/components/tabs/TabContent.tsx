@@ -12,7 +12,7 @@ import { AgentView } from '@/components/agent'
 import { PreviewTabContent } from '@/components/diff/PreviewTabContent'
 import { TabErrorBoundary } from './TabErrorBoundary'
 
-export interface TabContentProps {
+interface TabContentProps {
   tabId: string
 }
 

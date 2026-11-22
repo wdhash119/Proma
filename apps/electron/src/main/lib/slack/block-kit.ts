@@ -15,7 +15,7 @@ function splitAtBoundary(text: string, maxLength: number): [string, string] {
 }
 
 /** Slack mrkdwn is intentionally small: preserve safe Markdown and normalize unsupported tables. */
-export function toSlackMrkdwn(markdown: string): string {
+function toSlackMrkdwn(markdown: string): string {
   return markdown
     .replace(/\r\n/g, '\n')
     .replace(/^\|(.+\|)\n\|(?:\s*:?-+:?\s*\|)+\s*$/gm, (_all, header: string) => `\`${header.trim()}\``)
@@ -23,7 +23,7 @@ export function toSlackMrkdwn(markdown: string): string {
     .replace(/__(.+?)__/gs, '_$1_')
 }
 
-export interface SlackRenderedMessage {
+interface SlackRenderedMessage {
   text: string
   blocks: SlackBlock[]
   truncated: boolean

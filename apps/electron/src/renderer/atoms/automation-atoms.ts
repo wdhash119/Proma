@@ -55,7 +55,7 @@ export interface AutomationDraft {
 }
 
 /** 表单视图状态（覆盖在中间内容区） */
-export interface AutomationFormState {
+interface AutomationFormState {
   open: boolean
   draft: AutomationDraft | null
 }
@@ -111,17 +111,6 @@ export function automationToDraft(a: Automation): AutomationDraft {
     active: a.active,
   }
 }
-
-/** 固定间隔选项（分钟） */
-export const AUTOMATION_INTERVAL_OPTIONS = [
-  { label: '每 5 分钟', value: 5 },
-  { label: '每 10 分钟', value: 10 },
-  { label: '每 30 分钟', value: 30 },
-  { label: '每 1 小时', value: 60 },
-  { label: '每 3 小时', value: 180 },
-  { label: '每 6 小时', value: 360 },
-  { label: '每 12 小时', value: 720 },
-] as const
 
 /** 星期选项（0=周日） */
 export const AUTOMATION_WEEKDAY_OPTIONS = [

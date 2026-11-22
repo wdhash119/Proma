@@ -46,7 +46,7 @@ interface ToolSdk {
 }
 
 /** 组装工具上下文所需的会话信息。 */
-export interface InstructionToolContextInput {
+interface InstructionToolContextInput {
   workspaceSlug?: string
   sessionId?: string
   agentCwd?: string

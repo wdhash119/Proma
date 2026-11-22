@@ -25,7 +25,7 @@ export interface ProjectMemoryContext {
   workspaceSlug: string
 }
 
-export interface ProjectMemoryPaths {
+interface ProjectMemoryPaths {
   /** 全局画像文件绝对路径。 */
   profile: string
   /** 项目记忆索引绝对路径。 */

@@ -75,7 +75,7 @@ function convertMetaToDefinition(meta: ChatToolMeta): ToolDefinition {
 // ===== 公开接口 =====
 
 /** 获取启用工具的返回结果 */
-export interface EnabledToolsResult {
+interface EnabledToolsResult {
   /** 合并后的工具定义列表 */
   tools: ToolDefinition[] | undefined
   /** 合并后的系统提示词追加 */

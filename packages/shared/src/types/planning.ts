@@ -1,11 +1,11 @@
 /** 本地任务与日程（Planning）类型。Todo 与日程分别持久化，Automation 保持独立。 */
 
 export type TodoStatus = 'open' | 'completed'
-export type TodoPriority = 'low' | 'medium' | 'high'
+type TodoPriority = 'low' | 'medium' | 'high'
 /** Todo 与日程分组独立存储；同名分组允许分别存在。 */
 export type PlanningGroupScope = 'todo' | 'calendar'
 export type PlanningReminderTargetType = 'todo' | 'calendar_event'
-export type PlanningReminderStatus = 'pending' | 'acknowledged' | 'completed'
+type PlanningReminderStatus = 'pending' | 'acknowledged' | 'completed'
 /** 标识提醒是否由目标计划时间自动生成，供改期时安全同步。 */
 export type PlanningReminderOrigin = 'manual' | 'todo_due_at'
 /** macOS EventKit 对应的两类受管目标。 */
@@ -85,7 +85,7 @@ export interface ConnectPlanningNativeConnectionInput {
   target: PlanningNativeSyncTarget
 }
 
-export interface PlanningNativeOrigin {
+interface PlanningNativeOrigin {
   connectionId: string
   targetTitle: string
   sourceTitle: string
@@ -208,7 +208,7 @@ export interface CalendarEventListQuery {
   limit?: number
 }
 
-export interface CreatePlanningReminderInput {
+interface CreatePlanningReminderInput {
   triggerAt: number
 }
 

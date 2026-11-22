@@ -1,4 +1,4 @@
-export interface TabBarActionLayout {
+interface TabBarActionLayout {
   scrollPaddingClassName: string
   shortcutPositionClassName: string
   panelPositionClassName: string

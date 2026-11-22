@@ -37,7 +37,7 @@ interface IndexedContentBlock {
   index: number
 }
 
-export type AssistantTurnRenderItem =
+type AssistantTurnRenderItem =
   | { type: 'block'; item: IndexedContentBlock }
   | {
       type: 'process-group'
@@ -111,7 +111,7 @@ function buildProcessGroupItems(blocks: SDKContentBlock[]): AssistantTurnRenderI
  * an already-externalized final text block. Delta updates replace changed block
  * objects immutably, so reference identity is enough to detect process changes.
  */
-export function stabilizeProcessBlockReferences(
+function stabilizeProcessBlockReferences(
   previous: SDKContentBlock[],
   next: SDKContentBlock[],
 ): SDKContentBlock[] {
@@ -158,7 +158,7 @@ export function buildProcessGroupToolNames(blocks: SDKContentBlock[]): string[] 
 
 type ProcessGroupDisplayMode = 'collapsed' | 'expanded'
 
-export function isProgressViewportAtBottom({
+function isProgressViewportAtBottom({
   clientHeight,
   scrollHeight,
   scrollTop,

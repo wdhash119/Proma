@@ -18,7 +18,7 @@ import type { ShellEnvResult } from '@proma/shared'
 
 const PATH_SEP = ';'
 
-export async function readRegistryValue(key: string, valueName: string): Promise<string | null> {
+async function readRegistryValue(key: string, valueName: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync('reg.exe', ['query', key, '/v', valueName], {
       encoding: 'utf-8',

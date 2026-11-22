@@ -36,7 +36,7 @@ export function getPreviewCandidateBasePaths(
 }
 
 /** Returns every absolute candidate represented by a preview file descriptor. */
-export function getPreviewFileCandidatePaths(file: PreviewFile, sessionPath?: string): string[] {
+function getPreviewFileCandidatePaths(file: PreviewFile, sessionPath?: string): string[] {
   if (isAbsoluteFilePath(file.filePath)) return [file.filePath]
 
   return getPreviewCandidateBasePaths(

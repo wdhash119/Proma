@@ -35,7 +35,7 @@ import { redactSensitiveLogText, redactSensitiveLogValue } from './bridge-log-re
 // ===== 接口定义 =====
 
 /** 平台适配器 — 各 Bridge 只需实现此接口 */
-export interface BridgePlatformAdapter {
+interface BridgePlatformAdapter {
   /** 发送纯文本回复。meta 是平台专属的上下文数据（如微信的 contextToken） */
   sendText(chatId: string, text: string, meta?: unknown): Promise<void>
 }
@@ -51,7 +51,7 @@ export interface BridgeAttachment {
 }
 
 /** 命令处理器配置 */
-export interface BridgeCommandHandlerConfig {
+interface BridgeCommandHandlerConfig {
   /** 平台名称，用于日志（如 '微信', '钉钉'） */
   platformName: string
   /** 平台适配器 */

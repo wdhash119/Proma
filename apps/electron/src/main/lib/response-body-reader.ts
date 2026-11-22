@@ -8,7 +8,7 @@
  * - charset 解析兼容 `charset="gbk"` / `charset='gbk'` 这类带引号写法。
  */
 
-export interface BoundedBodyResult {
+interface BoundedBodyResult {
   /** 保留下来的正文字节，最多 `maxBytes`。 */
   bytes: Uint8Array
   /** 是否因超过上限而截断。 */

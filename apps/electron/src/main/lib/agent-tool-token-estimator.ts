@@ -14,7 +14,7 @@ export const WRITE_CONTENT_TOKEN_THRESHOLD = 16_000
  * 覆盖区间：CJK 统一汉字、CJK 符号标点、全角形式、
  * 韩文音节、平假名、片假名、CJK 扩展 A/B。
  */
-export function isCjkCodePoint(cp: number): boolean {
+function isCjkCodePoint(cp: number): boolean {
   return (
     (cp >= 0x4E00 && cp <= 0x9FFF) ||   // CJK Unified Ideographs
     (cp >= 0x3000 && cp <= 0x303F) ||   // CJK Symbols and Punctuation

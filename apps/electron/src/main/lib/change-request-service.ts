@@ -8,7 +8,7 @@
 
 import { homedir } from 'node:os'
 import { BrowserWindow } from 'electron'
-import type { ChangeRequestBinding, ChangeRequestSnapshot, ChangeRequestsActionInput } from '@proma/shared'
+import type { ChangeRequestBinding, ChangeRequestsActionInput } from '@proma/shared'
 import { CHANGE_REQUESTS_IPC_CHANNELS, extractChangeRequestUrls, normalizeChangeRequestUrl, parseChangeRequestUrl } from '@proma/shared'
 import { getAgentSessionMeta, resolveAgentCwd } from './agent-session-manager'
 import { getAgentWorkspace } from './agent-workspace-manager'
@@ -399,5 +399,3 @@ export function disposeChangeRequestService(): void {
   scopeCache.clear()
   pendingCommands.clear()
 }
-
-export type { ChangeRequestSnapshot }

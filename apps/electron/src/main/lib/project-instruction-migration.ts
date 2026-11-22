@@ -61,7 +61,7 @@ Proma 已从受信任项目根加载以下 legacy \`CLAUDE.md\` 兼容来源；�
 // ===== 旧外层规则到项目 AGENTS.md 的受控迁移 =====
 
 /** Migrate 的合并提案：正文由 Agent 语义合并后提交，版本来自 Inspect。 */
-export interface InstructionMergeProposal {
+interface InstructionMergeProposal {
   targetRevision: string
   sources: Array<{ path: string; revision: string }>
   content: string

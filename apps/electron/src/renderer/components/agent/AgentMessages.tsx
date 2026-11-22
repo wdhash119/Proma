@@ -534,7 +534,7 @@ export function formatDuration(ms: number): string {
 }
 
 /** 构建 usage tooltip 多行文本 */
-export function buildUsageTooltip(durationMs: number, usage?: AgentEventUsage): string {
+function buildUsageTooltip(durationMs: number, usage?: AgentEventUsage): string {
   const lines: string[] = []
   lines.push(`耗时: ${formatDuration(durationMs)}`)
 

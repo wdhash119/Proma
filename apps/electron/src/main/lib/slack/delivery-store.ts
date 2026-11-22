@@ -1,6 +1,6 @@
 import { readJsonFileSafe, writeJsonFileAtomic } from '../safe-file'
 
-export type SlackDeliveryStatus = 'accepted' | 'running' | 'final-ready' | 'delivered' | 'consumed' | 'failed'
+type SlackDeliveryStatus = 'accepted' | 'running' | 'final-ready' | 'delivered' | 'consumed' | 'failed'
 
 export interface SlackDeliveryRecord {
   eventId: string

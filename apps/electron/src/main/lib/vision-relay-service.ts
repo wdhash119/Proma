@@ -27,7 +27,7 @@ const SUPPORTED_IMAGE_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
 }
 
-export type VisionRelayFailureCode =
+type VisionRelayFailureCode =
   | 'VISION_NOT_CONFIGURED'
   | 'VISION_ROUTE_UNAVAILABLE'
   | 'VISION_FILE_NOT_AUTHORIZED'
@@ -36,11 +36,11 @@ export type VisionRelayFailureCode =
   | 'VISION_PROVIDER_ERROR'
   | 'VISION_OUTPUT_INVALID'
 
-export type VisionRelayResult =
+type VisionRelayResult =
   | { ok: true; result: Record<string, unknown> }
   | { ok: false; code: VisionRelayFailureCode; message: string }
 
-export interface InspectImageInput {
+interface InspectImageInput {
   imagePath: string
   instruction?: string
   allowedRoots: string[]

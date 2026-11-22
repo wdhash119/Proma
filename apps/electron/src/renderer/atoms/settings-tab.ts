@@ -13,7 +13,7 @@ import { atom } from 'jotai'
 import type { TabType } from './tab-atoms'
 
 /** 全部设置标签页 ID；新增标签页时同步维护，供运行时校验回退使用。 */
-export const SETTINGS_TAB_IDS = [
+const SETTINGS_TAB_IDS = [
   'general',
   'channels',
   'computer-use',

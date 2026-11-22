@@ -4,16 +4,16 @@ import type {
   AgentStreamCompletePayload,
 } from '@proma/shared'
 
-export type AgentStreamCompletionDetails = Omit<
+type AgentStreamCompletionDetails = Omit<
   AgentStreamCompletePayload,
   'sessionId' | 'triggeredBy'
 >
 
-export interface AgentStreamCompleteTarget {
+interface AgentStreamCompleteTarget {
   send(channel: string, payload: AgentStreamCompletePayload): void
 }
 
-export function buildAgentStreamCompletePayload(
+function buildAgentStreamCompletePayload(
   run: Readonly<Pick<AgentSendInput, 'sessionId' | 'triggeredBy'> & { runGeneration?: number }>,
   details: AgentStreamCompletionDetails = {},
 ): AgentStreamCompletePayload {

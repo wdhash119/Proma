@@ -23,7 +23,7 @@ import type { BunRuntimeStatus, PlatformArch } from '@proma/shared'
  *
  * @returns 当前系统的平台架构组合
  */
-export function getCurrentPlatformArch(): PlatformArch {
+function getCurrentPlatformArch(): PlatformArch {
   const platform = process.platform as 'darwin' | 'linux' | 'win32'
   const arch = process.arch as 'arm64' | 'x64'
 
@@ -64,7 +64,7 @@ function getBunBinaryName(): string {
  *
  * @returns Bun 二进制路径，如果不存在返回 null
  */
-export function getBundledBunPath(): string | null {
+function getBundledBunPath(): string | null {
   if (!app.isPackaged) {
     return null
   }
@@ -87,7 +87,7 @@ export function getBundledBunPath(): string | null {
  *
  * @returns Bun 二进制路径，如果不存在返回 null
  */
-export function getVendorBunPath(): string | null {
+function getVendorBunPath(): string | null {
   if (app.isPackaged) {
     return null
   }
@@ -113,7 +113,7 @@ export function getVendorBunPath(): string | null {
  *
  * @returns Bun 二进制路径，如果未找到返回 null
  */
-export function getSystemBunPath(): string | null {
+function getSystemBunPath(): string | null {
   try {
     // 使用 which/where 命令查找 bun
     const command = process.platform === 'win32' ? 'where bun' : 'which bun'
@@ -142,7 +142,7 @@ export function getSystemBunPath(): string | null {
  * @param bunPath - Bun 二进制路径
  * @returns 版本号，如果无效返回 null
  */
-export function validateBunExecutable(bunPath: string): string | null {
+function validateBunExecutable(bunPath: string): string | null {
   if (!existsSync(bunPath)) {
     return null
   }

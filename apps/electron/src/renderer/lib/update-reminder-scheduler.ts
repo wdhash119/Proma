@@ -1,7 +1,7 @@
 /** 已下载更新的重复提醒间隔：每 4 小时一次。 */
-export const UPDATE_REMINDER_INTERVAL_MS = 4 * 60 * 60 * 1000
+const UPDATE_REMINDER_INTERVAL_MS = 4 * 60 * 60 * 1000
 
-export interface UpdateReminderSchedulerOptions {
+interface UpdateReminderSchedulerOptions {
   remind: (version: string) => void
   intervalMs?: number
   setIntervalFn?: (callback: () => void, intervalMs: number) => ReturnType<typeof setInterval>

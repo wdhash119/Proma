@@ -14,12 +14,12 @@ const SKILL_USAGE_FILE = 'skill-usage.json'
 /** 超过该天数未使用即视为「长期未用」。 */
 export const SKILL_UNUSED_DAYS = 30
 
-export interface SkillUsageEntry {
+interface SkillUsageEntry {
   lastUsedAt: number
   useCount: number
 }
 
-export interface SkillUsageSnapshot {
+interface SkillUsageSnapshot {
   version: 1
   skills: Record<string, SkillUsageEntry>
 }
@@ -92,7 +92,7 @@ export function recordSkillUsage(workspaceSlug: string, slugs: string[], now = D
   }
 }
 
-export interface SkillUsageLike {
+interface SkillUsageLike {
   slug: string
 }
 

@@ -301,7 +301,7 @@ export function BasePathsProvider({ basePaths, sessionId, children }: MessagePat
 }
 
 /** 仅在普通文本中转换旧引用，避免改写 inline code、fenced code 和缩进代码块。 */
-export function normalizeNamedReferenceDelimiters(markdown: string): string {
+function normalizeNamedReferenceDelimiters(markdown: string): string {
   const normalizeText = (text: string): string => text.replace(
     /(&(?:session|todo|calendar_event):[A-Za-z0-9-]+)~(\S+)/g,
     '$1::$2'
@@ -425,7 +425,7 @@ function MentionChip({ type, value }: { type: MentionType; value: string }): Rea
 
 // ----- remarkMentions：将 @file: /skill: #mcp: &session: &todo: &calendar_event: 转为 mention:// link 节点 -----
 
-export function remarkMentions() {
+function remarkMentions() {
   return (tree: MdastParent) => {
     walkMdastText(tree, (node, index, parent) => {
       const text = node.value
@@ -482,7 +482,7 @@ export function remarkMentions() {
 
 // ----- remarkPreserveBreaks：在 text 节点中将 \n 转为 break 节点（跳过代码块） -----
 
-export function remarkPreserveBreaks() {
+function remarkPreserveBreaks() {
   return (tree: MdastParent) => {
     walkMdastText(tree, (node, index, parent) => {
       const text = node.value
@@ -503,7 +503,7 @@ export function remarkPreserveBreaks() {
 }
 
 /** remark 插件函数签名 */
-export type RemarkPluginFn = () => (tree: MdastParent) => void
+type RemarkPluginFn = () => (tree: MdastParent) => void
 
 /**
  * 本轮「文件名 → 绝对路径」映射上下文 — 由 AssistantTurnRenderer 提供，作用域为单个 turn。

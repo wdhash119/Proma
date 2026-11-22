@@ -3,12 +3,12 @@ export interface MarkdownScrollPosition {
   left: number
 }
 
-export interface MarkdownEditorSelection {
+interface MarkdownEditorSelection {
   from: number
   to: number
 }
 
-export interface MarkdownSourceSelection {
+interface MarkdownSourceSelection {
   start: number
   end: number
 }
@@ -25,7 +25,7 @@ export interface MarkdownEditorViewState {
   sourceSelection: MarkdownSourceSelection | null
 }
 
-export interface MarkdownEditorScope {
+interface MarkdownEditorScope {
   filePath: string
   dirPath?: string
   gitRoot?: string
@@ -185,15 +185,6 @@ export function clearMarkdownEditorStateForSession(sessionId: string): void {
   for (const key of editorStateCache.keys()) {
     if (key.startsWith(prefix)) editorStateCache.delete(key)
   }
-}
-
-export function clearMarkdownEditorStateCache(): void {
-  for (const sessionId of editorSessionEpochs.keys()) {
-    editorSessionEpochs.set(sessionId, getMarkdownEditorStateSessionEpoch(sessionId) + 1)
-  }
-  editorStateCache.clear()
-  editorSaveQueue.clear()
-  editorSessionEpochs.clear()
 }
 
 export function enqueueMarkdownEditorSave<T>(

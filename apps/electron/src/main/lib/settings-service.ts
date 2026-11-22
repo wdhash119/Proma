@@ -13,7 +13,7 @@ import type { AppSettings } from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 
 
-export function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {
+function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {
   return isTerminalProfile(input) && getTerminalProfilesForPlatform('win32').includes(input)
     ? input
     : undefined

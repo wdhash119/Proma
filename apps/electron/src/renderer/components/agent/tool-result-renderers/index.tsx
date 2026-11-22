@@ -16,7 +16,7 @@ import { WebSearchResultRenderer } from './web-search-result'
 import { WebFetchResultRenderer } from './web-fetch-result'
 import { DefaultResultRenderer } from './default-result'
 
-export interface ToolResultRendererProps {
+interface ToolResultRendererProps {
   toolName: string
   input: Record<string, unknown>
   result: string

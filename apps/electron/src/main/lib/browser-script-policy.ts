@@ -1,13 +1,13 @@
-export const MAX_BROWSER_SCRIPT_CHARS = 20_000
-export const MAX_BROWSER_DOM_SELECTOR_CHARS = 1_000
-export const MAX_BROWSER_DOM_TEXT_CHARS = 10_000
-export const MAX_BROWSER_EXTRACT_CHARS = 50_000
-export const MAX_BROWSER_SCROLL_DELTA = 50_000
+const MAX_BROWSER_SCRIPT_CHARS = 20_000
+const MAX_BROWSER_DOM_SELECTOR_CHARS = 1_000
+const MAX_BROWSER_DOM_TEXT_CHARS = 10_000
+const MAX_BROWSER_EXTRACT_CHARS = 50_000
+const MAX_BROWSER_SCROLL_DELTA = 50_000
 
-export const BROWSER_DOM_ACTIONS = ['focus', 'fill', 'click', 'inspect'] as const
-export type BrowserDomAction = typeof BROWSER_DOM_ACTIONS[number]
-export type BrowserExtractFormat = 'text' | 'markdown'
-export type BrowserScrollPosition = 'top' | 'bottom'
+const BROWSER_DOM_ACTIONS = ['focus', 'fill', 'click', 'inspect'] as const
+type BrowserDomAction = typeof BROWSER_DOM_ACTIONS[number]
+type BrowserExtractFormat = 'text' | 'markdown'
+type BrowserScrollPosition = 'top' | 'bottom'
 
 export interface BrowserDomActionInput {
   action: BrowserDomAction
@@ -76,7 +76,7 @@ export function assertBrowserScript(script: string): void {
   if (script.length > MAX_BROWSER_SCRIPT_CHARS) throw new Error(`JavaScript 不能超过 ${MAX_BROWSER_SCRIPT_CHARS} 个字符。`)
 }
 
-export function assertBrowserDomAction(input: BrowserDomActionInput): void {
+function assertBrowserDomAction(input: BrowserDomActionInput): void {
   if (!BROWSER_DOM_ACTIONS.includes(input.action)) throw new Error('不支持的 DOM 操作。')
   assertSelector(input.selector, true)
   if (input.action === 'fill' && typeof input.text !== 'string') throw new Error('fill 操作需要 text。')

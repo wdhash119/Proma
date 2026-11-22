@@ -127,11 +127,6 @@ function scrollCacheKey(sessionId: string, filePath: string, scope = ''): string
   return `${sessionId}:${filePath}:${scope}`
 }
 
-/** 获取缓存的滚动位置 */
-export function getPreviewScrollPosition(sessionId: string, filePath: string, scope?: string): { top: number; left: number } | undefined {
-  return scrollPositionCache.get(scrollCacheKey(sessionId, filePath, scope))
-}
-
 /**
  * 清除指定 session 的预览缓存，供 useCloseTab 调用。
  */

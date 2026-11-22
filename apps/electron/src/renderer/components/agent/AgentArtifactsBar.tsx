@@ -11,7 +11,7 @@ import type { SessionArtifact } from '@proma/shared'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-export interface AgentArtifactsBarProps {
+interface AgentArtifactsBarProps {
   sessionId: string
   /** 流式结束后再刷新，避免每个 token 都读一次文件。 */
   streaming: boolean

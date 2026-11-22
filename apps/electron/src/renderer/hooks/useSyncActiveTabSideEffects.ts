@@ -21,7 +21,7 @@ import {
 } from '@/atoms/agent-atoms'
 import type { TabItem } from '@/atoms/tab-atoms'
 
-export type SyncActiveTabSideEffects = (newActiveTab: TabItem | null) => void
+type SyncActiveTabSideEffects = (newActiveTab: TabItem | null) => void
 
 export function useSyncActiveTabSideEffects(): SyncActiveTabSideEffects {
   const setAppMode = useSetAtom(appModeAtom)

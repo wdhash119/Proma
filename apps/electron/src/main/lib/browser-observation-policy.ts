@@ -1,6 +1,6 @@
-export const DEFAULT_BROWSER_OBSERVE_MAX_ELEMENTS = 240
-export const MAX_BROWSER_OBSERVE_MAX_ELEMENTS = 400
-export const MIN_BROWSER_OBSERVE_MAX_ELEMENTS = 20
+const DEFAULT_BROWSER_OBSERVE_MAX_ELEMENTS = 240
+const MAX_BROWSER_OBSERVE_MAX_ELEMENTS = 400
+const MIN_BROWSER_OBSERVE_MAX_ELEMENTS = 20
 
 const INTERACTIVE_ROLE_RATIO = 2 / 3
 
@@ -31,12 +31,12 @@ export function resolveBrowserObserveMaxElements(requested?: number): number {
   return Math.max(MIN_BROWSER_OBSERVE_MAX_ELEMENTS, Math.min(MAX_BROWSER_OBSERVE_MAX_ELEMENTS, Math.floor(requested)))
 }
 
-export function isInteractiveAxRole(role: string): boolean {
+function isInteractiveAxRole(role: string): boolean {
   return INTERACTIVE_AX_ROLES.has(role.toLowerCase())
 }
 
 /** contenteditable 等自定义编辑器不一定暴露为标准 textbox role。 */
-export function isInteractiveBrowserObservationCandidate(candidate: { role: string; editable?: boolean }): boolean {
+function isInteractiveBrowserObservationCandidate(candidate: { role: string; editable?: boolean }): boolean {
   return candidate.editable === true || isInteractiveAxRole(candidate.role)
 }
 

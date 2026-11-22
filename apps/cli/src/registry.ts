@@ -5,7 +5,7 @@ import type { ParsedArgs } from './args'
 import type { PathOptions } from './paths'
 import type { CommandExit } from './output'
 
-export interface CommandContext {
+interface CommandContext {
   args: ParsedArgs
   /** 从全局 flag 解析出的路径选项（--config-dir / --dev / PROMA_DEV）。 */
   pathOpts: PathOptions
@@ -13,7 +13,7 @@ export interface CommandContext {
   json: boolean
 }
 
-export interface Command {
+interface Command {
   name: string
   summary: string
   /** 一行用法示例（不含 "proma " 前缀）。 */

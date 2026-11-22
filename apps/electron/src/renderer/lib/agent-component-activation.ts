@@ -57,7 +57,7 @@ function getWorkspaceManagedFileComponent(path: string): WorkspaceComponentTab |
  * 将 Agent 的变更工具调用映射为应展示的项目级组件。
  * 仅匹配需要自动展示的增删改操作；Skills/MCP 配置变更不添加、打开或聚焦右侧 Tab。
  */
-export function getChangedWorkspaceComponentForTool(
+function getChangedWorkspaceComponentForTool(
   toolName: unknown,
   rawInput: unknown,
 ): WorkspaceComponentTab | null {

@@ -9,11 +9,6 @@
 export type Platform = 'darwin' | 'linux' | 'win32'
 
 /**
- * 支持的 CPU 架构
- */
-export type Architecture = 'arm64' | 'x64'
-
-/**
  * 平台-架构组合标识
  * 用于确定下载哪个 Bun 二进制文件
  */
@@ -234,7 +229,7 @@ export interface ResolvedFileUrl {
 }
 
 /** Office 文件内联预览类型 */
-export type OfficePreviewKind = 'document' | 'spreadsheet' | 'presentation'
+type OfficePreviewKind = 'document' | 'spreadsheet' | 'presentation'
 
 /** Office 文件内联预览结果 */
 export interface OfficePreviewResult {
@@ -261,14 +256,6 @@ export interface GitBashStatus {
   version: string | null
   /** 错误信息（如果不可用）*/
   error: string | null
-}
-
-/** 系统编辑器应用信息 */
-export interface EditorApp {
-  /** 显示名称，如 "Visual Studio Code" */
-  name: string
-  /** .app 路径，如 "/Applications/Visual Studio Code.app" */
-  path: string
 }
 
 /** 某个文件路径在本机系统中的默认打开应用信息 */

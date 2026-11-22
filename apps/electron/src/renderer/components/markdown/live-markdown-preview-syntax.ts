@@ -1,4 +1,4 @@
-export type InlineLiveMarkdownPreview =
+type InlineLiveMarkdownPreview =
   | { kind: 'math' | 'autolink'; from: number; to: number; content: string }
   | { kind: 'image'; from: number; to: number; src: string; alt: string; title: string }
 
@@ -39,11 +39,6 @@ export function findRawHtmlBlockEnd(lines: readonly string[], start: number): nu
     }
   }
   return null
-}
-
-/** Raw HTML must occupy a complete Markdown line before the live editor replaces it with a widget. */
-export function isStandaloneRawMarkdownHtml(line: string): boolean {
-  return findRawHtmlBlockEnd([line], 0) === 0
 }
 
 function isEscaped(source: string, offset: number): boolean {

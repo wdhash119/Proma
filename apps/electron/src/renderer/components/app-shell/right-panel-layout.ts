@@ -1,5 +1,5 @@
-export const RIGHT_PANEL_MAX_VIEWPORT_RATIO = 3 / 5
-export const MIN_MAIN_AREA_WIDTH = 320
+const RIGHT_PANEL_MAX_VIEWPORT_RATIO = 3 / 5
+const MIN_MAIN_AREA_WIDTH = 320
 
 export function getRightPanelMaxWidth(
   viewportWidth: number,

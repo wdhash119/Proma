@@ -31,7 +31,7 @@ const TONE_DOT: Record<Tone, string> = {
 }
 
 /** 把 PR 状态压成一句人能快速扫读的短语 + 颜色。 */
-export function describeChangeRequest(snapshot: ChangeRequestSnapshot | undefined): { label: string; tone: Tone } {
+function describeChangeRequest(snapshot: ChangeRequestSnapshot | undefined): { label: string; tone: Tone } {
   if (!snapshot) return { label: '等待状态', tone: 'muted' }
   if (snapshot.state === 'MERGED') return { label: '已合并', tone: 'ok' }
   if (snapshot.state === 'CLOSED') return { label: '已关闭', tone: 'muted' }
@@ -46,7 +46,7 @@ export function describeChangeRequest(snapshot: ChangeRequestSnapshot | undefine
   return { label: '待合并', tone: 'busy' }
 }
 
-export interface ChangeRequestBarProps {
+interface ChangeRequestBarProps {
   sessionId: string
 }
 

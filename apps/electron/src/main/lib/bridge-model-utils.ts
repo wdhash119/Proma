@@ -38,7 +38,7 @@ export function resolveModelByIndex(channel: Channel, index: number): ChannelMod
 }
 
 /** 解析当前绑定的渠道/模型展示信息，供 /now 使用 */
-export interface BindingModelDescription {
+interface BindingModelDescription {
   /** 渠道展示名（解析失败时为 channelId 原值或「未设置」） */
   channelName: string
   /** 模型展示名（解析失败时为 modelId 原值或「未设置」） */

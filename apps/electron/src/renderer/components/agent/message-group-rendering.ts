@@ -1,7 +1,7 @@
 import type { SDKMessage, SDKUserMessage } from '@proma/shared'
 import { groupIntoTurns, isUserInputMessage, type MessageGroup } from '@proma/session-core'
 
-export interface MessageGroupRenderCache {
+interface MessageGroupRenderCache {
   prefixLength: number
   prefixMessages: SDKMessage[]
   sessionModelId?: string
@@ -46,7 +46,7 @@ function canReuseMessageGroup(previous: MessageGroup, next: MessageGroup): boole
  * groupIntoTurns 每次都会创建新的 group/数组。复用内容未变的历史 group 引用，
  * 让 React.memo 可以跳过已完成回合的 Markdown、代码高亮和工具结果渲染。
  */
-export function stabilizeMessageGroups(previous: MessageGroup[], next: MessageGroup[]): MessageGroup[] {
+function stabilizeMessageGroups(previous: MessageGroup[], next: MessageGroup[]): MessageGroup[] {
   let changed = previous.length !== next.length
   const stable = next.map((group, index) => {
     const prior = previous[index]

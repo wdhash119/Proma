@@ -1,6 +1,6 @@
 import type { TranscriptTurn, TurnRole } from './transcript'
 
-export interface RenderMarkdownOptions {
+interface RenderMarkdownOptions {
   /** 文档标题用的会话 id。 */
   sessionId?: string
   /** 是否输出顶部标题与说明（默认 true）。截取片段时可设 false。 */

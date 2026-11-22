@@ -13,7 +13,7 @@
 
 import * as React from 'react'
 
-export const HOVER_POPOVER_CLOSE_DELAY = 150
+const HOVER_POPOVER_CLOSE_DELAY = 150
 
 /**
  * side="right" + sideOffset={8} 弹层的共用样式：
@@ -23,16 +23,16 @@ export const HOVER_POPOVER_CLOSE_DELAY = 150
 export const HOVER_POPOVER_CONTENT_CLASS
   = "relative before:absolute before:-left-2 before:top-0 before:h-full before:w-2 before:content-[''] data-[state=closed]:pointer-events-none"
 
-export type HoverPopoverOpenReason = 'hover' | 'pointer' | 'keyboard'
+type HoverPopoverOpenReason = 'hover' | 'pointer' | 'keyboard'
 
-export interface UseHoverPopoverOptions {
+interface UseHoverPopoverOptions {
   /** 受控开合；省略时由 hook 自己维护状态。 */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   closeDelay?: number
 }
 
-export interface HoverPopoverController {
+interface HoverPopoverController {
   open: boolean
   /** 传给 Radix Popover 的 onOpenChange，同时取消待执行的延迟关闭。 */
   onOpenChange: (open: boolean) => void

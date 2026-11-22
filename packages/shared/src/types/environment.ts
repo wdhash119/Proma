@@ -8,7 +8,7 @@ import type { Platform } from './runtime'
 /**
  * Node.js 检测结果
  */
-export interface NodeJsCheckResult {
+interface NodeJsCheckResult {
   /** 是否已安装 */
   installed: boolean
   /** 版本号 */
@@ -24,7 +24,7 @@ export interface NodeJsCheckResult {
 /**
  * Git 检测结果
  */
-export interface GitCheckResult {
+interface GitCheckResult {
   /** 是否已安装 */
   installed: boolean
   /** 版本号 */

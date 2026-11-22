@@ -9,7 +9,7 @@ import { focusedVaultFolderAtomFamily, getVaultSessionScope, selectedVaultFileAt
 import { ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import { cn } from '@/lib/utils'
 
-export interface TurnSkillUsageSummaryProps {
+interface TurnSkillUsageSummaryProps {
   inputMessage?: SDKUserMessage
   turnMessages: SDKMessage[]
   /** Avoid a second divider when another completion summary follows this section. */
@@ -123,7 +123,7 @@ function SkillUsageChip({ activation }: { activation: SkillActivation }): React.
   )
 }
 
-export function getTurnSkillActivations(
+function getTurnSkillActivations(
   turnMessages: SDKMessage[],
   inputMessage?: SDKUserMessage,
 ): SkillActivation[] {

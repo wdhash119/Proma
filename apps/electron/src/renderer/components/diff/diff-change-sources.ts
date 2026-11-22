@@ -1,6 +1,6 @@
 import type { ChangeSource } from '@proma/shared'
 
-export interface DiffChangeSourceEntry {
+interface DiffChangeSourceEntry {
   source?: ChangeSource
 }
 

@@ -94,7 +94,7 @@ export interface FeishuSessionMirrorSettings {
 // ===== Bridge 连接状态 =====
 
 /** 飞书 Bridge 连接状态 */
-export type FeishuBridgeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+type FeishuBridgeStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 /** 飞书 Bridge 状态详情 */
 export interface FeishuBridgeState {

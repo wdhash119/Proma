@@ -236,7 +236,7 @@ export function getVaultUserContext(sessionId: string): VaultUserContextSnapshot
   }
 }
 
-export interface VaultFileSystem {
+interface VaultFileSystem {
   listFiles(): VaultTreeEntry[]
   readFile(relativePath: string): VaultReadResult
   resolveMedia(noteRelativePath: string, src: string): string | null
@@ -250,7 +250,7 @@ export interface VaultFileSystem {
 }
 
 /** Creates a bounded filesystem facade for one already-authorized Vault root. */
-export function createVaultFileSystem(rootPath: string): VaultFileSystem {
+function createVaultFileSystem(rootPath: string): VaultFileSystem {
   const root = assertVaultRoot(rootPath)
 
   const listFiles = (): VaultTreeEntry[] => {
@@ -530,7 +530,7 @@ function parseVaultConfig(value: unknown): VaultConfig | null {
   }
 }
 
-export function getVaultConfig(): VaultConfig | null {
+function getVaultConfig(): VaultConfig | null {
   return parseVaultConfig(readJsonFileSafe<unknown>(getVaultConfigPath()))
 }
 
@@ -657,7 +657,7 @@ export function getAgentVaultRoots(): string[] {
   return [...roots.values()]
 }
 
-export function discoverObsidianVaultCandidates(): VaultCandidate[] {
+function discoverObsidianVaultCandidates(): VaultCandidate[] {
   const configPaths = platform() === 'darwin'
     ? [join(homedir(), 'Library', 'Application Support', 'obsidian', 'obsidian.json')]
     : platform() === 'win32'

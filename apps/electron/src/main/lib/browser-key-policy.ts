@@ -6,7 +6,7 @@
  * 默认行为（PageDown 滚动页面、Enter 提交表单、Tab 移动焦点等）。只传 key
  * 字符串时，Chromium 无法为非字符导航键推断虚拟键码，默认行为不会发生。
  */
-export interface BrowserNavigationKeyCode {
+interface BrowserNavigationKeyCode {
   /** DOM KeyboardEvent.code，对导航键通常与 key 一致 */
   code: string
   /** Windows 虚拟键码（VK_*），Chromium 依赖它识别非字符导航键 */
@@ -31,7 +31,7 @@ const NAVIGATION_KEY_CODES: Record<string, BrowserNavigationKeyCode> = {
 
 const MAX_BROWSER_TEXT_LENGTH = 10_000
 
-export type BrowserPressAction =
+type BrowserPressAction =
   | { kind: 'key'; key: string; code: string; windowsVirtualKeyCode: number }
   | { kind: 'text'; text: string }
 

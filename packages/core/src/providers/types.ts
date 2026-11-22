@@ -24,7 +24,7 @@ export interface ImageAttachmentData {
  * 由 Electron 层注入，负责从磁盘读取附件 base64 数据。
  * core 层不直接访问文件系统。
  */
-export type ImageAttachmentReader = (attachments?: FileAttachment[]) => ImageAttachmentData[]
+type ImageAttachmentReader = (attachments?: FileAttachment[]) => ImageAttachmentData[]
 
 // ===== Tool Use（Function Calling）=====
 
@@ -109,48 +109,48 @@ export type ContinuationMessage =
 // ===== 流式事件 =====
 
 /** 文本增量事件 */
-export interface StreamChunkEvent {
+interface StreamChunkEvent {
   type: 'chunk'
   delta: string
 }
 
 /** 推理增量事件 */
-export interface StreamReasoningEvent {
+interface StreamReasoningEvent {
   type: 'reasoning'
   delta: string
 }
 
 /** 推理签名事件（Anthropic 协议的 signature_delta） */
-export interface StreamReasoningSignatureEvent {
+interface StreamReasoningSignatureEvent {
   type: 'reasoning_signature'
   signature: string
 }
 
 /** 推理块开始事件（content_block_start with type=thinking） */
-export interface StreamReasoningBlockStartEvent {
+interface StreamReasoningBlockStartEvent {
   type: 'reasoning_block_start'
 }
 
 /** 推理块结束事件（content_block_stop 对应 thinking 块） */
-export interface StreamReasoningBlockStopEvent {
+interface StreamReasoningBlockStopEvent {
   type: 'reasoning_block_stop'
 }
 
 /** 流式错误事件 */
-export interface StreamErrorEvent {
+interface StreamErrorEvent {
   type: 'error'
   error: string
 }
 
 /** 流式完成事件 */
-export interface StreamDoneEvent {
+interface StreamDoneEvent {
   type: 'done'
   /** 停止原因：'tool_use' 表示需要执行工具后继续 */
   stopReason?: 'end_turn' | 'tool_use' | string
 }
 
 /** 工具调用开始事件 */
-export interface StreamToolCallStartEvent {
+interface StreamToolCallStartEvent {
   type: 'tool_call_start'
   toolCallId: string
   toolName: string
@@ -159,7 +159,7 @@ export interface StreamToolCallStartEvent {
 }
 
 /** 工具调用参数增量事件 */
-export interface StreamToolCallDeltaEvent {
+interface StreamToolCallDeltaEvent {
   type: 'tool_call_delta'
   /** 为空时由 reader 按 metadata / 当前工具调用关联 */
   toolCallId: string

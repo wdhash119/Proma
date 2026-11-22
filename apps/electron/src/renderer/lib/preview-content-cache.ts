@@ -1,7 +1,7 @@
 import type { FilePreviewMetadata } from '@proma/shared'
 
 /** 单份文件预览的已解析内容，按 session、路径、version 与解析范围缓存。 */
-export interface PreviewContentCacheEntry {
+interface PreviewContentCacheEntry {
   oldContent: string
   newContent: string
   /** 非文本文件预览数据 */

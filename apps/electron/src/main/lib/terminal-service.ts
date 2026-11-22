@@ -34,7 +34,7 @@ const agentTerminals = new Map<string, AgentTerminalRecord>()
 const MAX_REPLAY_CHARS = 1_000_000
 let initialized = false
 
-export interface AgentTerminalRecord {
+interface AgentTerminalRecord {
   sessionId: string
   terminalId: string
   title: string

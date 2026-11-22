@@ -19,10 +19,10 @@ export interface VaultScrollAnchor {
   lineOffset: number
 }
 
-export const VAULT_SCROLL_SETTLE_MS = 700
-export const VAULT_SCROLL_MAX_RETRIES = 4
-export const VAULT_SCROLL_OFFSET_TOLERANCE_PX = 2
-export const MAX_VAULT_SCROLL_ANCHORS = 200
+const VAULT_SCROLL_SETTLE_MS = 700
+const VAULT_SCROLL_MAX_RETRIES = 4
+const VAULT_SCROLL_OFFSET_TOLERANCE_PX = 2
+const MAX_VAULT_SCROLL_ANCHORS = 200
 
 // Insertion order is recency order. Reads refresh an entry; writes replace it.
 // This bounds renderer-lifetime memory while retaining recently visited notes.
@@ -48,15 +48,6 @@ export function writeVaultScrollAnchor(key: string, anchor: VaultScrollAnchor): 
     if (oldestKey === undefined) break
     anchorStore.delete(oldestKey)
   }
-}
-
-export function clearVaultScrollAnchors(): void {
-  anchorStore.clear()
-}
-
-/** Snapshot for deterministic tests and explicit local inspection. */
-export function dumpVaultScrollAnchors(): Record<string, VaultScrollAnchor> {
-  return Object.fromEntries(Array.from(anchorStore, ([key, anchor]) => [key, copyAnchor(anchor)]))
 }
 
 /**

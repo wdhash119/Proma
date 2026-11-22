@@ -9,7 +9,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-export interface MentionListProps<T> {
+interface MentionListProps<T> {
   items: T[]
   onSelect: (item: T) => void
   /** 空列表占位文字 */

@@ -26,7 +26,7 @@ export const markdownFontSizeAtom = atom<MarkdownFontSize>(DEFAULT_MARKDOWN_FONT
  * 渲染组件通过 var(--md-preview-font-size) 读取，inline code / 代码块用
  * em 相对单位跟随缩放。
  */
-export function applyMarkdownFontSizeToDOM(size: MarkdownFontSize): void {
+function applyMarkdownFontSizeToDOM(size: MarkdownFontSize): void {
   const px = FONT_SIZE_PX[size]
   document.documentElement.style.setProperty('--md-preview-font-size', `${px}px`)
 }

@@ -17,7 +17,7 @@ import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import { Spinner } from '@/components/ui/spinner'
 import { TabPreviewPanel } from './TabPreviewPanel'
 
-export interface TabBarItemProps {
+interface TabBarItemProps {
   id: string
   type: TabType
   title: string

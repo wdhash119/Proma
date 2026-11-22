@@ -1,7 +1,7 @@
 import { existsSync, statSync, unlinkSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-export const DEV_BUNDLE_RELATIVE_PATHS = [
+const DEV_BUNDLE_RELATIVE_PATHS = [
   'dist/main.cjs',
   'dist/agent-runtime.cjs',
   'dist/preload.cjs',
@@ -29,7 +29,7 @@ function isReadyBundle(path: string): boolean {
 /**
  * 清理上一轮构建产物，确保 readiness 只会由本轮 esbuild watcher 满足。
  */
-export function prepareDevBundles(root = electronRoot): void {
+function prepareDevBundles(root = electronRoot): void {
   for (const relativePath of DEV_BUNDLE_RELATIVE_PATHS) {
     const bundlePath = resolve(root, relativePath)
     if (existsSync(bundlePath)) unlinkSync(bundlePath)
@@ -39,7 +39,7 @@ export function prepareDevBundles(root = electronRoot): void {
 /**
  * 等待三个 watcher 完成首次构建，再允许 electronmon 启动 Electron。
  */
-export async function waitForDevBundles(options: WaitForDevBundlesOptions = {}): Promise<void> {
+async function waitForDevBundles(options: WaitForDevBundlesOptions = {}): Promise<void> {
   const root = options.root ?? electronRoot
   const timeoutMs = options.timeoutMs ?? 30_000
   const pollIntervalMs = options.pollIntervalMs ?? 25

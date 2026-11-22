@@ -7,7 +7,7 @@
 /**
  * 代理模式
  */
-export type ProxyMode = 'system' | 'manual'
+type ProxyMode = 'system' | 'manual'
 
 /**
  * 全局代理配置

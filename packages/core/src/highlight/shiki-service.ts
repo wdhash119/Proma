@@ -4,9 +4,8 @@
  * 提供懒加载的 Shiki 高亮器单例，支持按需加载语言。
  * 纯逻辑层，不依赖 React。
  *
- * 三套 API：
+ * 两套 API：
  * - highlightCode()      异步 HTML，首次初始化 + 按需加载语言
- * - highlightCodeSync()  同步 HTML，初始化完成后零延迟
  * - highlightToTokens()  同步 token 结构，适合逐行 React 渲染（流式最优）
  */
 
@@ -51,7 +50,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 }
 
 /** 高亮选项 */
-export interface HighlightOptions {
+interface HighlightOptions {
   /** 代码内容 */
   code: string
   /** 语言标识（如 'typescript'、'py'、'bash'） */
@@ -61,7 +60,7 @@ export interface HighlightOptions {
 }
 
 /** 高亮结果（HTML 字符串） */
-export interface HighlightResult {
+interface HighlightResult {
   /** Shiki 渲染的 HTML 字符串 */
   html: string
   /** 实际使用的语言（经过别名解析和 fallback） */
@@ -121,11 +120,6 @@ let cachedHighlighter: ShikiHighlighter | null = null
 
 /** 高亮器就绪订阅者，初始化完成后一次性触发并清空 */
 const readyListeners = new Set<() => void>()
-
-/** 是否已完成首次初始化（同步查询用） */
-export function isHighlighterReady(): boolean {
-  return cachedHighlighter !== null
-}
 
 /**
  * 订阅高亮器就绪事件
@@ -228,27 +222,9 @@ export async function highlightCode(options: HighlightOptions): Promise<Highligh
 }
 
 /**
- * 同步高亮代码，返回 HTML 字符串
- * 返回 null 表示高亮器尚未初始化
- */
-export function highlightCodeSync(options: HighlightOptions): HighlightResult | null {
-  if (!cachedHighlighter) return null
-
-  const { code, language, theme = 'github-dark' } = options
-  const lang = resolveLoadedLanguage(cachedHighlighter, language)
-
-  const html = cachedHighlighter.codeToHtml(code, {
-    lang: lang as BundledLanguage,
-    theme: theme as BundledTheme,
-  })
-
-  return { html, language: lang }
-}
-
-/**
  * 同步高亮代码，返回按行 token 结构（适合 React 逐行渲染，流式最优）
  *
- * 相比 highlightCodeSync 返回 HTML 字符串：
+ * 相比 highlightCode 返回 HTML 字符串：
  * - 返回结构化 token 数据，由调用方渲染为 React 元素
  * - 配合稳定 key 实现增量 DOM 更新，流式输出只更新变化的行
  * - 返回 null 表示高亮器尚未初始化

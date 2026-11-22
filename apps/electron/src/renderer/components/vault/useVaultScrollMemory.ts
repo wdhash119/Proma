@@ -9,7 +9,7 @@ import {
 } from './vault-scroll-memory'
 
 /** Reads the document anchor that is currently at the top of the viewport. */
-export function readVaultScrollAnchorFromView(view: EditorView): VaultScrollAnchor | null {
+function readVaultScrollAnchorFromView(view: EditorView): VaultScrollAnchor | null {
   const scroller = view.scrollDOM
   const rect = scroller.getBoundingClientRect()
   if (rect.height === 0) return null
@@ -29,13 +29,13 @@ interface UseVaultScrollMemoryOptions {
   storageKey: string
 }
 
-export interface VaultScrollMemoryView {
+interface VaultScrollMemoryView {
   readonly scrollDOM: HTMLElement
   readonly state: EditorView['state']
   dispatch: EditorView['dispatch']
 }
 
-export interface VaultScrollMemoryRuntime {
+interface VaultScrollMemoryRuntime {
   now: () => number
   requestFrame: (callback: FrameRequestCallback) => number
   cancelFrame: (handle: number) => void
@@ -60,7 +60,7 @@ const browserRuntime: VaultScrollMemoryRuntime = {
  * exercise the actual event/timer/dispatch contract without pretending a
  * headless DOM has CodeMirror layout measurements.
  */
-export function attachVaultScrollMemory(
+function attachVaultScrollMemory(
   view: VaultScrollMemoryView,
   storageKey: string,
   runtime: VaultScrollMemoryRuntime = browserRuntime,

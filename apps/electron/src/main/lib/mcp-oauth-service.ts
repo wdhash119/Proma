@@ -126,18 +126,18 @@ async function fetchJson<T>(url: string, message: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function normalizeMcpResource(serverUrl: string): string {
+function normalizeMcpResource(serverUrl: string): string {
   return new URL(serverUrl).toString()
 }
 
-export function protectedResourceMetadataUrl(serverUrl: string): string {
+function protectedResourceMetadataUrl(serverUrl: string): string {
   const resource = new URL(serverUrl)
   const resourcePath = resource.pathname.replace(/\/$/, '')
   return new URL(`/.well-known/oauth-protected-resource${resourcePath}`, resource.origin).toString()
 }
 
 /** RFC 8414 inserts the issuer path after the host-level well-known prefix. */
-export function authorizationServerMetadataUrl(authorizationServer: string): string {
+function authorizationServerMetadataUrl(authorizationServer: string): string {
   const issuer = new URL(authorizationServer)
   const issuerPath = issuer.pathname === '/' ? '' : issuer.pathname
   return new URL(`/.well-known/oauth-authorization-server${issuerPath}`, issuer.origin).toString()
@@ -278,7 +278,7 @@ async function startCallbackServer(state: string): Promise<{ redirectUri: string
   }
 }
 
-export async function exchangeAuthorizationCode(input: {
+async function exchangeAuthorizationCode(input: {
   tokenEndpoint: string
   clientId: string
   redirectUri: string
@@ -418,7 +418,7 @@ export function deleteMcpCredential(workspaceSlug: string, serverName: string): 
   writeJsonFileAtomic(getMcpOAuthCredentialsPath(), file)
 }
 
-export async function refreshCredential(credential: McpOAuthCredential): Promise<McpOAuthCredential> {
+async function refreshCredential(credential: McpOAuthCredential): Promise<McpOAuthCredential> {
   if (!credential.refreshToken) throw new Error('MCP OAuth 凭据已过期，请重新授权')
   const response = await fetch(credential.tokenEndpoint, {
     method: 'POST',

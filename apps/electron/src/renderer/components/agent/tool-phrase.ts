@@ -57,7 +57,7 @@ export function shouldShowToolKindLabel(
 }
 
 /** 工具短语 */
-export interface ToolPhrase {
+interface ToolPhrase {
   /** 完成态/收起态短语，如 "读取 foo.ts 第 10-60 行" */
   label: string
   /** Loading 态短语，如 "正在读取 foo.ts..." */

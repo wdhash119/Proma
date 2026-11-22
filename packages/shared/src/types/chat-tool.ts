@@ -9,7 +9,7 @@
 // ===== 工具元数据 =====
 
 /** 工具参数定义（简化格式，供用户/Agent 创建） */
-export interface ChatToolParam {
+interface ChatToolParam {
   /** 参数名 */
   name: string
   /** 参数类型 */

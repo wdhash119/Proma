@@ -2,7 +2,7 @@ import type { AgentThinkingLevel } from '../types/agent'
 
 export type GeminiThinkingLevel = Extract<AgentThinkingLevel, 'minimal' | 'low' | 'medium' | 'high'>
 
-export interface GeminiModelCapability {
+interface GeminiModelCapability {
   contextWindow: number
   maxOutputTokens: number
   thinkingLevels: readonly GeminiThinkingLevel[]

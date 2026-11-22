@@ -17,7 +17,7 @@ import { redactSensitiveLogValue } from './bridge-log-redaction'
  */
 
 /** Bridge 注册信息 */
-export interface BridgeRegistration {
+interface BridgeRegistration {
   /** 显示名称，用于日志 */
   name: string
   /** 判断是否应在启动时自动连接（检查配置是否完整/启用） */
@@ -32,7 +32,7 @@ export interface BridgeRegistration {
   recover?: () => Promise<void>
 }
 
-export interface BridgeSelfHealingOptions {
+interface BridgeSelfHealingOptions {
   /** 定时健康检查间隔；传 0 可关闭定时检查 */
   healthCheckIntervalMs?: number
 }
@@ -108,7 +108,7 @@ export function stopBridgeSelfHealing(): void {
 }
 
 /** 立即恢复需要自愈的 Bridge。force=true 时会重启所有自动启用的 Bridge。 */
-export async function recoverAllBridges(
+async function recoverAllBridges(
   reason: string,
   options: { force?: boolean } = {},
 ): Promise<void> {

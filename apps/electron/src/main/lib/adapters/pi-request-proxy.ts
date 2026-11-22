@@ -60,7 +60,7 @@ export function installPiRequestProxyFetch(): void {
   }) as typeof globalThis.fetch
 }
 
-export interface PiRequestProxyOptions {
+interface PiRequestProxyOptions {
   proxyUrl?: string
   noProxy?: string
   httpIdleTimeoutMs?: number

@@ -67,7 +67,7 @@ let activeLoginAbort: AbortController | undefined
  * Proma 的代理 fetch 重新接回该流程；本 service 只负责与公开 ModelRuntime 交互。
  */
 
-export interface CodexLoginCallbacks {
+interface CodexLoginCallbacks {
   /** SDK 生成授权 URL 后回调，用于（除自动开浏览器外）通知渲染层展示 URL。 */
   onAuthUrl?: (url: string) => void
   /** Pi 生成 device code 后回调，供 UI 展示、复制或交给另一台设备扫码。 */
@@ -76,7 +76,7 @@ export interface CodexLoginCallbacks {
   onProgress?: (message: string) => void
 }
 
-export interface CodexLoginOptions extends CodexLoginCallbacks {
+interface CodexLoginOptions extends CodexLoginCallbacks {
   /** 默认系统浏览器；网络受限时可选择 RFC 8628 device-code 流程。 */
   method?: CodexOAuthLoginMethod
 }

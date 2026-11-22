@@ -38,7 +38,7 @@ const STARTUP_TIMEOUT_MS = 10_000
  * 一个 utility process 管理全部本地 PTY：与 Agent runtime 隔离，又不会为每个 Tab
  * 创建一个 Node 进程。Renderer 始终经由此 client 接收已批处理的输出。
  */
-export class TerminalRuntimeClient {
+class TerminalRuntimeClient {
   private runtimeProcess: UtilityProcess | undefined
   private port: RuntimePort | undefined
   private starting: Promise<void> | undefined

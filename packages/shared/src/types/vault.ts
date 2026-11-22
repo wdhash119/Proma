@@ -32,7 +32,7 @@ export interface VaultFileEntry {
 }
 
 /** A visible non-hidden directory within the authorized Vault root. */
-export interface VaultFolderEntry {
+interface VaultFolderEntry {
   kind: 'folder'
   relativePath: string
   name: string

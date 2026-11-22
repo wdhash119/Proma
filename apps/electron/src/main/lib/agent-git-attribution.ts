@@ -10,25 +10,25 @@
  */
 
 /** 默认开启：对齐 Claude Code / Cursor「默认归因 + 可关」策略 */
-export const DEFAULT_GIT_ATTRIBUTION_ENABLED = true
+const DEFAULT_GIT_ATTRIBUTION_ENABLED = true
 
 /** 官方站点（商业版 / 产品主页） */
-export const PROMA_OFFICIAL_URL = 'https://proma.cool'
+const PROMA_OFFICIAL_URL = 'https://proma.cool'
 
 /** 开源仓库完整地址 */
-export const PROMA_GITHUB_URL = 'https://github.com/proma-ai/Proma'
+const PROMA_GITHUB_URL = 'https://github.com/proma-ai/Proma'
 
 /** Commit trailer（标准 git trailer，不进入 GitHub co-author 列表） */
-export const PROMA_COMMIT_TRAILER = 'Made-with: Proma'
+const PROMA_COMMIT_TRAILER = 'Made-with: Proma'
 
 /**
  * PR / MR 描述底部标识。
  * 含官方站 + 开源仓库完整链接，便于推广与引流。
  */
-export const PROMA_PR_ATTRIBUTION =
+const PROMA_PR_ATTRIBUTION =
   `Made with [Proma](${PROMA_OFFICIAL_URL}) · [GitHub](${PROMA_GITHUB_URL})`
 
-export interface GitAttributionConfig {
+interface GitAttributionConfig {
   /** 是否启用；undefined 视为默认开启 */
   enabled?: boolean
 }

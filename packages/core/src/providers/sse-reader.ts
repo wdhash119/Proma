@@ -15,7 +15,7 @@ import type { ProviderAdapter, ProviderRequest, StreamEventCallback, ThinkingBlo
 // ===== 流式请求 =====
 
 /** streamSSE 的输入选项 */
-export interface StreamSSEOptions {
+interface StreamSSEOptions {
   /** 构建好的 HTTP 请求配置 */
   request: ProviderRequest
   /** 供应商适配器（用于解析 SSE 行） */
@@ -31,7 +31,7 @@ export interface StreamSSEOptions {
 }
 
 /** streamSSE 的返回结果 */
-export interface StreamSSEResult {
+interface StreamSSEResult {
   /** 累积的完整文本内容 */
   content: string
   /** 累积的推理内容（扁平文本，所有思考块拼接） */

@@ -15,13 +15,13 @@ import { dirname } from 'node:path'
 import { writeTextFileAtomic } from './safe-file'
 
 /** CDN 根地址；清单固定位于 `${CDN}/latest.yml`。 */
-export const CDN = 'https://cdn.proma.cool/cua-driver'
+const CDN = 'https://cdn.proma.cool/cua-driver'
 
 /** 一天毫秒数，用于检查节流与抖动范围。 */
 export const DAY = 24 * 60 * 60 * 1000
 
 /** 清单体积上限，防止异常响应撑爆内存。 */
-export const MAX_MANIFEST_BYTES = 64 * 1024
+const MAX_MANIFEST_BYTES = 64 * 1024
 
 /** 单个资产体积上限（1GB），超出即视为清单异常。 */
 export const MAX_ASSET_BYTES = 1024 * 1024 * 1024
@@ -37,10 +37,10 @@ export const LABELS = [
 ] as const
 
 /** 平台标签字面量类型。 */
-export type CuaAssetLabel = (typeof LABELS)[number]
+type CuaAssetLabel = (typeof LABELS)[number]
 
 /** 清单中的单个资产条目。 */
-export interface CuaCdnAsset {
+interface CuaCdnAsset {
   label: CuaAssetLabel
   name: string
   /** 小写十六进制 SHA-256。 */

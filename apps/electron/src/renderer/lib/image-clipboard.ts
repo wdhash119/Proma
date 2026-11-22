@@ -1,4 +1,4 @@
-export interface ImageClipboardResult {
+interface ImageClipboardResult {
   success: boolean
   message?: string
 }

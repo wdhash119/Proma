@@ -48,7 +48,7 @@ export function stripLineCol(filePath: string): { path: string; suffix: string }
 }
 
 /** 与主进程 file-preview-service.ts 的绝对路径规则保持一致。 */
-export function isAbsolutePreviewPath(filePath: string): boolean {
+function isAbsolutePreviewPath(filePath: string): boolean {
   return filePath.startsWith('/') || UNC_PATH_RE.test(filePath) || WIN_DRIVE_RE.test(filePath) || HOME_DIRECTORY_RE.test(filePath)
 }
 
@@ -102,7 +102,7 @@ export function isLocalFileReference(text: string): boolean {
   return isAbsoluteFilePath(text) || isRelativeFilePath(text)
 }
 
-export interface FilePathDisplayInput {
+interface FilePathDisplayInput {
   originalPath: string
   resolvedPath?: string | null
   lineColSuffix?: string

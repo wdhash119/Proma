@@ -28,7 +28,7 @@ export function resolveAgentTerminalCwd(input: {
   return realCwd
 }
 
-export function isPathWithin(candidate: string, root: string): boolean {
+function isPathWithin(candidate: string, root: string): boolean {
   const path = resolve(candidate)
   const parent = resolve(root)
   const relation = relative(parent, path)

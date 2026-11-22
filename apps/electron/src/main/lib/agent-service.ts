@@ -135,7 +135,7 @@ function getStreamRouteTargets(): Map<string, WebContents> {
   return targets
 }
 
-export function rebindActiveAgentStreams(webContents: WebContents): AgentActiveSessionSnapshot[] {
+function rebindActiveAgentStreams(webContents: WebContents): AgentActiveSessionSnapshot[] {
   const snapshots = orchestrator.listActiveSessionSnapshots()
   for (const snapshot of snapshots) {
     streamForwarder.clear(snapshot.sessionId)
@@ -258,7 +258,7 @@ export function setVisibleAgentSession(webContents: WebContents, sessionId: stri
 /** 仅主进程内部使用的单次运行扩展，绝不经 IPC 序列化。 */
 type AgentRunInput = AgentSendInput & { runGeneration?: number }
 
-export interface AgentRunExtensions {
+interface AgentRunExtensions {
   piCustomTools?: ToolDefinition[]
 }
 
@@ -618,7 +618,7 @@ export async function updateAgentPermissionMode(sessionId: string, mode: PromaPe
  *
  * 使用 'now' 优先级立即注入 SDK 并持久化。
  */
-export async function queueAgentMessage(
+async function queueAgentMessage(
   input: AgentQueueMessageInput,
   _webContents: WebContents,
 ): Promise<string> {

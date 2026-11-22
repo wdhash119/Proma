@@ -4,9 +4,9 @@
  * 避免工具已执行成功后因持久化结果失败而中断 Agent turn。
  */
 
-export type PiToolResultJson = null | boolean | number | string | PiToolResultJson[] | { [key: string]: PiToolResultJson }
+type PiToolResultJson = null | boolean | number | string | PiToolResultJson[] | { [key: string]: PiToolResultJson }
 
-export interface SerializedPiToolResultPayload {
+interface SerializedPiToolResultPayload {
   details: PiToolResultJson
   text: string
 }

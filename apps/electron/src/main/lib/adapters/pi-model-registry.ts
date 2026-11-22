@@ -46,7 +46,7 @@ type PiModelCost = PiCatalogModel['cost']
 type PiRequestHeaders = Record<string, string>
 type PiCatalogModelPatch = Pick<PiCatalogModel, 'id'> & Partial<PiCatalogModel>
 
-export interface PiModelDefaults {
+interface PiModelDefaults {
   api: Api
   reasoning: boolean
   thinkingLevelMap?: PiCatalogModel['thinkingLevelMap']
@@ -82,7 +82,7 @@ const UNSUPPORTED_CODEX_MODEL_PREFIXES = [
  * reasoning 档位由 shared reasoning profile 管理；未被 Codex 标记的 Pro/Nano SKU
  * 仍保留 catalog 的上下文窗口。
  */
-export function getCodexAlignedGPT5Capabilities(modelId: string | undefined): Pick<PiModelDefaults, 'contextWindow'> | undefined {
+function getCodexAlignedGPT5Capabilities(modelId: string | undefined): Pick<PiModelDefaults, 'contextWindow'> | undefined {
   const contextWindow = inferCodexAlignedGPT5ContextWindow(modelId)
   if (contextWindow === undefined) return undefined
   return { contextWindow }
@@ -152,7 +152,7 @@ function compilePiReasoningCapabilities(
  * nevertheless rejects legacy `thinking: { type: 'enabled' }`; recognize the whole
  * Fable 5 family here to keep the request on Pi's adaptive + effort path.
  */
-export function shouldForcePiAdaptiveThinking(
+function shouldForcePiAdaptiveThinking(
   api: Api,
   catalogModel: { api: Api, compat?: unknown } | undefined,
   modelId?: string,
@@ -173,14 +173,14 @@ type CodexRuntimeCredential = CodexOAuthCredentials & {
 }
 
 /** Pi 内置 Codex provider 所需的最小模型与 OAuth 输入。 */
-export interface CodexModelInput {
+interface CodexModelInput {
   model?: string
   codexOAuthCredentials?: CodexOAuthCredentials
   onCodexOAuthCredentialsRefreshed?: (credentials: CodexOAuthCredentials) => void | Promise<void>
 }
 
 /** Pi 内置 xAI provider 所需的最小模型与 OAuth 输入。 */
-export interface XaiModelInput {
+interface XaiModelInput {
   channelId?: string
   model?: string
   xaiOAuthCredentials?: XaiOAuthCredentials
@@ -188,7 +188,7 @@ export interface XaiModelInput {
 }
 
 /** Pi 内置 GitHub Copilot provider 所需的最小模型与 OAuth 输入。 */
-export interface GithubCopilotModelInput {
+interface GithubCopilotModelInput {
   model?: string
   githubCopilotOAuthCredentials?: GithubCopilotOAuthCredentials
   onGithubCopilotOAuthCredentialsRefreshed?: (credentials: GithubCopilotOAuthCredentials) => void | Promise<void>
@@ -344,7 +344,7 @@ const DEEPSEEK_V4_FLASH_VISION_MODEL_IDS = new Set([
 ])
 
 /** 判断模型是否已确认支持原生图片输入。 */
-export function supportsPiNativeImageInput(modelId: string | undefined): boolean {
+function supportsPiNativeImageInput(modelId: string | undefined): boolean {
   const normalized = stripLegacyAgentSdkContextSuffix(modelId)?.trim().toLowerCase()
   return normalized !== undefined && DEEPSEEK_V4_FLASH_VISION_MODEL_IDS.has(normalized)
 }
@@ -487,7 +487,7 @@ function normalizePiApi(provider: ProviderType): Api {
   }
 }
 
-export function resolvePiApi(provider: ProviderType): Api {
+function resolvePiApi(provider: ProviderType): Api {
   return normalizePiApi(provider)
 }
 
@@ -647,7 +647,7 @@ export async function resolvePiImageInputCapability(
 }
 
 /** Vision Relay 的实际请求路由。 */
-export interface PiVisionRelayRoute {
+interface PiVisionRelayRoute {
   adapterProvider: ProviderType
   baseUrl?: string
 }
@@ -819,7 +819,7 @@ function patchCatalogModelWithOverrides(
   return next
 }
 
-export function normalizePiBaseUrl(baseUrl: string | undefined, provider: ProviderType, api = normalizePiApi(provider)): string | undefined {
+function normalizePiBaseUrl(baseUrl: string | undefined, provider: ProviderType, api = normalizePiApi(provider)): string | undefined {
   if (!baseUrl) return undefined
   const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
   if (api === 'anthropic-messages') {
@@ -839,7 +839,7 @@ export function normalizePiBaseUrl(baseUrl: string | undefined, provider: Provid
   return normalizedBaseUrl
 }
 
-export function requiresPromaUserAgent(provider: ProviderType): boolean {
+function requiresPromaUserAgent(provider: ProviderType): boolean {
   return provider === 'kimi-coding'
     || provider === 'xiaomi-token-plan'
     || provider === 'qwen-token-plan'
@@ -847,7 +847,7 @@ export function requiresPromaUserAgent(provider: ProviderType): boolean {
     || provider === 'zhipu-coding-team'
 }
 
-export function buildPiRequestHeaders(provider: ProviderType, apiKey: string): PiRequestHeaders | undefined {
+function buildPiRequestHeaders(provider: ProviderType, apiKey: string): PiRequestHeaders | undefined {
   if (normalizePiApi(provider) !== 'anthropic-messages') return undefined
 
   const headers: PiRequestHeaders = {
@@ -869,7 +869,7 @@ export function buildPiRequestHeaders(provider: ProviderType, apiKey: string): P
  * 必须先提取其中的 apiKey，否则整串会被塞进 `Authorization: Bearer` 头导致 401。
  * 与渠道认证解析保持一致。
  */
-export function resolvePiApiKey(provider: ProviderType, apiKey: string): string {
+function resolvePiApiKey(provider: ProviderType, apiKey: string): string {
   return provider === 'zhipu-coding-team' ? extractZhipuCodingTeamApiToken(apiKey) : apiKey
 }
 
@@ -880,7 +880,7 @@ export function resolvePiApiKey(provider: ProviderType, apiKey: string): string 
  * 端点（智谱等）并不识别，带后缀会被判为「模型不存在」（智谱 1211）。
  * pi 模式统一剥离该后缀，保证注册与请求使用干净的模型 ID。
  */
-export function stripLegacyAgentSdkContextSuffix(modelId: string | undefined): string | undefined {
+function stripLegacyAgentSdkContextSuffix(modelId: string | undefined): string | undefined {
   return modelId?.replace(/\[1m\]$/i, '')
 }
 
@@ -937,7 +937,7 @@ function isSupportedCodexModel(model: Pick<PiCatalogModel, 'id'>): boolean {
     && !UNSUPPORTED_CODEX_MODEL_PREFIXES.some((prefix) => modelId === prefix || modelId.startsWith(`${prefix}-`))
 }
 
-export async function getCodexCatalogModels(): Promise<PiCatalogModel[]> {
+async function getCodexCatalogModels(): Promise<PiCatalogModel[]> {
   const { getModels } = await loadPiAiCompat()
   return mergeCodexModels(getModels('openai-codex')).filter(isSupportedCodexModel)
 }
@@ -999,7 +999,7 @@ export async function listCodexModels(
     .map((model) => ({ id: model.id, name: model.name }))
 }
 
-export async function getXaiCatalogModels(): Promise<PiCatalogModel[]> {
+async function getXaiCatalogModels(): Promise<PiCatalogModel[]> {
   const { getModels } = await loadPiAiCompat()
   return [...getModels('xai')]
 }
@@ -1010,7 +1010,7 @@ export async function getXaiCatalogModels(): Promise<PiCatalogModel[]> {
  * xAI 的 device-code token 不等同于 xAI API key，必须注入内存 CredentialStore
  * 并使用内置 `xai` provider，不能退回 registerProvider() 的 API key 路径。
  */
-export async function buildXaiModel(sdk: PiSdk, input: XaiModelInput) {
+async function buildXaiModel(sdk: PiSdk, input: XaiModelInput) {
   if (!input.xaiOAuthCredentials || !input.channelId) {
     throw new Error('xAI OAuth 凭据或渠道标识缺失，请重新登录')
   }
@@ -1038,7 +1038,7 @@ export async function listXaiModels(): Promise<{ id: string; name: string }[]> {
   return (await getXaiCatalogModels()).map((m) => ({ id: m.id, name: m.name }))
 }
 
-export async function getGithubCopilotCatalogModels(): Promise<PiCatalogModel[]> {
+async function getGithubCopilotCatalogModels(): Promise<PiCatalogModel[]> {
   const { getModels } = await loadPiAiCompat()
   return [...getModels('github-copilot')]
 }
@@ -1047,7 +1047,7 @@ export async function getGithubCopilotCatalogModels(): Promise<PiCatalogModel[]>
  * GitHub Copilot 的模型可见性由订阅套餐、组织策略和已启用模型决定。
  * 因此必须用携带凭据的 ModelRuntime 读取过滤后的目录，不能退回全量 catalog。
  */
-export async function buildGithubCopilotModel(sdk: PiSdk, input: GithubCopilotModelInput) {
+async function buildGithubCopilotModel(sdk: PiSdk, input: GithubCopilotModelInput) {
   if (!input.githubCopilotOAuthCredentials) {
     throw new Error('GitHub Copilot 登录凭据无效或缺失，请重新登录')
   }

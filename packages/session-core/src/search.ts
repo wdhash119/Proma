@@ -1,6 +1,6 @@
 import type { TranscriptTurn, TurnRole } from './transcript'
 
-export interface SearchHit {
+interface SearchHit {
   index: number
   role: TurnRole
   /** 命中处上下文片段。 */
@@ -9,7 +9,7 @@ export interface SearchHit {
   matchCount: number
 }
 
-export interface SearchOptions {
+interface SearchOptions {
   caseSensitive?: boolean
   /** 片段在命中点前后保留的字符数（默认 60）。 */
   context?: number

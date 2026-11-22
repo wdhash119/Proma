@@ -1,6 +1,6 @@
 import type { SlackAppManifestResult } from '@proma/shared'
 
-export interface SlackManifestOptions {
+interface SlackManifestOptions {
   botName?: string
   description?: string
 }

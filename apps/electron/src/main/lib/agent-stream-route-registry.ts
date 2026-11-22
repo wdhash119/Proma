@@ -1,8 +1,8 @@
-export interface StreamRouteTarget {
+interface StreamRouteTarget {
   isDestroyed(): boolean
 }
 
-export interface AgentStreamRoute<T extends StreamRouteTarget> {
+interface AgentStreamRoute<T extends StreamRouteTarget> {
   target: T
   ownerId: number
 }

@@ -3,7 +3,7 @@ import { shouldNotifyByPolicy } from '@proma/shared'
 import type { TabItem } from '@/atoms/tab-atoms'
 import { isDelegationObservationVisible } from '@/lib/agent-session-list'
 
-export interface AgentCompletionPresenceInput {
+interface AgentCompletionPresenceInput {
   tabs: TabItem[]
   activeTabId: string | null
   currentAgentSessionId: string | null
@@ -14,11 +14,11 @@ export interface AgentCompletionPresenceInput {
   documentHasFocus: boolean
 }
 
-export interface AgentCompletionMarkers {
+interface AgentCompletionMarkers {
   markUnviewedCompleted: boolean
 }
 
-export interface AgentCompletionNotificationInput {
+interface AgentCompletionNotificationInput {
   completion: AgentStreamCompletePayload
   session?: Pick<AgentSessionMeta, 'sourceDelegationId' | 'parentSessionId' | 'sourceAutomationId'>
 }
@@ -35,7 +35,7 @@ export interface CompletionNotificationDecisionInput extends AgentCompletionNoti
   notifyPolicy?: AutomationResultNotifyPolicy
 }
 
-export interface CompletionNotificationDecision {
+interface CompletionNotificationDecision {
   /** 是否发送桌面通知（系统通知自身仍按窗口焦点决定是否弹出）。 */
   notify: boolean
   /** 是否播放完成提示音；与桌面通知共用同一次发送，避免双响。 */
@@ -43,7 +43,7 @@ export interface CompletionNotificationDecision {
 }
 
 /** 仅顶层 Agent 会话完成属于用户级任务完成提醒边界 */
-export function shouldNotifyAgentCompletion({
+function shouldNotifyAgentCompletion({
   completion,
   session,
 }: AgentCompletionNotificationInput): boolean {
@@ -70,7 +70,7 @@ export function markSessionCompletionViewed(
   return next
 }
 
-export function isSuccessfulAgentCompletion(
+function isSuccessfulAgentCompletion(
   completion: AgentStreamCompletePayload,
   hasStreamError: boolean,
 ): boolean {
@@ -79,7 +79,7 @@ export function isSuccessfulAgentCompletion(
     (!completion.resultSubtype || completion.resultSubtype === 'success')
 }
 
-export type DelegatedCompletionAttention = 'viewed' | 'unviewed' | null
+type DelegatedCompletionAttention = 'viewed' | 'unviewed' | null
 
 interface DelegatedCompletionAttentionInput extends AgentCompletionNotificationInput {
   hasStreamError: boolean
@@ -141,7 +141,7 @@ export function decideCompletionNotification(
 }
 
 /** 判断 Agent 完成时用户是否仍停留在该会话入口 */
-export function isAgentSessionActiveForCompletion({
+function isAgentSessionActiveForCompletion({
   tabs,
   activeTabId,
   currentAgentSessionId,

@@ -21,13 +21,13 @@ const FORK_WORKSPACE_COPY_BLOCKLIST = new Set([
   'target',
 ])
 
-export interface ForkWorkspaceCopyResult {
+interface ForkWorkspaceCopyResult {
   copiedCount: number
   skippedCount: number
   failedCount: number
 }
 
-export function shouldCopyForkWorkspacePath(src: string): boolean {
+function shouldCopyForkWorkspacePath(src: string): boolean {
   return !FORK_WORKSPACE_COPY_BLOCKLIST.has(basename(src))
 }
 

@@ -53,7 +53,7 @@ export interface ComputerUsePreviewCaptureInput {
 }
 
 /** 预览服务的全部外部依赖。 */
-export interface ComputerUsePreviewDependencies {
+interface ComputerUsePreviewDependencies {
   /** 采集一帧画面，返回 data URL。失败时抛错，服务统一归类为 capture_failed。 */
   capture: (input: ComputerUsePreviewCaptureInput) => Promise<string>
   /** 释放驱动侧采集会话。 */

@@ -20,13 +20,13 @@ const DEFAULT_COUNT = 10
 const MAX_COUNT = 50
 const USER_AGENT = 'Mozilla/5.0 (compatible; Proma/1.0; +https://proma.cool) WebSearch'
 
-export interface WebSearchItem {
+interface WebSearchItem {
   title: string
   url: string
   snippet?: string
 }
 
-export interface WebSearchSuccess {
+interface WebSearchSuccess {
   ok: true
   query: string
   resultCount: number
@@ -34,16 +34,16 @@ export interface WebSearchSuccess {
   note?: string
 }
 
-export interface WebSearchFailure {
+interface WebSearchFailure {
   ok: false
   query: string
   error: string
   hint?: string
 }
 
-export type WebSearchOutcome = WebSearchSuccess | WebSearchFailure
+type WebSearchOutcome = WebSearchSuccess | WebSearchFailure
 
-export interface WebSearchOptions {
+interface WebSearchOptions {
   count?: number
   signal?: AbortSignal
   /** 仅供测试：替换底层抓取实现。 */

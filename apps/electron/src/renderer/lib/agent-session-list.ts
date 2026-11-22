@@ -26,7 +26,7 @@ export function sortAgentSessionsByUpdatedAtDesc(
 }
 
 /** Agent 归档会话的顶层项目分组。 */
-export interface ArchivedAgentSessionProjectGroup {
+interface ArchivedAgentSessionProjectGroup {
   /** 稳定的虚拟列表 key；不对应真实项目的分组使用保留 ID。 */
   id: string
   label: string

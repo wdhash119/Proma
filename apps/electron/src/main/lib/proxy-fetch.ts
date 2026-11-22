@@ -38,7 +38,7 @@ export function createManagedProxyFetch(proxyUrl?: string): ManagedProxyFetch {
  * @param proxyUrl 代理地址（如 http://127.0.0.1:7890）
  * @returns 走代理的 fetch 函数，签名兼容全局 fetch
  */
-export function createProxyFetch(proxyUrl: string): typeof globalThis.fetch {
+function createProxyFetch(proxyUrl: string): typeof globalThis.fetch {
   const dispatcher = new ProxyAgent(proxyUrl)
 
   return ((input: RequestInfo | URL, init?: RequestInit) => {

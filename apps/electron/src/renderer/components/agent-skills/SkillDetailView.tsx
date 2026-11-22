@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 import type { SkillMeta } from '@proma/shared'
 import { extractSkillBody, rebuildSkillMd } from './skillMdUtils'
 
-export interface SkillDetailViewProps {
+interface SkillDetailViewProps {
   skill: SkillMeta
   workspaceSlug: string
   /** 外部能力变更后由数据层递增，用于重新读取 SKILL.md 和静默刷新资源树。 */

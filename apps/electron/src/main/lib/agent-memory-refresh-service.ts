@@ -7,9 +7,9 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Internal-only cadence. Users are invited, never automatically scanned. */
-export const WORKSPACE_MEMORY_REVIEW_INTERVAL_DAYS = 3
+const WORKSPACE_MEMORY_REVIEW_INTERVAL_DAYS = 3
 
-export interface WorkspaceMemoryRefreshOpportunity {
+interface WorkspaceMemoryRefreshOpportunity {
   /** The latest memory update before which new workspace sessions accumulated. */
   memoryUpdatedAt?: number
   newestSessionAt: number

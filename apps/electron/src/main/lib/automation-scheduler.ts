@@ -112,7 +112,7 @@ export function broadcastChanged(): void {
  *
  * @param automation 任务定义
  */
-export async function runAutomation(automation: Automation): Promise<void> {
+async function runAutomation(automation: Automation): Promise<void> {
   if (runningAutomations.has(automation.id)) {
     console.log(`[定时任务] ${automation.name} 上一轮尚未结束，跳过本轮`)
     appendRun(automation.id, {

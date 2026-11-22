@@ -49,7 +49,7 @@ const WAIT_POLL_INTERVAL_MS = 250
 /** 单次观察最多为多少个无名元素补线索，避免观察变慢。 */
 const MAX_UNNAMED_HINT_LOOKUPS = 12
 
-export type PromaSelfApprovalKind = 'create-project'
+type PromaSelfApprovalKind = 'create-project'
 
 /** 用户显式同意的回调；返回 false 表示拒绝。 */
 export type PromaSelfApprovalRequester = (
@@ -57,7 +57,7 @@ export type PromaSelfApprovalRequester = (
   signal?: AbortSignal,
 ) => Promise<boolean>
 
-export interface PromaSelfElement {
+interface PromaSelfElement {
   ref: string
   role: string
   name: string
@@ -68,32 +68,32 @@ export interface PromaSelfElement {
   note?: string
 }
 
-export interface PromaSelfSnapshot {
+interface PromaSelfSnapshot {
   title: string
   url: string
   generation: number
   elements: PromaSelfElement[]
 }
 
-export interface PromaSelfFindQuery {
+interface PromaSelfFindQuery {
   role?: string
   name?: string
   exact?: boolean
   maxResults?: number
 }
 
-export interface PromaSelfWaitCondition {
+interface PromaSelfWaitCondition {
   kind: 'text' | 'selector'
   value: string
 }
 
-export interface PromaSelfDomActionInput {
+interface PromaSelfDomActionInput {
   action: 'focus' | 'fill' | 'click' | 'inspect'
   selector: string
   text?: string
 }
 
-export interface PromaSelfScrollInput {
+interface PromaSelfScrollInput {
   selector?: string
   deltaY?: number
   position?: 'top' | 'bottom'

@@ -23,10 +23,10 @@ export const COMPUTER_USE_PLATFORM_LABELS: Record<ComputerUsePlatform, string> =
 const UPDATE_CHECK_PLATFORMS: readonly ComputerUsePlatform[] = ['macos', 'windows']
 
 /** 安装状态徽章的语气，用于选择配色与图标。 */
-export type ComputerUseStatusTone = 'success' | 'warning' | 'neutral'
+type ComputerUseStatusTone = 'success' | 'warning' | 'neutral'
 
 /** 徽章与说明文案。 */
-export interface ComputerUseStatusSummary {
+interface ComputerUseStatusSummary {
   /** 徽章文字 */
   label: string
   /** 徽章下方说明 */
@@ -34,7 +34,7 @@ export interface ComputerUseStatusSummary {
   tone: ComputerUseStatusTone
 }
 
-export interface ComputerUseStatusInput {
+interface ComputerUseStatusInput {
   installation: ComputerUseInstallation | null
   /** 是否正在检测 */
   detecting: boolean
@@ -94,14 +94,14 @@ export function canCheckComputerUseUpdate(installation: ComputerUseInstallation 
 }
 
 /** 更新条与安装条的展示条件。 */
-export interface ComputerUseIndicators {
+interface ComputerUseIndicators {
   /** 展示「有新版本可用」更新条 */
   showUpdate: boolean
   /** 展示「开始配置 Computer Use」安装条 */
   showInstall: boolean
 }
 
-export interface ComputerUseIndicatorInput {
+interface ComputerUseIndicatorInput {
   installation: ComputerUseInstallation | null
   /** 是否正在检测；检测中不展示安装/更新条，避免结论闪烁 */
   detecting: boolean

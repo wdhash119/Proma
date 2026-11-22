@@ -29,7 +29,7 @@ import { getSDKCompactStatus } from '@proma/shared'
 
 export type SessionMiniMapType = 'agent'
 
-export interface SessionMiniMapTarget {
+interface SessionMiniMapTarget {
   type: SessionMiniMapType
   sessionId: string
   title: string

@@ -17,7 +17,7 @@ import { isPartialSDKMessage } from '../bridge-agent-message-utils'
  * 所有 reducer 是纯函数：`reduce(state, payload) → state`。
  */
 
-export type ToolStatus = 'running' | 'done' | 'error'
+type ToolStatus = 'running' | 'done' | 'error'
 
 export interface ToolEntry {
   id: string
@@ -35,7 +35,7 @@ export type Block =
 
 export type FooterStatus = 'thinking' | 'tool_running' | 'streaming' | null
 
-export type Terminal = 'running' | 'done' | 'interrupted' | 'error' | 'idle_timeout'
+type Terminal = 'running' | 'done' | 'interrupted' | 'error' | 'idle_timeout'
 
 interface PartialAssistantSnapshot {
   blocks: Record<number, { type: 'text' | 'thinking'; content: string }>

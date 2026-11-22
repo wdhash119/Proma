@@ -258,7 +258,7 @@ const PROVIDER_LOGO_MAP: Record<ProviderType, string> = {
  *
  * @param modelId 模型 ID（如 "gpt-4-turbo"、"claude-3-opus-20240229"）
  */
-export function getModelLogoById(modelId: string): string | undefined {
+function getModelLogoById(modelId: string): string | undefined {
   if (!modelId) return undefined
 
   for (const key in MODEL_LOGO_MAP) {

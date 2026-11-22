@@ -210,7 +210,7 @@ function createMentionSuggestion<T>(
 
 // ===== Skill 配置 =====
 
-export interface SkillMentionItem {
+interface SkillMentionItem {
   id: string
   name: string
   description?: string
@@ -253,7 +253,7 @@ export function createSkillMentionSuggestion(
 
 // ===== MCP 配置 =====
 
-export interface McpMentionItem {
+interface McpMentionItem {
   id: string
   name: string
   type: string
@@ -263,7 +263,7 @@ export interface McpMentionItem {
  * 仅暴露 # 候选过滤所需的无敏感连接状态。其值必须由主进程从工作区 mcp.json
  * 中已持久化、且仅在真实 handshake + listTools 成功后写入的 lastTestResult 派生。
  */
-export type McpMentionServer = WorkspaceCapabilities['mcpServers'][number] & {
+type McpMentionServer = WorkspaceCapabilities['mcpServers'][number] & {
   lastTestResult?: {
     success: boolean
   }
@@ -273,7 +273,7 @@ export type McpMentionServer = WorkspaceCapabilities['mcpServers'][number] & {
  * # MCP 候选只来自当前工作区的持久化 MCP 能力摘要。
  * 不混入会话临时工具、CLI 集成或 mcpporter 注册项，避免展示无法由当前工作区配置启用的服务。
  */
-export function getMcpMentionItems(
+function getMcpMentionItems(
   mcpServers: readonly McpMentionServer[],
   query: string,
 ): McpMentionItem[] {
@@ -316,7 +316,7 @@ export function createMcpMentionSuggestion(
 
 // ===== Agent 会话引用配置 =====
 
-export type SessionMentionItem = AgentSessionReferenceSearchResult
+type SessionMentionItem = AgentSessionReferenceSearchResult
 
 // 空查询只读会话索引，可安全展示更多；搜索会读取 JSONL 消息，保持较小上限避免阻塞主进程。
 const RECENT_SESSION_MENTION_LIMIT = 200

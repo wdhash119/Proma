@@ -29,7 +29,7 @@ interface SyncContext {
   skippedOptionalPackages: string[]
 }
 
-export interface SyncRuntimeDepsOptions {
+interface SyncRuntimeDepsOptions {
   sourceNodeModules?: string
   targetNodeModules?: string
   externalRuntimePackages?: readonly string[]
@@ -37,13 +37,13 @@ export interface SyncRuntimeDepsOptions {
   cleanTarget?: boolean
 }
 
-export interface SyncRuntimeDepsResult {
+interface SyncRuntimeDepsResult {
   copiedPackageCount: number
   copiedPackages: string[]
   skippedOptionalPackages: string[]
 }
 
-export const EXTERNAL_RUNTIME_PACKAGES: readonly string[] = [
+const EXTERNAL_RUNTIME_PACKAGES: readonly string[] = [
   // Pi 0.86 的已发布入口不再包含 server/client 实验代码；pi-server 仅是其开发依赖。
   '@earendil-works/pi-coding-agent',
   '@earendil-works/pi-agent-core',
@@ -233,7 +233,7 @@ function prepareTargetNodeModules(sourceNodeModules: string, targetNodeModules: 
   mkdirSync(target, { recursive: true })
 }
 
-export function syncRuntimeDeps(options: SyncRuntimeDepsOptions = {}): SyncRuntimeDepsResult {
+function syncRuntimeDeps(options: SyncRuntimeDepsOptions = {}): SyncRuntimeDepsResult {
   const ctx: SyncContext = {
     sourceNodeModules: options.sourceNodeModules ?? defaultSourceNodeModules,
     targetNodeModules: options.targetNodeModules ?? defaultTargetNodeModules,

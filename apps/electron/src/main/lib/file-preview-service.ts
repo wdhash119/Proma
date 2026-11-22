@@ -724,7 +724,7 @@ async function registerOfficeCliOutputFile(path: string): Promise<string> {
   return registerPromaFilePath(path)
 }
 
-export async function renderOfficeWithOfficeCli(
+async function renderOfficeWithOfficeCli(
   resolvedPath: string,
   registerFilePath: (path: string) => string | Promise<string> = registerOfficeCliOutputFile,
   officeCliCandidates = getOfficeCliCandidates(),

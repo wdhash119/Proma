@@ -100,7 +100,7 @@ export function buildTurnFileNameMap(turnMessages: SDKMessage[]): Map<string, st
   return map
 }
 
-export interface TurnFileChangesSummaryProps {
+interface TurnFileChangesSummaryProps {
   turnMessages: SDKMessage[]
   basePath?: string
 }

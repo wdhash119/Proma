@@ -14,7 +14,7 @@ const FULLY_AUTOMATIC_PLANNING_DELETION_TOOLS = new Set([
   'mcp__planning__delete_calendar_event',
 ])
 
-export type PlanningDeletionPermissionDecision =
+type PlanningDeletionPermissionDecision =
   | 'not-planning-deletion'
   | 'allow'
   | 'require-single-approval'

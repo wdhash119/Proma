@@ -1,4 +1,4 @@
-export const VAULT_SIDEBAR_COLLAPSED_WIDTH = 36
+const VAULT_SIDEBAR_COLLAPSED_WIDTH = 36
 
 export function getVaultSidebarDisplayWidth(expandedWidth: number, collapsed: boolean): number {
   return collapsed ? VAULT_SIDEBAR_COLLAPSED_WIDTH : expandedWidth

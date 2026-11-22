@@ -1,7 +1,7 @@
 import { Type } from 'typebox'
 import type { CreateAutomationInput, UpdateAutomationInput } from '@proma/shared'
 
-export type AutomationScheduleType = CreateAutomationInput['scheduleType']
+type AutomationScheduleType = CreateAutomationInput['scheduleType']
 
 /**
  * A few model tool-call transports still materialize optional properties. At this

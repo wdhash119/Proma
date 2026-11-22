@@ -5,7 +5,7 @@
  * 权限模式与计划模式已下线，因此只剩「未查看完成会话」与「待回答提问」。
  */
 
-export interface DockBadgeCountInput {
+interface DockBadgeCountInput {
   /** 已完成但尚未查看的 Agent 会话数量 */
   unviewedCompletedCount: number
   /** 待回答 AskUser 请求数量 */

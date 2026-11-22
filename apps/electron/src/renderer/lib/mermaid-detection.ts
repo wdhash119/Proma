@@ -50,11 +50,7 @@ const MERMAID_LANGUAGE_CLASS_PATTERN = /(?:^|\s)language-(?:mermaid|mmd)(?:\s|$)
 const MERMAID_DIRECTIVE_PATTERN = /^%%\{[\s\S]*\}%%$/
 const MERMAID_COMMENT_PATTERN = /^%%(?!\{)/
 
-export function isMermaidLanguage(language: string): boolean {
-  return /^(?:mermaid|mmd)$/i.test(language.trim())
-}
-
-export function looksLikeMermaidDefinition(code: string): boolean {
+function looksLikeMermaidDefinition(code: string): boolean {
   for (const line of code.trimStart().split(/\r?\n/)) {
     const candidate = line.trim()
     if (!candidate || MERMAID_DIRECTIVE_PATTERN.test(candidate) || MERMAID_COMMENT_PATTERN.test(candidate)) continue

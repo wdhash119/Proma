@@ -23,10 +23,10 @@ export const PROMA_SELF_CONTROL_PROTECTED_ERROR
   = '该控件需要用户亲自操作，Proma 自操作已拒绝。请保留当前界面并交给用户处理。'
 
 /** 这些动词属于用户的决定权，Agent 不能代为点击。 */
-export const PROMA_SELF_CONTROL_BLOCKED_ACTION_PATTERN
+const PROMA_SELF_CONTROL_BLOCKED_ACTION_PATTERN
   = /(?:删除|清空|移除|支付|购买|订阅|授权|允许|批准|拒绝|退出登录|停止\s*Agent|发送|确认|清理|delete|remove|pay|purchase|subscribe|authorize|allow|approve|reject|sign\s*out|stop\s*agent|send|confirm)/i
 
-export const PROMA_SELF_CONTROL_PROJECT_CREATION_SELECTOR = '[data-proma-self-control="create-project"]'
+const PROMA_SELF_CONTROL_PROJECT_CREATION_SELECTOR = '[data-proma-self-control="create-project"]'
 
 export const PROMA_SELF_CONTROL_PROJECT_CONSENT_ERROR
   = '创建项目前必须获得用户明确同意。请先通过 AskUserQuestion 询问，并等待用户选择同意。'
@@ -50,7 +50,7 @@ export function hasPromaSelfProjectConsent(answers: Record<string, unknown>): bo
   })
 }
 
-export const PROMA_SELF_CONTROL_PROJECT_CREATION_PATTERN
+const PROMA_SELF_CONTROL_PROJECT_CREATION_PATTERN
   = /(?:新建空白项目|从本地文件夹创建项目|新建项目|创建项目|new\s+(?:blank\s+)?project|create\s+(?:a\s+)?project)/i
 
 /** 动作标签是否命中受保护语义。 */
@@ -98,7 +98,7 @@ export function buildPromaSelfControlProjectCreationFunction(): string {
   }`
 }
 
-export interface PromaSelfControlDomGuard {
+interface PromaSelfControlDomGuard {
   protectionFunctionSource: string
   projectCreationFunctionSource: string
   errorMessage: string

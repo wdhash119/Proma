@@ -14,7 +14,7 @@ import { readJsonFileSafe, writeJsonFileAtomic } from './safe-file'
 const ARTIFACTS_FILE = 'artifacts.json'
 const MAX_ARTIFACTS = 20
 
-export interface PresentedArtifact {
+interface PresentedArtifact {
   /** 绝对路径；渲染进程据此打开预览或系统默认应用。 */
   path: string
   description?: string
@@ -57,7 +57,7 @@ export function listSessionArtifacts(workspaceSlug: string, sessionId: string): 
     .sort((left, right) => right.presentedAt - left.presentedAt)
 }
 
-export interface PresentInput {
+interface PresentInput {
   path: string
   description?: string
 }

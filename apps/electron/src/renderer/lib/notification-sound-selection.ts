@@ -1,6 +1,6 @@
 import type { NotificationSoundId, NotificationSoundPackId } from '@/types/settings'
 
-export const NOTIFICATION_SOUND_PACK_IDS: NotificationSoundPackId[] = [
+const NOTIFICATION_SOUND_PACK_IDS: NotificationSoundPackId[] = [
   'minimal',
   'soft',
   'glass',

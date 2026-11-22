@@ -5,7 +5,7 @@ import { workspaceCapabilitiesVersionAtom } from './agent-atoms'
 import { EMPTY_SKILL_MENTION_NAMES } from '../lib/skill-mention-name'
 
 /** 仅展示使用全量 Skill 列表；不改变 Agent 的启用能力范围。 */
-export const skillMentionNamesAtomFamily = atomFamily((workspaceSlug: string | null) => atom(async (get): Promise<ReadonlyMap<string, string>> => {
+const skillMentionNamesAtomFamily = atomFamily((workspaceSlug: string | null) => atom(async (get): Promise<ReadonlyMap<string, string>> => {
   get(workspaceCapabilitiesVersionAtom)
   if (!workspaceSlug) return EMPTY_SKILL_MENTION_NAMES
 

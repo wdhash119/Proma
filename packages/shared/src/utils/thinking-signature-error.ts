@@ -14,11 +14,3 @@ export function isThinkingSignatureError(...messages: Array<string | null | unde
   //    如 "***.***.***.***.***.signature: Field required"）
   return /(?:invalid\s+signature[\s\S]{0,240}thinking\s+block|thinking\s+block[\s\S]{0,240}invalid\s+signature|\bsignature\s*:\s*field\s+required)/i.test(combined)
 }
-
-export function formatThinkingSignatureError(): string {
-  return `${THINKING_SIGNATURE_ERROR_TITLE}：${THINKING_SIGNATURE_ERROR_MESSAGE}`
-}
-
-export function normalizeThinkingSignatureError(error: string): string {
-  return isThinkingSignatureError(error) ? formatThinkingSignatureError() : error
-}

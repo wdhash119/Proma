@@ -17,7 +17,7 @@ const MAX_CONTENT_CHARS = 120_000
 const MAX_REDIRECTS = 5
 const USER_AGENT = 'Proma/1.0 (+https://proma.cool) WebFetch'
 
-export interface WebFetchResult {
+interface WebFetchResult {
   ok: true
   url: string
   title: string
@@ -26,16 +26,16 @@ export interface WebFetchResult {
   status: number
 }
 
-export interface WebFetchFailure {
+interface WebFetchFailure {
   ok: false
   url: string
   status?: number
   error: string
 }
 
-export type WebFetchOutcome = WebFetchResult | WebFetchFailure
+type WebFetchOutcome = WebFetchResult | WebFetchFailure
 
-export interface WebFetchOptions {
+interface WebFetchOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxChars?: number

@@ -9,7 +9,7 @@
 import { isCheckPending } from '@proma/shared'
 import type { ChangeRequestFetchResult } from './change-request-store'
 
-export interface ChangeRequestPollIntervals {
+interface ChangeRequestPollIntervals {
   activeMs: number
   idleMs: number
   closedMs: number
@@ -47,7 +47,7 @@ export function nextChangeRequestPollDelay(
   return unstable ? intervals.activeMs : intervals.idleMs
 }
 
-export interface ChangeRequestPollerOptions {
+interface ChangeRequestPollerOptions {
   /** 读取单条 PR 的最新状态；失败时返回 { error }。 */
   fetch: (url: string) => Promise<ChangeRequestFetchResult>
   /** 写入结果，返回受影响会话 ID。 */

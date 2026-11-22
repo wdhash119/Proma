@@ -11,7 +11,7 @@
 import type { AgentMessage, AgentToolResult } from '@earendil-works/pi-agent-core'
 import type { JsonSchemaOutputFormat, SDKResultMessage } from '@proma/shared'
 
-export type RuntimeGuardStopReason = 'max_turns' | 'max_budget_usd' | 'output_validation_failed'
+type RuntimeGuardStopReason = 'max_turns' | 'max_budget_usd' | 'output_validation_failed'
 
 export interface RuntimeGuardResultOverride {
   subtype: SDKResultMessage['subtype']
@@ -27,7 +27,7 @@ export interface AgentRuntimeGuard {
   getResultOverride(messages: AgentMessage[]): RuntimeGuardResultOverride | undefined
 }
 
-export interface AgentRuntimeGuardOptions {
+interface AgentRuntimeGuardOptions {
   maxTurns?: number
   maxBudgetUsd?: number
   outputFormat?: JsonSchemaOutputFormat

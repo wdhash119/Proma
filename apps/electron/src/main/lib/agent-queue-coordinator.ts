@@ -14,7 +14,7 @@ interface QueueEntry {
   queuedAt: number
 }
 
-export interface AgentQueueCoordinatorOptions {
+interface AgentQueueCoordinatorOptions {
   isActive: (sessionId: string) => boolean
   getWebContents: (sessionId: string) => WebContents | null
   startRun: (input: DispatchedQueueRunInput, webContents: WebContents) => Promise<void>

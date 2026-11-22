@@ -19,7 +19,7 @@ export interface DelegationChannelView {
   models: Array<{ id: string; name: string; enabled: boolean }>
 }
 
-export interface DelegationTargetRequest {
+interface DelegationTargetRequest {
   /** 子会话父级的渠道；未跨渠道时继承。 */
   parentChannelId: string
   /** 子会话父级的模型；未跨渠道时继承。 */
@@ -30,7 +30,7 @@ export interface DelegationTargetRequest {
   modelId?: string
 }
 
-export interface DelegationTarget {
+interface DelegationTarget {
   channelId: string
   channelName: string
   provider: ProviderType
@@ -139,7 +139,7 @@ export function resolveDelegationTarget(
 }
 
 /** 列出所有启用渠道的可用模型，供 `list_available_agent_models` 跨渠道展示。 */
-export interface AvailableAgentModelsAcrossChannels {
+interface AvailableAgentModelsAcrossChannels {
   currentChannelId: string
   currentModelId?: string
   currentModelAvailable: boolean

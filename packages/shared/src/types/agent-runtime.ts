@@ -6,7 +6,7 @@
 export const AGENT_RUNTIME_PROTOCOL_VERSION = 1 as const
 export const AGENT_RUNTIME_BOOTSTRAP_ID = 'bootstrap'
 
-export type AgentRuntimeMessageKind = 'request' | 'response' | 'event'
+type AgentRuntimeMessageKind = 'request' | 'response' | 'event'
 
 export interface AgentRuntimeContext {
   sessionId?: string
@@ -49,7 +49,7 @@ export interface AgentRuntimeEvent<Payload = unknown> extends AgentRuntimeEnvelo
 
 export type AgentRuntimeEnvelope = AgentRuntimeRequest | AgentRuntimeResponse | AgentRuntimeEvent
 
-export type AgentRuntimeStatus = 'starting' | 'ready' | 'stopping' | 'stopped' | 'crashed'
+type AgentRuntimeStatus = 'starting' | 'ready' | 'stopping' | 'stopped' | 'crashed'
 
 export interface AgentRuntimeState {
   status: AgentRuntimeStatus

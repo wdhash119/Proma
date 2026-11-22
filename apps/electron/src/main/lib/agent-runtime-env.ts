@@ -4,7 +4,7 @@ import type { RuntimeStatus, WindowsShellPreference } from '@proma/shared'
 import { getBundledCliPath } from './config-paths'
 import { selectWindowsShell, type WindowsShellKind } from './windows-shell-selection'
 
-export type AgentRuntimeShellKind = WindowsShellKind
+type AgentRuntimeShellKind = WindowsShellKind
 
 export interface AgentRuntimeEnv {
   env: Record<string, string>
@@ -14,7 +14,7 @@ export interface AgentRuntimeEnv {
   wslDistro?: string
 }
 
-export interface BuildAgentRuntimeEnvOptions {
+interface BuildAgentRuntimeEnvOptions {
   proxyUrl?: string
   runtimeStatus?: RuntimeStatus | null
   windowsShellPreference?: WindowsShellPreference

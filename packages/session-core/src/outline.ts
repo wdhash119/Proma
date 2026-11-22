@@ -1,6 +1,6 @@
 import type { TranscriptTurn, TurnRole } from './transcript'
 
-export interface OutlineEntry {
+interface OutlineEntry {
   index: number
   role: TurnRole
   preview: string

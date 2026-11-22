@@ -246,7 +246,7 @@ export function AssistantLogo({ model }: { model?: string }): React.ReactElement
 
 // groupIntoTurns / mergeAdjacentSameModelTurns 已迁移至 @proma/session-core
 
-export interface AssistantTurnRendererProps {
+interface AssistantTurnRendererProps {
   turn: AssistantTurn
   /** 所有消息（全局，供工具结果查找跨 turn 的结果） */
   allMessages: SDKMessage[]
@@ -273,7 +273,7 @@ export interface AssistantTurnRendererProps {
   sessionModelId?: string
 }
 
-export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser }: AssistantTurnRendererProps): React.ReactElement | null {
+function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser }: AssistantTurnRendererProps): React.ReactElement | null {
   const channels = useAtomValue(channelsAtom)
   // 收集所有 assistant 消息的内容块，保留 parent_tool_use_id 关联
   interface EnrichedBlock {
@@ -510,16 +510,16 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
 // ===== 附件解析 =====
 
 /** 解析的附件引用 */
-export interface AttachedFileRef {
+interface AttachedFileRef {
   filename: string
   path: string
 }
 
 /** 解析的引用文件 */
-export type QuotedFileRef = ParsedQuotedSelectionRef
+type QuotedFileRef = ParsedQuotedSelectionRef
 
 /** 解析消息中的 <attached_files>、<quoted_file> 和 <quoted_context> 块，返回文件列表、引用列表和剩余文本 */
-export function parseAttachedFiles(
+function parseAttachedFiles(
   content: string,
   options: { inlineAgentHistoryQuotes?: boolean } = {},
 ): { files: AttachedFileRef[]; quotes: QuotedFileRef[]; text: string } {
@@ -546,7 +546,7 @@ export function parseAttachedFiles(
 }
 
 /** 判断文件是否为图片类型 */
-export function isImageFile(filename: string): boolean {
+function isImageFile(filename: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(filename)
 }
 
@@ -887,7 +887,7 @@ interface AssistantErrorTailProps {
  * standalone=true 时兼容旧 ErrorMessage 的行为：把 error.message / content 里的所有 text
  * 一并作为红色 MessageResponse 渲染出来，用于「没有正文，只有错误」的场景。
  */
-export function AssistantErrorTail({
+function AssistantErrorTail({
   message,
   onRetry,
   onRetryInNewSession,
@@ -1147,7 +1147,7 @@ function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact, onReli
 
 // ===== MessageGroup 渲染器（统一入口，同时支持 turn 和单条消息） =====
 
-export interface MessageGroupRendererProps {
+interface MessageGroupRendererProps {
   group: MessageGroup
   allMessages: SDKMessage[]
   /** 仅跨 turn 工具元数据变化时更新历史 assistant；普通 live 数组新引用不触发重渲染。 */

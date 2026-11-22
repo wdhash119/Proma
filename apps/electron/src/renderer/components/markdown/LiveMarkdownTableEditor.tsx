@@ -23,7 +23,7 @@ import type { LiveMarkdownFindController, LiveMarkdownFindOptions, LiveMarkdownF
 const { useEffect, useLayoutEffect, useRef, useState } = React
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
-export interface LiveMarkdownTableCell {
+interface LiveMarkdownTableCell {
   row: number
   column: number
 }
@@ -47,7 +47,7 @@ const EMPTY_FIND_STATE: LiveMarkdownFindState = {
   activeMatchFrom: null,
 }
 
-export function doesLiveMarkdownTableCellMatch(value: string, query: string, options: LiveMarkdownFindOptions): boolean {
+function doesLiveMarkdownTableCellMatch(value: string, query: string, options: LiveMarkdownFindOptions): boolean {
   if (!query) return false
   try {
     const source = options.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -62,7 +62,7 @@ function cellValue(table: LiveMarkdownTable, { row, column }: LiveMarkdownTableC
   return row === 0 ? table.header[column] ?? '' : table.rows[row - 1]?.[column] ?? ''
 }
 
-export function findLiveMarkdownTableCellSourceRange(source: string | undefined, sourceRange: { from: number; to: number } | undefined, cell: LiveMarkdownTableCell): { from: number; to: number } | null {
+function findLiveMarkdownTableCellSourceRange(source: string | undefined, sourceRange: { from: number; to: number } | undefined, cell: LiveMarkdownTableCell): { from: number; to: number } | null {
   if (!source || !sourceRange) return null
   // row=0 为表头；body 的第一个 row 需要跳过分隔行。
   const lineIndex = cell.row === 0 ? 0 : cell.row + 1

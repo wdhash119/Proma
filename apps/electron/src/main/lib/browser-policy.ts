@@ -5,7 +5,7 @@ const BING_SEARCH_URL = 'https://www.bing.com/search'
 const USER_NEW_TAB_URL = 'https://www.google.com/'
 const USER_NEW_TAB_FALLBACK_URL = 'https://www.bing.com/'
 
-export interface BrowserDestination {
+interface BrowserDestination {
   url: string
   /** 仅默认 Google 新标签页和搜索词在 3 秒加载超时时回退。 */
   fallbackUrl?: string
@@ -36,7 +36,7 @@ function isLocalNetworkAddress(hostname: string): boolean {
  * 地址栏可直接输入域名或路径（例如 `example.com/docs`）；缺省协议时按 HTTPS 打开。
  * 受管浏览器不再按网络地址、协议或 URL 认证信息设置访问限制，具体协议支持由 Chromium 决定。
  */
-export function normalizeBrowserUrl(input: string): string {
+function normalizeBrowserUrl(input: string): string {
   const value = input.trim()
   if (!value) throw new Error('浏览器地址不能为空。')
   // 协议相对 URL 按 HTTPS 处理，和无协议域名保持一致。
@@ -115,7 +115,7 @@ function isLikelyUrl(value: string): boolean {
 /**
  * 仅默认 Google 新标签页和由普通文本生成的 Google 搜索有 Bing 回退；用户输入的 URL 永远直达。
  */
-export function resolveBrowserDestinationWithFallback(input: string): BrowserDestination {
+function resolveBrowserDestinationWithFallback(input: string): BrowserDestination {
   const value = input.trim()
   if (!value) throw new Error('浏览器地址或搜索内容不能为空。')
   if (value === USER_NEW_TAB_URL) return { url: USER_NEW_TAB_URL, fallbackUrl: USER_NEW_TAB_FALLBACK_URL }
@@ -148,4 +148,4 @@ export async function assertSafeBrowserDestinationWithFallback(input: string): P
   }
 }
 
-export { BING_SEARCH_URL, GOOGLE_SEARCH_URL, USER_NEW_TAB_FALLBACK_URL, USER_NEW_TAB_URL }
+export { USER_NEW_TAB_URL }

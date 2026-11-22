@@ -47,7 +47,7 @@ export function getChatToolsConfig(): ChatToolsFileConfig {
 /**
  * 保存工具配置
  */
-export function saveChatToolsConfig(config: ChatToolsFileConfig): void {
+function saveChatToolsConfig(config: ChatToolsFileConfig): void {
   const filePath = getChatToolsConfigPath()
   try {
     writeJsonFileAtomic(filePath, config)

@@ -1,6 +1,6 @@
 import type { MarkdownScrollPosition } from '@/lib/markdown-editor-state'
 
-export interface MarkdownScrollRestoreMaskOptions {
+interface MarkdownScrollRestoreMaskOptions {
   isMarkdown: boolean
   loading: boolean
   cachedScrollPosition: MarkdownScrollPosition | undefined

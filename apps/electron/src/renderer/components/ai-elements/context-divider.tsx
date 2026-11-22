@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
 import type { ComponentProps } from 'react'
 
-export interface ContextDividerProps extends ComponentProps<'div'> {
+interface ContextDividerProps extends ComponentProps<'div'> {
   /** 分隔线对应的 messageId */
   messageId: string
   /** 删除分隔线的回调 */

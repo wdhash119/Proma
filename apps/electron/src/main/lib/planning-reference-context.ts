@@ -5,7 +5,7 @@ const MAX_REFERENCED_PLANNING_ITEMS = 10;
 const MAX_PLANNING_REFERENCE_NOTE_LENGTH = 4_000;
 const MAX_PLANNING_REFERENCE_TAGS = 20;
 
-export interface ReferencedPlanningPromptOptions {
+interface ReferencedPlanningPromptOptions {
   /** Pi runtime has the matching read tools and should verify every explicit reference first. */
   requireToolRead?: boolean;
 }

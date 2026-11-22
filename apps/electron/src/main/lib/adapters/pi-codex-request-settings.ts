@@ -5,7 +5,7 @@ type ProviderPayload = Record<string, unknown>
 
 export const CODEX_FAST_MODE_SERVICE_TIER = 'priority'
 
-export interface CodexFastModeSettings {
+interface CodexFastModeSettings {
   fastMode?: boolean
 }
 

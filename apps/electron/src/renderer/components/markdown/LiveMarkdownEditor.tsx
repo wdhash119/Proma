@@ -41,7 +41,7 @@ interface LiveMarkdownFindMatch {
   to: number
 }
 
-export function findLiveMarkdownMatches(
+function findLiveMarkdownMatches(
   documentText: string,
   query: string,
   options: LiveMarkdownFindOptions,

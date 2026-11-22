@@ -1,7 +1,7 @@
 import type { AgentStreamEvent, AgentStreamPayload, SDKMessage } from '@proma/shared'
 
-export const FOREGROUND_PARTIAL_INTERVAL_MS = 50
-export const BACKGROUND_PARTIAL_INTERVAL_MS = 250
+const FOREGROUND_PARTIAL_INTERVAL_MS = 50
+const BACKGROUND_PARTIAL_INTERVAL_MS = 250
 
 type TimerHandle = ReturnType<typeof setTimeout>
 
@@ -11,7 +11,7 @@ interface PendingPartial {
   timer?: TimerHandle
 }
 
-export interface AgentStreamForwarderOptions {
+interface AgentStreamForwarderOptions {
   now?: () => number
   schedule?: (callback: () => void, delayMs: number) => TimerHandle
   cancel?: (timer: TimerHandle) => void

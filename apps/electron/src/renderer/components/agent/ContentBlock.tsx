@@ -189,7 +189,7 @@ function SubAgentFooter({
 
 // ===== ContentBlock Props =====
 
-export interface ContentBlockProps {
+interface ContentBlockProps {
   /** 内容块数据 */
   block: SDKContentBlock
   /** 所有消息（用于查找工具结果） */

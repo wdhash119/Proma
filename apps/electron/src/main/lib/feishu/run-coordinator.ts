@@ -15,7 +15,7 @@
  * 抢占接口（abort）已留好，未来若加"用户主动抢占按钮"可直接复用。
  */
 
-export interface ActiveRunHandle {
+interface ActiveRunHandle {
   scope: string
   sessionId: string
   startedAt: number

@@ -38,14 +38,14 @@ async function withWorkspaceMcpConfigMutation<T>(workspaceSlug: string, action: 
   }
 }
 
-export interface WorkspaceMcpServerSummary {
+interface WorkspaceMcpServerSummary {
   name: string
   type: McpTransportType
   enabled: boolean
   verified: boolean
 }
 
-export interface ConfigureWorkspaceMcpResult extends WorkspaceMcpServerSummary {
+interface ConfigureWorkspaceMcpResult extends WorkspaceMcpServerSummary {
   /** 本次调用是否基于已有同名条目更新。 */
   updatedExisting: boolean
   /** Pi customTools 在 run 启动时构建，因此本轮不会热更新。 */

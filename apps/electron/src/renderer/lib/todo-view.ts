@@ -2,7 +2,7 @@ import type { TodoStatus } from '@proma/shared'
 
 export type TodoListView = 'all' | 'today' | 'upcoming' | 'completed' | `group:${string}`
 
-export interface TodoViewItem {
+interface TodoViewItem {
   id: string
   status: TodoStatus
   dueAt?: number

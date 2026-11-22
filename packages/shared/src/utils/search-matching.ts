@@ -1,6 +1,6 @@
-export type SearchMatchKind = 'exact' | 'fragment' | 'fuzzy'
+type SearchMatchKind = 'exact' | 'fragment' | 'fuzzy'
 
-export interface SearchMatch {
+interface SearchMatch {
   matchStart: number
   matchLength: number
   score: number
@@ -94,12 +94,12 @@ function editDistanceAt(
   return previous[length]!
 }
 
-export interface SearchResultRank {
+interface SearchResultRank {
   score: number
   role: 'user' | 'assistant'
 }
 
-export interface SearchSnippet {
+interface SearchSnippet {
   snippet: string
   matchStart: number
   matchLength: number

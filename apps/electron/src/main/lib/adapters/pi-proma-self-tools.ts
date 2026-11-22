@@ -9,7 +9,7 @@ import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from 'typebox'
 import { promaSelfController, type PromaSelfApprovalRequester } from '../proma-self-controller'
 
-export interface PromaSelfToolsContext {
+interface PromaSelfToolsContext {
   sessionId: string
   /** 用户是否已显式同意某个高副作用动作（目前仅创建项目）。 */
   requestPromaSelfApproval?: PromaSelfApprovalRequester

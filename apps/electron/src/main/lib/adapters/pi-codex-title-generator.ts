@@ -25,7 +25,7 @@ type CodexTitleTransport = 'auto' | 'sse'
 const TITLE_MAX_OUTPUT_TOKENS = 40
 const TITLE_REQUEST_TIMEOUT_MS = 30_000
 
-export interface CodexTitleGenerationInput {
+interface CodexTitleGenerationInput {
   modelId: string
   prompt: string
   credentials: CodexOAuthCredentials
@@ -49,7 +49,7 @@ export interface CodexTitleRequestEnvironment {
   closeRequestProxyDispatcher: (dispatcher: Dispatcher | undefined) => Promise<void>
 }
 
-export interface CodexTitleConnectionSettings {
+interface CodexTitleConnectionSettings {
   proxyUrl?: string
   noProxy?: string
   transport: CodexTitleTransport
@@ -67,7 +67,7 @@ function getCaseInsensitiveEnvironmentValue(key: string): string | undefined {
  * 标题请求沿用前台 Pi Agent 的连接选择：无代理时优先 WebSocket（auto），
  * 有 HTTP 代理时改用可携带 undici dispatcher 的 SSE。
  */
-export function resolveCodexTitleConnectionSettings(proxyUrl?: string): CodexTitleConnectionSettings {
+function resolveCodexTitleConnectionSettings(proxyUrl?: string): CodexTitleConnectionSettings {
   const resolvedProxyUrl = proxyUrl?.trim()
     || getCaseInsensitiveEnvironmentValue('HTTPS_PROXY')
     || getCaseInsensitiveEnvironmentValue('HTTP_PROXY')

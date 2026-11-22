@@ -12,7 +12,7 @@ import { resolve } from 'node:path'
 /** 一轮结束后稍等再发现：连续轮次只跑一次，避免每个 turn 都打 gh。 */
 export const TURN_DISCOVERY_DEBOUNCE_MS = 5_000
 
-export interface ShouldDiscoverAfterTurnInput {
+interface ShouldDiscoverAfterTurnInput {
   /** 会话里已经有绑定。 */
   hasBindings: boolean
   /** 当前 cwd 所属 Git 仓库根；无法识别时为 null。 */
@@ -34,7 +34,7 @@ export function isTurnEndEvent(event: unknown): boolean {
   return type === 'run_completed' || type === 'run_stopped'
 }
 
-export interface TurnDiscoverySchedulerOptions {
+interface TurnDiscoverySchedulerOptions {
   /** 执行一次发现；异常会被吞掉，不影响 Agent 流。 */
   run: (sessionId: string) => void
   debounceMs?: number

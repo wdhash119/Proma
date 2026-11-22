@@ -13,7 +13,7 @@ import { isAgentRecommendToolCall, executeAgentRecommendTool } from './chat-tool
 import { getChatToolsConfig } from './chat-tool-config'
 
 /** 工具执行上下文 */
-export interface ToolExecutionContext {
+interface ToolExecutionContext {
   /** webContents 用于推送工具活动事件 */
   webContents: WebContents
   /** 对话 ID */

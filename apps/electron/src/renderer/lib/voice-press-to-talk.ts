@@ -24,7 +24,7 @@ interface PressToTalkSession {
   token: string
 }
 
-export interface PressToTalkControllerOptions {
+interface PressToTalkControllerOptions {
   /** 请求主进程开始一次长按会话；返回 false 表示被状态守卫拒绝。 */
   start: (token: string) => Promise<boolean>
   /** 请求主进程结束本次长按会话。 */

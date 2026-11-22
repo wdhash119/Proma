@@ -19,7 +19,7 @@ import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom'
 
 // ===== Conversation 根容器 =====
 
-export type ConversationProps = ComponentProps<typeof StickToBottom>
+type ConversationProps = ComponentProps<typeof StickToBottom>
 
 export function Conversation({ className, ...props }: ConversationProps): React.ReactElement {
   return (
@@ -35,7 +35,7 @@ export function Conversation({ className, ...props }: ConversationProps): React.
 
 // ===== ConversationContent 内容区域 =====
 
-export type ConversationContentProps = ComponentProps<typeof StickToBottom.Content>
+type ConversationContentProps = ComponentProps<typeof StickToBottom.Content>
 
 export function ConversationContent({ className, ...props }: ConversationContentProps): React.ReactElement {
   return (
@@ -48,7 +48,7 @@ export function ConversationContent({ className, ...props }: ConversationContent
 
 // ===== ConversationScrollButton 滚动到底部 =====
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>
+type ConversationScrollButtonProps = ComponentProps<typeof Button>
 
 export function ConversationScrollButton({
   className,

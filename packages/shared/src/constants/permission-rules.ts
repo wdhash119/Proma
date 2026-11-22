@@ -37,7 +37,7 @@ export const SAFE_TOOLS: readonly string[] = [
 ]
 
 /** 安全的 Bash 命令模式（只读操作） */
-export const SAFE_BASH_PATTERNS: readonly RegExp[] = [
+const SAFE_BASH_PATTERNS: readonly RegExp[] = [
   /^git\s+(status|log|diff|show|branch|remote|tag)\b/,
   /^ls\b/,
   /^head\b/,
@@ -66,7 +66,7 @@ export const SAFE_BASH_PATTERNS: readonly RegExp[] = [
 ]
 
 /** 危险命令前缀（需特别标记⚠️） */
-export const DANGEROUS_COMMANDS: readonly string[] = [
+const DANGEROUS_COMMANDS: readonly string[] = [
   'rm', 'rmdir',
   'sudo', 'su',
   'chmod', 'chown',

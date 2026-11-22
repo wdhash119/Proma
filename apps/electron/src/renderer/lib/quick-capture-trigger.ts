@@ -6,7 +6,7 @@
  * 这里用短时间窗去重：同一轮按键只执行一次打开动作。
  */
 
-export interface QuickCaptureTriggerOptions {
+interface QuickCaptureTriggerOptions {
   /** 仅供测试：注入时钟。 */
   now?: () => number
   /** 去重窗口；默认 300ms，覆盖 keydown 与 IPC 的到达间隔。 */

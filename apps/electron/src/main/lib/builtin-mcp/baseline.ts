@@ -12,7 +12,7 @@
 import type { BuiltinMcpCategory, McpToolSummary } from '@proma/shared'
 import manifest from './default-mcp.json' with { type: 'json' }
 
-export interface BuiltinMcpDefinition {
+interface BuiltinMcpDefinition {
   /** 内置能力 ID（如 'proma-cloud'）。 */
   id: string
   /** 运行时真实 server 名，下划线安全（= prompt = 注入 = UI 真实名） */

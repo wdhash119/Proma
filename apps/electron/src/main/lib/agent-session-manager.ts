@@ -432,7 +432,7 @@ export function getSessionCheckoutHistory(sessionId: string): SessionCheckoutEnt
   return getAgentSessionMeta(sessionId)?.checkoutHistory ?? []
 }
 
-export function resolveAgentWorkbenchDir(
+function resolveAgentWorkbenchDir(
   workspace: Pick<AgentWorkspace, 'slug' | 'projectRootPath'> | undefined,
   sessionId: string,
 ): string | undefined {
@@ -517,7 +517,7 @@ export function getAgentSessionMessages(id: string): AgentMessage[] {
 /**
  * 追加一条消息到会话的 JSONL 文件
  */
-export function appendAgentMessage(id: string, message: AgentMessage): void {
+function appendAgentMessage(id: string, message: AgentMessage): void {
   // Late output from a stopped/deleted runtime must never recreate its JSONL file.
   if (isAgentSessionDeleting(id) || !getAgentSessionMeta(id)) return
 

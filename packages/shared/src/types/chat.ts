@@ -94,7 +94,7 @@ export interface FileOrFolderDialogResult extends FileDialogResult {
 /**
  * 消息角色
  */
-export type MessageRole = 'user' | 'assistant' | 'system'
+type MessageRole = 'user' | 'assistant' | 'system'
 
 /**
  * 聊天消息

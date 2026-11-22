@@ -5,7 +5,7 @@
  * 也可能是 `{ type, value }` 结构，判断前必须先归一化，否则会把空名字当成有效名字。
  */
 
-export interface CdpAxValue {
+interface CdpAxValue {
   type?: string
   value?: unknown
 }

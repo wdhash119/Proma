@@ -56,7 +56,7 @@ function getCacheTtl(result: ChannelPlanQuotaResult): number {
   return result.supported ? PLAN_QUOTA_CACHE_MS : PLAN_QUOTA_ERROR_CACHE_MS
 }
 
-export function getCachedPlanQuota(channelId: string, channelUpdatedAt?: number): ChannelPlanQuotaResult | null {
+function getCachedPlanQuota(channelId: string, channelUpdatedAt?: number): ChannelPlanQuotaResult | null {
   const cached = quotaCache.get(channelId)
   if (!cached || cached.channelUpdatedAt !== channelUpdatedAt) return null
   if (Date.now() - cached.result.updatedAt >= getCacheTtl(cached.result)) return null

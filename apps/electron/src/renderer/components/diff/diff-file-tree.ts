@@ -3,11 +3,11 @@
  * 仅包含存在改动的路径，并压缩没有分支的连续目录，减少无意义的纵向层级。
  */
 
-export interface DiffFileTreeEntry {
+interface DiffFileTreeEntry {
   filePath: string
 }
 
-export interface DiffFileTreeDirectoryNode<T extends DiffFileTreeEntry> {
+interface DiffFileTreeDirectoryNode<T extends DiffFileTreeEntry> {
   kind: 'directory'
   /** 展示名；连续单分支目录会合并为带斜杠的路径。 */
   name: string
@@ -16,7 +16,7 @@ export interface DiffFileTreeDirectoryNode<T extends DiffFileTreeEntry> {
   children: Array<DiffFileTreeNode<T>>
 }
 
-export interface DiffFileTreeFileNode<T extends DiffFileTreeEntry> {
+interface DiffFileTreeFileNode<T extends DiffFileTreeEntry> {
   kind: 'file'
   name: string
   path: string

@@ -20,7 +20,7 @@ export interface GitHubRepository {
   name: string
 }
 
-export interface ChangeRequestView {
+interface ChangeRequestView {
   snapshot: ChangeRequestSnapshot
   url: string
   host: string
@@ -29,7 +29,7 @@ export interface ChangeRequestView {
   number: number
 }
 
-export type GhRunner = (program: string, args: string[], cwd: string) => Promise<string>
+type GhRunner = (program: string, args: string[], cwd: string) => Promise<string>
 
 const VIEW_FIELDS = 'number,url,title,state,isDraft,headRefName,baseRefName,reviewDecision,mergeable,statusCheckRollup'
 const LIST_FIELDS = 'number,url,headRefName,headRepositoryOwner'

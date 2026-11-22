@@ -1,5 +1,5 @@
 /** Pi 自动压缩开始时的上下文占用比例。 */
-export const PI_AUTO_COMPACTION_THRESHOLD_RATIO = 0.8
+const PI_AUTO_COMPACTION_THRESHOLD_RATIO = 0.8
 
 /**
  * 将目标上下文占用比例换算为 Pi SDK 的 reserveTokens 配置。

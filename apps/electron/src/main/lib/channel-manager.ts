@@ -774,7 +774,7 @@ export async function resolveCodexOAuthCredentials(channelId: string): Promise<C
 }
 
 /** 返回当前有效的 Codex access token，兼容只需要 bearer token 的调用方。 */
-export async function resolveCodexAccessToken(channelId: string): Promise<string> {
+async function resolveCodexAccessToken(channelId: string): Promise<string> {
   return (await resolveCodexOAuthCredentials(channelId)).access
 }
 
@@ -862,7 +862,7 @@ export async function resolveXaiOAuthCredentials(channelId: string): Promise<Xai
   return refreshed
 }
 
-export async function resolveXaiAccessToken(channelId: string): Promise<string> {
+async function resolveXaiAccessToken(channelId: string): Promise<string> {
   return (await resolveXaiOAuthCredentials(channelId)).access
 }
 

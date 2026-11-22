@@ -48,7 +48,7 @@ interface PendingExitPlan {
  */
 const MAX_PLAN_DOCUMENT_BYTES = 1024 * 1024
 
-export class AgentExitPlanService {
+class AgentExitPlanService {
   /** 待处理的请求 Map（requestId → PendingExitPlan） */
   private pendingRequests = new Map<string, PendingExitPlan>()
 

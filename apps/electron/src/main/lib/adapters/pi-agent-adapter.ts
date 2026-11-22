@@ -114,7 +114,7 @@ const PI_NATIVE_RETRY_BASE_DELAY_MS = 1_000
 const PI_NATIVE_MAX_DELAY_MS = 60_000
 const MAX_AUTOMATIC_COMPACTION_CONTINUATIONS = 20
 
-export function shouldMarkCompactionAfterCompletedTurn(
+function shouldMarkCompactionAfterCompletedTurn(
   terminalResult: SDKMessage | undefined,
   requiresOriginalTaskContinuation: boolean,
 ): boolean {
@@ -246,7 +246,7 @@ interface AssistantMessageState {
  * 同一 assistant 流在 Pi native retry 前后必须复用 UUID：renderer 才能用恢复后的
  * partial/final frame 原地替换断流前的 partial，而不是把两段回答并排追加。
  */
-export function createPiAssistantUuidTracker(createUuid: () => string = randomUUID): {
+function createPiAssistantUuidTracker(createUuid: () => string = randomUUID): {
   get: () => string
   reset: () => void
 } {
@@ -273,7 +273,7 @@ function toolCallDeltaFromPartial(event: Extract<AssistantMessageEvent, { type: 
 }
 
 /** Extract only the small structured delta from Pi's cumulative message_update event. */
-export function serializePiAssistantDelta(event: AssistantMessageEvent): AgentAssistantDelta | undefined {
+function serializePiAssistantDelta(event: AssistantMessageEvent): AgentAssistantDelta | undefined {
   switch (event.type) {
     case 'start': return { type: 'start' }
     case 'text_start': return { type: 'text_start', contentIndex: event.contentIndex }
@@ -305,7 +305,7 @@ export function serializePiAssistantDelta(event: AssistantMessageEvent): AgentAs
   }
 }
 
-export interface PiRemoteConnectionSettings {
+interface PiRemoteConnectionSettings {
   httpProxy?: string
   transport?: PiAgentTransport
   httpIdleTimeoutMs?: number
@@ -748,7 +748,7 @@ function createTerminatingJsonToolResult(payload: unknown): AgentToolResult<unkn
   } as AgentToolResult<unknown>
 }
 
-export const PI_COMPACTION_CONTINUATION_PROMPT = `<proma_compaction_continuation>
+const PI_COMPACTION_CONTINUATION_PROMPT = `<proma_compaction_continuation>
 当前会话上下文已经安全压缩。请依据压缩摘要、保留的最近上下文和已持久化的交接状态，继续完成原始用户任务。
 
 - 不要重复已经完成或已提交的操作；先核验当前状态。
@@ -756,7 +756,7 @@ export const PI_COMPACTION_CONTINUATION_PROMPT = `<proma_compaction_continuation
 - 只有原始需求全部完成时才给出最终答复；若确实受阻，明确说明阻塞原因。
 </proma_compaction_continuation>`
 
-export function planPiCompactionContinuation(options: {
+function planPiCompactionContinuation(options: {
   continuationCount: number
   abortRequested: boolean
   runtimeLimitReached: boolean
@@ -771,12 +771,12 @@ export function planPiCompactionContinuation(options: {
   return { shouldContinue: true, prompt: PI_COMPACTION_CONTINUATION_PROMPT }
 }
 
-export function canRunCurrentSessionCompaction(toolNames: string[]): boolean {
+function canRunCurrentSessionCompaction(toolNames: string[]): boolean {
   return toolNames.length === 1 && toolNames[0] === 'CompactContext'
 }
 
 /** AskUserQuestion 必须暂停整个工具批次，不能与后续动作混合执行。 */
-export function shouldBlockToolForAskUserQuestion(toolNames: string[], toolName: string): boolean {
+function shouldBlockToolForAskUserQuestion(toolNames: string[], toolName: string): boolean {
   return toolName !== 'AskUserQuestion'
     && toolNames.includes('AskUserQuestion')
     && toolNames.length > 1
@@ -799,14 +799,14 @@ function isPiContextOverflow(message: AssistantMessage, contextWindow: number | 
   return false
 }
 
-export function shouldDeferPiOverflowTerminalMessage(
+function shouldDeferPiOverflowTerminalMessage(
   message: AssistantMessage,
   contextWindow: number | undefined,
 ): boolean {
   return message.stopReason !== 'stop' && isPiContextOverflow(message, contextWindow)
 }
 
-export function shouldDeferPiOverflowTerminalError(
+function shouldDeferPiOverflowTerminalError(
   message: AssistantMessage | undefined,
   contextWindow: number | undefined,
   willRetry: boolean,
@@ -847,7 +847,7 @@ function installCurrentSessionCompactionHooks(session: AgentSession): void {
  * Creates a session-scoped compaction control. The callback is closed over by one
  * query invocation, so a model cannot select or compact any other user session.
  */
-export function buildCurrentSessionCompactionTool(
+function buildCurrentSessionCompactionTool(
   sdk: PiSdk,
   requestCompaction: () => void,
   canUseTool: PiAgentQueryOptions['canUseTool'],
@@ -891,7 +891,7 @@ function createCompactionNoopMessage(sessionId: string, error: unknown): SDKMess
   } as unknown as SDKMessage
 }
 
-export async function compactCurrentSessionAfterTurn(
+async function compactCurrentSessionAfterTurn(
   session: Pick<AgentSession, 'compact' | 'sessionId'>,
   onNoop: (message: SDKMessage) => void,
 ): Promise<'compacted' | 'noop'> {
@@ -1220,7 +1220,7 @@ function createPromaBashToolOptions(sdk: PiSdk, runtimeEnv: AgentRuntimeEnv | un
   }
 }
 
-export function isPiBashToolAvailable(
+function isPiBashToolAvailable(
   platform: NodeJS.Platform,
   runtimeEnv: Pick<AgentRuntimeEnv, 'shellKind'> | undefined,
 ): boolean {
@@ -1229,14 +1229,14 @@ export function isPiBashToolAvailable(
 }
 
 /** Pi 0.84.3 起可在 Windows 无 Git Bash / WSL 时使用系统原生 PowerShell。 */
-export function isPiPowerShellToolAvailable(platform: NodeJS.Platform): boolean {
+function isPiPowerShellToolAvailable(platform: NodeJS.Platform): boolean {
   return platform === 'win32'
 }
 
-export type PiBuiltinShellTool = 'bash' | 'powershell' | 'none'
+type PiBuiltinShellTool = 'bash' | 'powershell' | 'none'
 
 /** 每个会话只暴露一种 Shell，避免模型混用 Bash 与 PowerShell 语法。 */
-export function selectPiBuiltinShellTool(
+function selectPiBuiltinShellTool(
   platform: NodeJS.Platform,
   runtimeEnv: Pick<AgentRuntimeEnv, 'shellKind'> | undefined,
 ): PiBuiltinShellTool {
@@ -1311,7 +1311,7 @@ function wrapCustomToolDefinitions(
     wrapToolWithPermission(tool as unknown as ToolDefinition<TSchema, unknown, unknown>, { canUseTool }) as ToolDefinition)
 }
 
-export function installRuntimeGuardHooks(session: AgentSession, guard: AgentRuntimeGuard): void {
+function installRuntimeGuardHooks(session: AgentSession, guard: AgentRuntimeGuard): void {
   const previousAfterToolCall = session.agent.afterToolCall
   session.agent.afterToolCall = async (context, signal) => {
     const previousResult = await previousAfterToolCall?.(context, signal)

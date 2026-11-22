@@ -40,7 +40,7 @@ interface InlineQuotedSelectionPayload {
   endLine?: number
 }
 
-export function escapeXmlAttribute(value: string): string {
+function escapeXmlAttribute(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -48,7 +48,7 @@ export function escapeXmlAttribute(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
-export function decodeXmlAttribute(value: string): string {
+function decodeXmlAttribute(value: string): string {
   return value
     .replace(/&quot;/g, '"')
     .replace(/&gt;/g, '>')
@@ -194,7 +194,7 @@ export function buildQuotedSelectionLabel(quote: QuotedSelection): string {
 }
 
 /** 为已发送消息生成展示用历史引用 marker，允许缺少旧版本的定位字段。 */
-export function serializeAgentHistoryQuoteDisplayMention(quote: QuotedSelection): string | null {
+function serializeAgentHistoryQuoteDisplayMention(quote: QuotedSelection): string | null {
   if (quote.sourceType !== 'agent-history' || !isNonEmptyString(quote.text) || !isNonEmptyString(quote.messageId)) {
     return null
   }
@@ -298,7 +298,7 @@ function normalizeContextSourceType(_value: string | undefined): QuotedSelection
   return 'agent-history'
 }
 
-export interface ParseQuotedSelectionRefsOptions {
+interface ParseQuotedSelectionRefsOptions {
   /** 将 Agent 历史引用保留为展示用 inline mention marker。 */
   inlineAgentHistoryQuotes?: boolean
 }

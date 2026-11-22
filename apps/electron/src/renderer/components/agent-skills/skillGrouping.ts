@@ -1,6 +1,6 @@
 import type { SkillMeta } from '@proma/shared'
 
-export interface SkillGroup {
+interface SkillGroup {
   id: string
   title: string
   skills: SkillMeta[]

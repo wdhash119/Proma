@@ -15,7 +15,7 @@ import {
   type ChatMarkdownBlock,
 } from '@/lib/chat-markdown-blocks'
 
-export interface ChatMarkdownProps {
+interface ChatMarkdownProps {
   /** Markdown 源码 */
   source: string
   /** 已归一化的 remark 插件（稳定引用） */

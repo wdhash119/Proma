@@ -23,9 +23,9 @@ import {
 export const MAX_INSTRUCTION_BYTES = 512 * 1024
 
 /** 迁移记录 JSON 的上限；正常记录只有几十 KB。 */
-export const MAX_MIGRATION_RECORD_BYTES = 4 * 1024 * 1024
+const MAX_MIGRATION_RECORD_BYTES = 4 * 1024 * 1024
 
-export interface InstructionIssue {
+interface InstructionIssue {
   path: string
   message: string
 }
@@ -176,7 +176,7 @@ export function inspectLegacyProjectInstructions(
 }
 
 /** 当前会话是否在 worktree 中工作；此时任何迁移都必须延后。 */
-export function isInstructionMigrationDeferred(ctx: ProjectInstructionContext): boolean {
+function isInstructionMigrationDeferred(ctx: ProjectInstructionContext): boolean {
   if (ctx.isWorktree === true) return true
   if (!ctx.canonicalProjectRoot) return false
   return !isSameInstructionPath(ctx.projectRoot, ctx.canonicalProjectRoot)

@@ -2,7 +2,7 @@
  * 语音输入音频工具
  */
 
-export const TARGET_SAMPLE_RATE = 16000
+const TARGET_SAMPLE_RATE = 16000
 export const CHUNK_BYTES = TARGET_SAMPLE_RATE * 2 * 0.2
 
 export function floatTo16BitPcm(samples: Float32Array, inputSampleRate: number): ArrayBuffer {

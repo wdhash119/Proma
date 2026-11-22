@@ -86,7 +86,7 @@ export interface PlanningSyncOutboxItem {
   nativeStartAt?: number
 }
 
-export interface PlanningNativeExternalItem {
+interface PlanningNativeExternalItem {
   calendarItemIdentifier: string
   calendarItemExternalIdentifier?: string
   /** 仅由 addon 从 Proma 自己写入的 URL marker 解析，绝不透出任意用户 URL。 */

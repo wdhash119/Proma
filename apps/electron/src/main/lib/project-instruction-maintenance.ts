@@ -34,9 +34,9 @@ import {
 } from './project-instruction-state'
 
 /** 维护结果：ready 表示已核验就绪，其余状态需要重新合并或延后。 */
-export type InstructionMaintenanceStatus = 'ready' | 'needs-merge' | 'blocked' | 'deferred'
+type InstructionMaintenanceStatus = 'ready' | 'needs-merge' | 'blocked' | 'deferred'
 
-export interface InstructionMaintenanceResult extends Partial<InstructionMigrationState> {
+interface InstructionMaintenanceResult extends Partial<InstructionMigrationState> {
   status: InstructionMaintenanceStatus
   changed?: boolean
   targetPath?: string
@@ -54,7 +54,6 @@ function memoryContext(ctx: ProjectInstructionContext): ProjectMemoryContext {
 }
 
 /** 供工具层复用的写权限校验。 */
-export { assertInstructionWritable }
 
 /**
  * 结束维护：确认没有待合并来源后补齐记忆关联并记录完成。

@@ -1,4 +1,4 @@
-export const UTILITY_PROCESS_START_RETRY_DELAYS_MS = [25, 100] as const
+const UTILITY_PROCESS_START_RETRY_DELAYS_MS = [25, 100] as const
 export const UTILITY_PROCESS_START_CANCELLED_CODE = 'UTILITY_PROCESS_START_CANCELLED'
 
 type UtilityProcessStartupCancelledError = Error & {

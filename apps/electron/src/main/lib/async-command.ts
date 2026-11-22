@@ -1,14 +1,14 @@
 import { execFile } from 'node:child_process'
 import type { ExecFileOptions } from 'node:child_process'
 
-export interface AsyncCommandOptions {
+interface AsyncCommandOptions {
   cwd?: string
   encoding?: BufferEncoding | 'buffer'
   env?: NodeJS.ProcessEnv
   timeout?: number
 }
 
-export interface AsyncCommandResult {
+interface AsyncCommandResult {
   stdout: string | Buffer
   stderr: string | Buffer
 }

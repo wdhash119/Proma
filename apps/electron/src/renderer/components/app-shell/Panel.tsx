@@ -6,7 +6,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-export interface PanelProps {
+interface PanelProps {
   /** Panel sizing behavior */
   variant?: 'shrink' | 'grow'
   /** Fixed width in pixels (only for shrink variant) */

@@ -322,7 +322,7 @@ function normalizeMaxRuns(v: number | null | undefined): number | undefined {
 /**
  * 应用 maxRuns 变更。只要运行配额发生变化，就把已执行计数/完成标记重置到新配额的起点。
  */
-export function applyMaxRunsUpdate(
+function applyMaxRunsUpdate(
   target: Pick<Automation, 'maxRuns' | 'runCount' | 'completedAt'>,
   nextMaxRuns: number | null | undefined,
 ): void {
@@ -359,7 +359,7 @@ type AutomationScheduleFields = Omit<
   'intervalMinutes'
 > & { intervalMinutes?: number }
 
-export function normalizeAutomationScheduleFields(
+function normalizeAutomationScheduleFields(
   target: Pick<Automation, 'scheduleType' | 'activeWindowStart' | 'activeWindowEnd' | 'activeWeekdays' | 'timeOfDay' | 'dayOfWeek' | 'dayOfMonth' | 'scheduledAt'>,
 ): void {
   if (target.scheduleType !== 'interval') {

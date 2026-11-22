@@ -124,7 +124,7 @@ export function buildAgentSessionTrees(
   }))
 }
 
-export function buildWorkspaceAgentSessionTrees(
+function buildWorkspaceAgentSessionTrees(
   sessions: readonly AgentSessionMeta[],
   workspaceId: string | null,
   agentIndicatorMap?: ReadonlyMap<string, SessionIndicatorStatus>,

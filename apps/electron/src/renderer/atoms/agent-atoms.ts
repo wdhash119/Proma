@@ -15,35 +15,7 @@ import type { AgentQueuedMessage } from '@/lib/agent-message-queue'
 import type { SessionFileChange } from '@/lib/session-file-changes'
 import type { RightWorkspaceSplitState } from '@/lib/right-workspace-split'
 
-/** 活动状态 */
-export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error' | 'backgrounded'
-
-/** 工具活动状态 */
-export interface ToolActivity {
-  toolUseId: string
-  toolName: string
-  input: Record<string, unknown>
-  intent?: string
-  displayName?: string
-  result?: string
-  isError?: boolean
-  done: boolean
-  parentToolUseId?: string
-  elapsedSeconds?: number
-  taskId?: string
-  shellId?: string
-  isBackground?: boolean
-  /** MCP 工具返回的图片附件 */
-  imageAttachments?: Array<{ localPath: string; filename: string; mediaType: string }>
-}
-
-/** 活动分组（Task 子代理） */
-export interface ActivityGroup {
-  parent: ToolActivity
-  children: ToolActivity[]
-}
-
-export interface ContextCompactionState {
+interface ContextCompactionState {
   status: 'running' | 'success' | 'noop' | 'failed'
   /** 主任务已收到成功的 agent_end，当前仅在收尾整理上下文。 */
   afterCompletedTurn?: boolean
@@ -52,10 +24,10 @@ export interface ContextCompactionState {
 }
 
 /** 用户可见的 retry 生命周期。 */
-export type RetryPhase = 'scheduled' | 'running' | 'succeeded' | 'exhausted' | 'cancelled'
+type RetryPhase = 'scheduled' | 'running' | 'succeeded' | 'exhausted' | 'cancelled'
 
 /** 单个流式 run 的 retry 状态。 */
-export interface AgentRetryState {
+interface AgentRetryState {
   /** 用渲染进程创建的 startedAt 隔离迟到事件。 */
   runStartedAt?: number
   /** 当前 retry 所处阶段。 */
@@ -142,14 +114,6 @@ export function resumeAgentStreamState(prev: AgentStreamState): AgentStreamState
   return resumed.retrying === undefined ? resumed : { ...resumed, retrying: undefined }
 }
 
-/** 从 ToolActivity 派生状态 */
-export function getActivityStatus(activity: ToolActivity): ActivityStatus {
-  if (activity.isBackground) return 'backgrounded'
-  if (!activity.done) return 'running'
-  if (activity.isError) return 'error'
-  return 'completed'
-}
-
 interface RetryEventRunScope {
   runStartedAt?: number
 }
@@ -176,87 +140,8 @@ function upsertRetryAttempt(history: RetryAttempt[], attempt: RetryAttempt): Ret
   ))
 }
 
-/**
- * 合并同层 TodoWrite 活动：多次调用只保留最新 input，置底显示
- *
- * TodoWrite 每次调用都包含完整的 todo 列表，只需展示最新状态。
- */
-function mergeTodoWrites(activities: ToolActivity[]): ToolActivity[] {
-  const todoWrites: ToolActivity[] = []
-  const others: ToolActivity[] = []
-
-  for (const a of activities) {
-    if (a.toolName === 'TodoWrite') {
-      todoWrites.push(a)
-    } else {
-      others.push(a)
-    }
-  }
-
-  if (todoWrites.length === 0) return activities
-
-  const latest = todoWrites[todoWrites.length - 1]!
-  const allDone = todoWrites.every((t) => t.done)
-
-  const merged: ToolActivity = {
-    ...latest,
-    done: allDone,
-    isError: allDone && todoWrites.some((t) => t.isError),
-  }
-
-  return [...others, merged]
-}
-
-/**
- * 将扁平活动列表按 parentToolUseId 分组
- *
- * 返回顶层项（ActivityGroup | ToolActivity），
- * Task 类型的工具作为 group.parent，其子活动嵌套在 children 中。
- * 每层内 TodoWrite 合并去重并置底。
- */
-export function groupActivities(activities: ToolActivity[]): Array<ActivityGroup | ToolActivity> {
-  // 过滤幽灵条目：tool_progress 创建的空 input 条目，完成后仍无内容
-  const filtered = activities.filter((a) => {
-    if (a.done && Object.keys(a.input).length === 0 && !a.result) return false
-    return true
-  })
-  const processed = mergeTodoWrites(filtered)
-
-  const parentIds = new Set<string>()
-  for (const a of processed) {
-    if (a.toolName === 'Task' || a.toolName === 'Agent') parentIds.add(a.toolUseId)
-  }
-
-  const childrenMap = new Map<string, ToolActivity[]>()
-  const topLevel: Array<ActivityGroup | ToolActivity> = []
-
-  for (const a of processed) {
-    if (a.parentToolUseId && parentIds.has(a.parentToolUseId)) {
-      const children = childrenMap.get(a.parentToolUseId) ?? []
-      children.push(a)
-      childrenMap.set(a.parentToolUseId, children)
-    } else {
-      topLevel.push(a)
-    }
-  }
-
-  return topLevel.map((item) => {
-    if ('toolUseId' in item && parentIds.has(item.toolUseId)) {
-      const children = childrenMap.get(item.toolUseId) ?? []
-      return { parent: item, children: mergeTodoWrites(children) } as ActivityGroup
-    }
-    return item
-  })
-}
-
-/** 判断是否为 ActivityGroup */
-export function isActivityGroup(item: ActivityGroup | ToolActivity): item is ActivityGroup {
-  return 'parent' in item && 'children' in item
-}
-
-
 /** 待预填到新 Agent 会话输入框的提示词；仅由用户手动发送。 */
-export interface AgentPendingPrompt {
+interface AgentPendingPrompt {
   sessionId: string
   message: string
   additionalDirectories?: string[]
@@ -350,7 +235,7 @@ export const agentStreamingStatesAtom = atom<Map<string, AgentStreamState>, [Map
 )
 
 /** AgentView 输入区/工具栏需要的低频流状态。 */
-export type AgentViewStreamState = Pick<
+type AgentViewStreamState = Pick<
   AgentStreamState,
   | 'running'
   | 'backgroundWaiting'
@@ -365,7 +250,7 @@ export type AgentViewStreamState = Pick<
 
 const EMPTY_AGENT_VIEW_STREAM_STATE: AgentViewStreamState = { running: false }
 
-export function areAgentViewStreamStatesEqual(
+function areAgentViewStreamStatesEqual(
   previous: AgentViewStreamState,
   next: AgentViewStreamState,
 ): boolean {
@@ -391,11 +276,11 @@ export const agentSessionViewStreamStateAtomFamily = atomFamily((sessionId: stri
 /**
  * AgentView 输入区/工具栏只订阅运行生命周期，usage 数据由 ContextUsageBadge 独立消费。
  */
-export type AgentInputStreamState = Pick<AgentStreamState, 'running' | 'backgroundWaiting'>
+type AgentInputStreamState = Pick<AgentStreamState, 'running' | 'backgroundWaiting'>
 
 const EMPTY_AGENT_INPUT_STREAM_STATE: AgentInputStreamState = { running: false }
 
-export function areAgentInputStreamStatesEqual(
+function areAgentInputStreamStatesEqual(
   previous: AgentInputStreamState,
   next: AgentInputStreamState,
 ): boolean {
@@ -518,13 +403,13 @@ export const agentSidePanelOpenAtomFamily = atomFamily((sessionId: string) => at
 /** 新 Agent 会话的右侧面板基线宽度；不继承旧版全局或其他会话的宽布局。 */
 const DEFAULT_AGENT_SIDE_PANEL_WIDTH = 460
 
-export interface AgentSidePanelLayout {
+interface AgentSidePanelLayout {
   width: number
   hasOpenedWideWorkspace: boolean
   widePanelWidthOverride: number | null
 }
 
-export const MAX_PERSISTED_AGENT_SIDE_PANEL_LAYOUTS = 50
+const MAX_PERSISTED_AGENT_SIDE_PANEL_LAYOUTS = 50
 
 /**
  * 仅保留最近活动的 Session 布局，防止 localStorage 随历史会话无限增长。
@@ -684,7 +569,7 @@ export function pruneFileBrowserStateMap<T>(state: Map<string, T>, retainedSessi
  * 同一项目下的打开状态跨会话保留；关闭一个组件不会影响其他项目。
  */
 export type WorkspaceComponentTab = 'todos' | 'calendar' | 'automations' | 'skills' | 'mcp' | 'memory' | 'vault'
-export const WORKSPACE_COMPONENT_TABS: readonly WorkspaceComponentTab[] = ['todos', 'calendar', 'automations', 'skills', 'mcp', 'memory', 'vault']
+const WORKSPACE_COMPONENT_TABS: readonly WorkspaceComponentTab[] = ['todos', 'calendar', 'automations', 'skills', 'mcp', 'memory', 'vault']
 
 export function isWorkspaceComponentTab(tab: AgentSidePanelTab | string): tab is WorkspaceComponentTab {
   return (WORKSPACE_COMPONENT_TABS as readonly string[]).includes(tab)
@@ -702,7 +587,7 @@ export function getDelegationTabLabel(title: string | null | undefined): string 
   return title?.trim() || '委派任务'
 }
 
-export type AgentSidePanelBaseTab = 'files' | 'changes' | 'chat' | 'temporary-agent' | 'delegation' | WorkspaceComponentTab
+type AgentSidePanelBaseTab = 'files' | 'changes' | 'chat' | 'temporary-agent' | 'delegation' | WorkspaceComponentTab
 /** 工作区组件、每个 Pi 探索分支、协作子 Agent、浏览器网页和文件预览都处于右侧工作区顶栏。 */
 export type AgentSidePanelTab = AgentSidePanelBaseTab | `exploration:${string}` | `browser:${string}` | `preview:${string}` | `terminal:${string}`
 
@@ -744,20 +629,12 @@ export function getExplorationSessionIdFromSidePanelTab(tab: AgentSidePanelTab |
   return tab.startsWith('exploration:') ? tab.slice('exploration:'.length) : null
 }
 
-export function isExplorationSidePanelTab(tab: AgentSidePanelTab | 'exploration'): tab is `exploration:${string}` {
-  return tab.startsWith('exploration:')
-}
-
 export function getBrowserSidePanelTab(tabId: string): AgentSidePanelTab {
   return `browser:${tabId}`
 }
 
 export function getBrowserTabIdFromSidePanelTab(tab: AgentSidePanelTab | 'browser'): string | null {
   return tab.startsWith('browser:') ? tab.slice('browser:'.length) : null
-}
-
-export function isBrowserSidePanelTab(tab: AgentSidePanelTab | 'browser' | 'preview'): tab is `browser:${string}` {
-  return tab.startsWith('browser:')
 }
 
 export function getPreviewSidePanelTab(previewId: string): AgentSidePanelTab {
@@ -769,7 +646,7 @@ export function getPreviewIdFromSidePanelTab(tab: AgentSidePanelTab | 'preview')
 }
 
 /** 终端仅在本次应用运行期存在，按 Agent 会话归属右侧工作区。 */
-export interface AgentTerminalTab {
+interface AgentTerminalTab {
   terminalId: string
   title: string
   /** 用户从 Worktree 入口打开时，终端固定在对应根目录。 */
@@ -836,7 +713,7 @@ export const agentSidePanelSplitRatioMapAtom = atomWithStorage<Record<string, nu
 )
 
 /** Agent 历史中的 Skill 引用请求在 Skills Tab 内打开对应详情。 */
-export interface SkillDetailNavigationRequest {
+interface SkillDetailNavigationRequest {
   skillSlug: string
   /** 用于防止跨项目会话误打开同名 Skill。 */
   workspaceSlug?: string
@@ -935,7 +812,7 @@ export const agentSessionPathMapAtom = atom<Map<string, string>>(new Map())
  * FileBrowser 实例订阅后，若路径落在自身 rootPath 下则展开祖先 + 滚动定位。
  * `ts` 用于触发同路径的二次定位（atom 比对引用）。
  */
-export interface FileBrowserAutoReveal {
+interface FileBrowserAutoReveal {
   sessionId: string
   path: string
   ts: number
@@ -945,7 +822,7 @@ export interface FileBrowserAutoReveal {
 export const fileBrowserAutoRevealAtom = atom<FileBrowserAutoReveal | null>(null)
 
 /** 文件搜索定位只应影响发起后的短暂视图，避免切回 Files 时重放旧定位。 */
-export const FILE_BROWSER_AUTO_REVEAL_TTL_MS = 1_500
+const FILE_BROWSER_AUTO_REVEAL_TTL_MS = 1_500
 
 export function isFileBrowserAutoRevealActive(
   reveal: FileBrowserAutoReveal | null,
@@ -1006,21 +883,6 @@ export interface AskUserRequestDraft {
 
 /** 待提交 AskUser 草稿 Map — 以 requestId 为 key，切换预览/会话时保留填写进度 */
 export const askUserDraftsAtom = atom<Map<string, AskUserRequestDraft>>(new Map())
-
-let lastRunningSessionSignature = ''
-let lastRunningSessionIds = new Set<string>()
-
-export const agentRunningSessionIdsAtom = atom<Set<string>>((get) => {
-  const ids = new Set<string>()
-  for (const sessionId of get(agentStreamingStateIdsAtom)) {
-    if (get(agentSessionStreamingStateAtomFamily(sessionId))?.running) ids.add(sessionId)
-  }
-  const signature = [...ids].sort().join('|')
-  if (signature === lastRunningSessionSignature) return lastRunningSessionIds
-  lastRunningSessionSignature = signature
-  lastRunningSessionIds = ids
-  return ids
-})
 
 /** 侧边栏会话指示点状态 */
 export type SessionIndicatorStatus = 'idle' | 'running' | 'blocked' | 'completed'
@@ -1436,7 +1298,7 @@ export const agentMessageRefreshAtom = atom<Map<string, number>>(new Map())
  * 因此通过 setSessionMessagesCache 做 LRU 淘汰，仅保留最近访问的
  * AGENT_MSG_CACHE_MAX 个会话；会话删除时也需主动剔除对应条目。
  */
-export const AGENT_MSG_CACHE_MAX = 20
+const AGENT_MSG_CACHE_MAX = 20
 export const agentSDKMessagesCacheAtom = atom<Map<string, SDKMessage[]>>(new Map())
 
 /**

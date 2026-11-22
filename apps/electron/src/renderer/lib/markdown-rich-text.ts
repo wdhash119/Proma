@@ -7,8 +7,6 @@ const DETAILS_BLOCK_RE = /<details(\s[^>]*)?>\s*<summary>([\s\S]*?)<\/summary>([
 const STANDALONE_HTML_MEDIA_RE = /^\s*<(?:img|video)\b[^>]*(?:\/?>|>.*?<\/video>)\s*$/i
 const LEADING_FRONTMATTER_RE = /^(?:\ufeff)?---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?=\r?\n|$)/
 
-export const MARKDOWN_RENDERER_VERSION = 5
-
 const EMOJI_SHORTCODES: Record<string, string> = {
   '+1': '👍',
   '-1': '👎',
@@ -138,13 +136,13 @@ export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
   return headings
 }
 
-export function parseImageWidth(value: unknown): number | null {
+function parseImageWidth(value: unknown): number | null {
   if (typeof value === 'string' && !/^\d+$/.test(value)) return null
   const width = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN
   return Number.isSafeInteger(width) && width > 0 && width <= 10_000 ? width : null
 }
 
-export function extractCodeText(codeEl: Element): string {
+function extractCodeText(codeEl: Element): string {
   const parts: string[] = []
   for (const child of Array.from(codeEl.childNodes)) {
     if (child.nodeType === globalThis.Node.TEXT_NODE) {

@@ -7,32 +7,32 @@ export interface WindowBounds {
   y: number
 }
 
-export interface WindowWorkArea {
+interface WindowWorkArea {
   width: number
   height: number
   x: number
   y: number
 }
 
-export interface WindowDisplayLike {
+interface WindowDisplayLike {
   workArea: WindowWorkArea
 }
 
-export interface NormalizeWindowBoundsOptions {
+interface NormalizeWindowBoundsOptions {
   minWidth?: number
   minHeight?: number
   fallbackWidth?: number
   fallbackHeight?: number
 }
 
-export interface WindowBoundsController {
+interface WindowBoundsController {
   isMaximized(): boolean
   isFullScreen(): boolean
   getBounds(): WindowBounds
   setBounds(bounds: WindowBounds): void
 }
 
-export interface MainWindowStateReadable {
+interface MainWindowStateReadable {
   isDestroyed(): boolean
   isMaximized(): boolean
   isFullScreen(): boolean
@@ -40,7 +40,7 @@ export interface MainWindowStateReadable {
   getNormalBounds(): WindowBounds
 }
 
-export interface MacCloseWindowController {
+interface MacCloseWindowController {
   isDestroyed(): boolean
   isFullScreen(): boolean
   setFullScreen(flag: boolean): void
@@ -48,11 +48,11 @@ export interface MacCloseWindowController {
   hide(): void
 }
 
-export interface MacCloseAppController {
+interface MacCloseAppController {
   hide(): void
 }
 
-export type ScheduleFn = (callback: () => void, delayMs: number) => unknown
+type ScheduleFn = (callback: () => void, delayMs: number) => unknown
 
 const FULL_SCREEN_HIDE_DELAY_MS = 160
 const FULL_SCREEN_HIDE_FALLBACK_DELAY_MS = 1000

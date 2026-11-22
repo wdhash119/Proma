@@ -58,7 +58,7 @@ function ModelSelectorListIcon({ src }: ModelSelectorListIconProps): React.React
 }
 
 /** 从渠道列表构建扁平化的模型选项 */
-export function buildModelOptions(
+function buildModelOptions(
   channels: Channel[],
   filterChannelId?: string,
   filterChannelIds?: string[],

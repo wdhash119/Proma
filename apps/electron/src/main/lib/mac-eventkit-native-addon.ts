@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { app } from 'electron'
 
-export type EventKitEntity = 'calendar' | 'reminder'
+type EventKitEntity = 'calendar' | 'reminder'
 type EventKitCommand = 'authorizationStatus' | 'requestAccess' | 'listWritableTargets' | 'listTargets' | 'listItems' | 'upsert' | 'remove'
 type Addon = { command: (command: EventKitCommand, entity: EventKitEntity, payloadJson: string) => Promise<string>; subscribeChanges?: (listener: () => void) => void }
 

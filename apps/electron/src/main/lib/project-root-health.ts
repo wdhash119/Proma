@@ -2,7 +2,7 @@ import { constants } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-export type ProjectRootHealthStatus = 'available' | 'missing' | 'not_directory' | 'unavailable'
+type ProjectRootHealthStatus = 'available' | 'missing' | 'not_directory' | 'unavailable'
 
 const projectRootStatusChecks = new Map<string, Promise<ProjectRootHealthStatus>>()
 

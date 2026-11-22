@@ -11,7 +11,7 @@ import type {
   AgentSendInput,
 } from '@proma/shared'
 
-export interface HeadlessAgentRunCallbacks {
+interface HeadlessAgentRunCallbacks {
   onError: (error: string) => void
   onComplete: (messages?: AgentMessage[]) => void
   onTitleUpdated: (title: string) => void
@@ -20,12 +20,12 @@ export interface HeadlessAgentRunCallbacks {
   originSessionId?: string
 }
 
-export type HeadlessAgentRunner = (
+type HeadlessAgentRunner = (
   input: AgentSendInput,
   callbacks: HeadlessAgentRunCallbacks,
 ) => Promise<void>
 
-export type AgentStopper = (sessionId: string) => void
+type AgentStopper = (sessionId: string) => void
 
 let headlessRunner: HeadlessAgentRunner | null = null
 let agentStopper: AgentStopper | null = null

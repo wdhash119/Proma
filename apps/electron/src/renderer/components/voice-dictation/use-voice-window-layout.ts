@@ -16,7 +16,7 @@ interface VoiceWindowLayoutInput {
   transcript: string
 }
 
-export interface VoiceWindowLayoutRefs {
+interface VoiceWindowLayoutRefs {
   rootRef: React.RefObject<HTMLDivElement>
   panelRef: React.RefObject<HTMLDivElement>
   headerRef: React.RefObject<HTMLDivElement>
@@ -24,7 +24,7 @@ export interface VoiceWindowLayoutRefs {
   transcriptBoxRef: React.RefObject<HTMLDivElement>
 }
 
-export interface VoiceWindowLayoutResult extends VoiceWindowLayoutRefs {
+interface VoiceWindowLayoutResult extends VoiceWindowLayoutRefs {
   transcriptMaxHeight: number | null
 }
 

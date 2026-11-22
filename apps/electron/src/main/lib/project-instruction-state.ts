@@ -49,7 +49,7 @@ export const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'AGENTS.MD'] as const
 const MAX_RECORD_BYTES = 16 * 1024
 
 /** 规范化路径标识；项目根可能已删除时退回 resolve 结果。 */
-export function instructionPathIdentity(path: string): string {
+function instructionPathIdentity(path: string): string {
   try {
     return realpathSync.native(path)
   } catch {
@@ -74,7 +74,7 @@ export function isSameInstructionPath(left: string, right: string): boolean {
 }
 
 /** 维护记录目录：`<workspaceRoot>/instruction-maintenance`。 */
-export function instructionMaintenanceDirectory(ctx: ProjectInstructionContext): string {
+function instructionMaintenanceDirectory(ctx: ProjectInstructionContext): string {
   return join(ctx.workspaceRoot, 'instruction-maintenance')
 }
 
@@ -97,7 +97,7 @@ export function instructionMemoryPaths(ctx: ProjectInstructionContext): { profil
 }
 
 /** 全局记忆目录；写入记录时用于校验记忆根没有被换到别处。 */
-export function instructionGlobalDirectory(ctx: ProjectInstructionContext): string {
+function instructionGlobalDirectory(ctx: ProjectInstructionContext): string {
   return ctx.globalDir ?? dirname(getGlobalMemoryFilePath())
 }
 
@@ -112,7 +112,7 @@ export function instructionRecordPath(ctx: ProjectInstructionContext): string {
  *
  * 任一变化都会让指纹不匹配，从而让旧标记失效；符号链接与非普通文件返回 undefined。
  */
-export function instructionTargetStamp(path: string): string | undefined {
+function instructionTargetStamp(path: string): string | undefined {
   try {
     const stats = lstatSync(path)
     if (!stats.isFile() || stats.size === 0) return undefined

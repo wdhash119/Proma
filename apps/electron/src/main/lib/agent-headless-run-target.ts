@@ -3,7 +3,7 @@
  *
  * 委派子会话优先复用父会话所在窗口；没有可用父窗口时才回退通用主窗口。
  */
-export interface HeadlessAgentRunTarget {
+interface HeadlessAgentRunTarget {
   isDestroyed(): boolean
 }
 

@@ -97,7 +97,7 @@ const EXACT_CONTEXT_RULES = new Set([
 ])
 
 /** MiMo-V2.6 系列的官方精确模型 ID（2026-09-22 模型列表），供 Pi runtime 等跨包复用。 */
-export const MIMO_V26_MODEL_IDS = ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.6-pro-ultraspeed'] as const
+const MIMO_V26_MODEL_IDS = ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.6-pro-ultraspeed'] as const
 
 /** 判断是否为 MiMo-V2.6 系列模型（精确匹配，含首尾空白与大小写归一）。 */
 export function isMimoV26Model(modelId: string | undefined): boolean {
@@ -138,7 +138,7 @@ const CONTEXT_WINDOW_CONFIG = {
 /**
  * 判断模型是否支持 1M context window（现为各模型默认能力，无需 beta header）。
  */
-export function supports1MContext(modelId: string): boolean {
+function supports1MContext(modelId: string): boolean {
   if (!modelId) return false
   const m = modelId.toLowerCase()
   if (CONTEXT_WINDOW_CONFIG.exclude.some((p) => m.includes(p))) return false

@@ -5,7 +5,7 @@
  * 处于运行状态，就保留请求并定期重试；条件满足后只执行一次安装回调。
  */
 
-export interface IdleInstallSchedulerOptions {
+interface IdleInstallSchedulerOptions {
   /** 当前是否允许安装更新（例如更新仍处于 downloaded 状态且无活跃 Agent） */
   canInstall: () => boolean
   /** 条件满足时执行安装 */
@@ -18,7 +18,7 @@ export interface IdleInstallSchedulerOptions {
   clearIntervalFn?: (timer: ReturnType<typeof setInterval>) => void
 }
 
-export interface IdleInstallScheduler {
+interface IdleInstallScheduler {
   /** 请求在安全空闲时安装；重复请求不会重复调度。 */
   request(): void
   /** 取消尚未执行的空闲安装请求。 */

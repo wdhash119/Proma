@@ -641,7 +641,7 @@ const SKILL_COPY_BLOCKLIST = new Set([
   '__pycache__',
 ])
 
-export function skillCopyFilter(src: string): boolean {
+function skillCopyFilter(src: string): boolean {
   return !SKILL_COPY_BLOCKLIST.has(basename(src))
 }
 
@@ -658,7 +658,7 @@ function compareSemver(a: string, b: string): number {
 
 // ===== MCP 配置管理 =====
 
-export function normalizeWorkspaceMcpConfig(config: Partial<WorkspaceMcpConfig>): WorkspaceMcpConfig {
+function normalizeWorkspaceMcpConfig(config: Partial<WorkspaceMcpConfig>): WorkspaceMcpConfig {
   const servers: WorkspaceMcpConfig['servers'] = {}
   const rawServers = config.servers ?? {}
 
@@ -974,7 +974,7 @@ async function withSkillImportLock<T>(targetPath: string, operation: () => Promi
  * 复制目录并记录来源元数据（.source.json），支持后续版本检测和同步更新。
  * 导入过程在临时目录中完成，成功后再原子移动到目标目录，避免失败留下残缺 Skill。
  */
-export async function importSkillFromWorkspace(
+async function importSkillFromWorkspace(
   targetSlug: string,
   sourceSlug: string,
   skillSlug: string,
@@ -1227,7 +1227,7 @@ function isRegularDirectory(path: string): boolean {
  * 迁移按工作区独立且幂等执行：绝不合并或覆盖内容不同的双文件，
  * 确保升级过程中每条既有规则始终至少保留一份完整副本。
  */
-export function migrateWorkspaceInstructionFiles(): void {
+function migrateWorkspaceInstructionFiles(): void {
   const index = readIndex()
 
   for (const workspace of index.workspaces) {
@@ -1374,7 +1374,7 @@ function migrateWorkspaceAutoMemoryDirectory(workspaceSlug: string): WorkspaceAu
 }
 
 /** 在应用启动时迁移全部已知工作区；重复调用不会覆盖新目录内容。 */
-export function migrateWorkspaceAutoMemoryDirectories(): void {
+function migrateWorkspaceAutoMemoryDirectories(): void {
   const index = readIndex()
   for (const workspace of index.workspaces) {
     migrateWorkspaceAutoMemoryDirectory(workspace.slug)

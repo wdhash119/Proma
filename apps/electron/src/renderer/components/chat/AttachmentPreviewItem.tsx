@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 
 /** 同批图片附件（用于大图预览时左右翻页） */
-export interface AttachmentSibling {
+interface AttachmentSibling {
   /** 本地预览 URL */
   previewUrl: string
   /** 文件名 */

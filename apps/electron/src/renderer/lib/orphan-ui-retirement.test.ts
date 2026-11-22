@@ -49,9 +49,10 @@ describe('Agent 消息渲染与快捷键初始化收敛', () => {
     expect(source).not.toContain(['SDKMessage', 'RendererProps'].join(''))
     expect(source).not.toContain(['function is', 'Record('].join(''))
     // 活链路：历史与实时统一走 MessageGroupRenderer / AssistantTurnRenderer。
-    expect(source).toContain('export function AssistantTurnRenderer')
+    // 存在性断言：导出与否不影响该链路，锁住组件仍在本文件即可。
+    expect(source).toContain('function AssistantTurnRenderer')
     expect(source).toContain('export const MessageGroupRenderer')
-    expect(source).toContain('export function parseAttachedFiles')
+    expect(source).toContain('function parseAttachedFiles')
     expect(source).toContain('export function getGroupId')
   })
 

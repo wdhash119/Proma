@@ -8,7 +8,7 @@ import {
 
 type ProviderPayload = Record<string, unknown>
 
-export interface DeepSeekReasoningRequestSettings {
+interface DeepSeekReasoningRequestSettings {
   profile?: ReasoningProfile
   thinkingLevel?: AgentThinkingLevel
 }
@@ -22,7 +22,7 @@ function isProviderPayload(payload: unknown): payload is ProviderPayload {
  * Anthropic-compatible protocol. DeepSeek ignores `thinking.budget_tokens`;
  * strength must be carried by `output_config.effort`.
  */
-export function injectDeepSeekReasoningLevel(
+function injectDeepSeekReasoningLevel(
   payload: unknown,
   settings: DeepSeekReasoningRequestSettings,
 ): unknown {

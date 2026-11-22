@@ -16,10 +16,6 @@ export function setLastFocusedVoiceInputId(id: string | null): void {
   lastFocusedVoiceInputId = id
 }
 
-export function getLastFocusedVoiceInputId(): string | null {
-  return lastFocusedVoiceInputId
-}
-
 /**
  * 在听写会话开始时冻结状态归属和文本回填目标。
  *

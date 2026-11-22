@@ -77,7 +77,7 @@ function planName(value: unknown): string {
  * 参考 CodexBar 2cb9efda1d 的 CopilotUsageFetcher / CopilotUsageModels 语义。
  * copilot_internal/user 不是稳定公开 API；只接受已知额度键，不把未知数据误标为 Premium。
  */
-export function parseGithubCopilotPlanQuotaResponse(data: unknown): ChannelPlanQuotaResult {
+function parseGithubCopilotPlanQuotaResponse(data: unknown): ChannelPlanQuotaResult {
   const response = object(data)
   if (!response) return unavailable('GitHub Copilot 额度响应格式错误')
   const snapshots = object(response.quota_snapshots)

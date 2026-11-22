@@ -1,4 +1,4 @@
-export const WECHAT_AGENT_SOURCE_MARKER = '（消息通过微信 Bot 发送）'
+const WECHAT_AGENT_SOURCE_MARKER = '（消息通过微信 Bot 发送）'
 
 /**
  * Marks only the model-facing copy of an incoming WeChat message.

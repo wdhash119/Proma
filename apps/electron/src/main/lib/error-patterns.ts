@@ -35,7 +35,7 @@ export function isTransientNetworkError(message?: string, stderr?: string): bool
  * 同时覆盖 V8 引擎措辞（Unexpected end of JSON input / is not valid JSON）和
  * JavaScriptCore 在完整 JSON 后收到脏数据时的 "Unexpected non-whitespace character after JSON"。
  */
-export const MALFORMED_RESPONSE_PATTERN =
+const MALFORMED_RESPONSE_PATTERN =
   /JSON Parse error|Unable to parse JSON|Unexpected end of JSON input|Unexpected token.*JSON|Unexpected non-whitespace character after JSON|is not valid JSON/i
 
 /** 判断错误消息/stderr 是否为上游响应体解析失败 */

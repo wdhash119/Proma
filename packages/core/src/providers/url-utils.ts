@@ -79,7 +79,7 @@ function removePathSuffixForSdkBaseUrl(rawUrl: string, suffix: string): string {
  * - "https://proxy.example.com/v1/messages/" → "https://proxy.example.com/v1"
  * - "https://api.deepseek.com/anthropic" → 不变（已有非版本路径）
  */
-export function normalizeAnthropicBaseUrl(baseUrl: string): string {
+function normalizeAnthropicBaseUrl(baseUrl: string): string {
   let url = baseUrl.trim().replace(/\/+$/, '')
   url = url.replace(/\/messages$/, '')
   if (!url.match(/\/v\d+$/)) {
@@ -107,7 +107,7 @@ export function normalizeAnthropicBaseUrl(baseUrl: string): string {
  * - "https://api.deepseek.com/anthropic" → "https://api.deepseek.com/anthropic/v1"
  * - "https://api.kimi.com/coding/v1" → 不变（已有版本路径）
  */
-export function normalizeVersionedAnthropicBaseUrl(baseUrl: string): string {
+function normalizeVersionedAnthropicBaseUrl(baseUrl: string): string {
   let url = baseUrl.trim().replace(/\/+$/, '')
   url = url.replace(/\/messages$/, '')
   if (!url.match(/\/v\d+$/)) {

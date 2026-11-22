@@ -12,13 +12,13 @@
 import type { Automation } from '../types/automation'
 
 /** 展开所需的调度字段（Automation 子集，方便单测与复用） */
-export type AutomationScheduleFields = Pick<Automation, 'scheduleType' | 'nextRunAt'> &
+type AutomationScheduleFields = Pick<Automation, 'scheduleType' | 'nextRunAt'> &
   Partial<
     Pick<Automation, 'intervalMinutes' | 'activeWindowStart' | 'activeWindowEnd' | 'activeWeekdays' | 'timeOfDay' | 'dayOfWeek' | 'dayOfMonth' | 'scheduledAt' | 'maxRuns' | 'runCount'>
   >
 
 /** 一天内的触发分布 */
-export interface AutomationOccurrenceDay {
+interface AutomationOccurrenceDay {
   /** 当天 0 点（本地）时间戳 */
   day: number
   /** 当天触发时刻（升序）。密集任务只保留前 AUTOMATION_OCCURRENCE_SAMPLES_PER_DAY 个，完整次数看 count */

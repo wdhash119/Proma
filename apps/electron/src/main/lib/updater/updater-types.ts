@@ -15,7 +15,7 @@ export type UpdateStatus =
   | { status: 'error'; error: string }
 
 /** 下载进度 */
-export interface DownloadProgress {
+interface DownloadProgress {
   /** 已下载百分比 0-100 */
   percent: number
   /** 已下载字节数 */

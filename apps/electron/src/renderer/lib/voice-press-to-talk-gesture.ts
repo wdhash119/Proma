@@ -8,10 +8,10 @@
  */
 
 /** 抑制窗口：拖出按钮后松手不产生 click，超过该时间后自动失效。 */
-export const PRESS_TO_TALK_CLICK_SUPPRESSION_WINDOW_MS = 800
+const PRESS_TO_TALK_CLICK_SUPPRESSION_WINDOW_MS = 800
 
 /** 一次按下手势的可变状态；由调用方按自己的 ref/state 持有。 */
-export interface PressToTalkGestureState {
+interface PressToTalkGestureState {
   /** 本次手势是否已被长按消费（越过阈值并发起 start，或选中文本时主动消费）。 */
   activated: boolean
   /** click 抑制截止时间戳；0 表示无需抑制。 */

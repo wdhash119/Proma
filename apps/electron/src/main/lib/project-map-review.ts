@@ -23,9 +23,9 @@ export const PROJECT_MAP_MAX_CHARS = 4000
 /** 低于该字符数视为描述不足，需在本轮补全。 */
 export const PROJECT_MAP_MIN_CHARS = 200
 
-export type ProjectMapStatus = '已存在' | '待完善' | '缺失' | '不可安全修改'
+type ProjectMapStatus = '已存在' | '待完善' | '缺失' | '不可安全修改'
 
-export interface ProjectMapSnapshot {
+interface ProjectMapSnapshot {
   /** 期望路径：总是项目根下的 AGENTS.md。 */
   path: string
   status: ProjectMapStatus
@@ -37,14 +37,14 @@ export interface ProjectMapSnapshot {
   revision?: string
 }
 
-export interface ProjectMapReviewState extends ProjectMapSnapshot {
+interface ProjectMapReviewState extends ProjectMapSnapshot {
   /** 上一次实际完成复查的时间（仅当 revision 仍匹配时有效）。 */
   checkedAt?: number
   /** 距离最近一次「修改或实际复查」是否已超过复查间隔。 */
   reviewDue: boolean
 }
 
-export interface ProjectMapReviewRecord {
+interface ProjectMapReviewRecord {
   checkedAt: number
   revision: string
   summary: string

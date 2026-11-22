@@ -170,7 +170,7 @@ export async function getCuaUpdateStatus(): Promise<CuaUpdateStatus> {
 }
 
 /** 只需要读取结论的来源；测试可注入最小实现。 */
-export interface CuaUpdateStatusSource {
+interface CuaUpdateStatusSource {
   status: () => Promise<CuaUpdateStatus>
 }
 

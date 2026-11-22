@@ -8,7 +8,7 @@ export const MEMORY_HISTORY_RANGE_OPTIONS: Array<{ value: MemoryHistoryRange; la
 ]
 
 /** This block is project-portable policy, while exact Proma paths remain in the workspace prompt. */
-export const PROJECT_KNOWLEDGE_MAINTENANCE_BLOCK = `<!-- proma:knowledge-maintenance:start -->
+const PROJECT_KNOWLEDGE_MAINTENANCE_BLOCK = `<!-- proma:knowledge-maintenance:start -->
 ## 协作知识演进（Proma 维护）
 
 - 保持本文件中的项目地图与已验证项目事实同步；命令、架构、边界和入口变化时做最小更新，不复制到协作记忆。
@@ -17,7 +17,7 @@ export const PROJECT_KNOWLEDGE_MAINTENANCE_BLOCK = `<!-- proma:knowledge-mainten
 - 基于明确、稳定证据的 Memory 最小增量可直接写入并在完成后说明；仅在删除或大段覆盖、与既有记录冲突、存在不确定推断，或可能涉及敏感个人信息时，先提出候选并取得确认。项目地图的已验证事实可直接更新。历史会话仅在用户授权后作为分批、限量的补充证据，不得全量扫描。
 <!-- proma:knowledge-maintenance:end -->`
 
-export function getMemoryHistoryRangeLabel(value: MemoryHistoryRange): string {
+function getMemoryHistoryRangeLabel(value: MemoryHistoryRange): string {
   return MEMORY_HISTORY_RANGE_OPTIONS.find((option) => option.value === value)?.promptLabel ?? '最近 1 个月内'
 }
 

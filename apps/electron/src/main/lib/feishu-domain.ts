@@ -1,6 +1,6 @@
 import type { FeishuDomain } from '@proma/shared'
 
-export const DEFAULT_FEISHU_DOMAIN: FeishuDomain = 'feishu'
+const DEFAULT_FEISHU_DOMAIN: FeishuDomain = 'feishu'
 
 export function normalizeFeishuDomain(domain: FeishuDomain | undefined): FeishuDomain {
   return domain === 'lark' ? 'lark' : DEFAULT_FEISHU_DOMAIN

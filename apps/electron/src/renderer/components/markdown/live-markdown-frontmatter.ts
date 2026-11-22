@@ -3,7 +3,7 @@ export interface LiveMarkdownPropertyEntry {
   value: string
 }
 
-export interface LiveMarkdownFrontmatterRange {
+interface LiveMarkdownFrontmatterRange {
   /** 1-indexed closing delimiter line. */
   endLine: number
 }
@@ -38,7 +38,7 @@ export function getLeadingFrontmatterRange(lines: readonly string[]): LiveMarkdo
  * Parse the conservative subset of YAML frontmatter that Proma can safely edit
  * without reserializing unrelated YAML syntax. Nested values remain source text.
  */
-export function parseLeadingFrontmatter(lines: readonly string[]): LiveMarkdownPropertyEntry[] | null {
+function parseLeadingFrontmatter(lines: readonly string[]): LiveMarkdownPropertyEntry[] | null {
   const range = getLeadingFrontmatterRange(lines)
   if (!range) return null
 

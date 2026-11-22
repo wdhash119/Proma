@@ -6,10 +6,6 @@ export interface LoadedPlanQuota {
   result: ChannelPlanQuotaResult
 }
 
-export function planQuotaAccountKey(channelId?: string | null, updatedAt?: number): string | null {
-  return channelId ? JSON.stringify([channelId, updatedAt]) : null
-}
-
 export function currentPlanQuota(loaded: LoadedPlanQuota | null, channelKey: string | null): ChannelPlanQuotaResult | null {
   return channelKey !== null && loaded?.channelKey === channelKey ? loaded.result : null
 }
@@ -53,7 +49,7 @@ function formatWindow(window: ChannelPlanQuotaWindow, now: number): string {
   return `${label} ${value}${reset ? ` · ${reset}` : ''}`
 }
 
-export function formatPlanQuotaWindowValue(window: ChannelPlanQuotaWindow, provider: ProviderType): string {
+function formatPlanQuotaWindowValue(window: ChannelPlanQuotaWindow, provider: ProviderType): string {
   const date = window.resetAt === undefined ? undefined : new Date(window.resetAt)
   const reset = date && Number.isFinite(date.getTime())
     ? `，重置 ${new Intl.DateTimeFormat(undefined, {

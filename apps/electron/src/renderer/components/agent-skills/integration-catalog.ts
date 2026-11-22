@@ -1,7 +1,7 @@
 import type { McpOAuthProvider, McpServerEntry } from '@proma/shared'
 
-export type CatalogIntegrationKind = 'mcp' | 'cli' | 'guided' | 'credential'
-export type CatalogAuthentication = 'none' | 'oauth' | 'api-key'
+type CatalogIntegrationKind = 'mcp' | 'cli' | 'guided' | 'credential'
+type CatalogAuthentication = 'none' | 'oauth' | 'api-key'
 
 interface CatalogIntegrationBase {
   id: string
@@ -62,12 +62,12 @@ export interface CatalogCredentialIntegration extends CatalogIntegrationBase {
   }
 }
 
-export type CatalogIntegration = CatalogMcpIntegration | CatalogCliIntegration | CatalogGuidedIntegration | CatalogCredentialIntegration
+type CatalogIntegration = CatalogMcpIntegration | CatalogCliIntegration | CatalogGuidedIntegration | CatalogCredentialIntegration
 
-export type CatalogMcpConnectionStatus = 'unconfigured' | 'pending' | 'connected'
-export type CatalogGuidedConnectionStatus = CatalogMcpConnectionStatus | 'skill-available'
+type CatalogMcpConnectionStatus = 'unconfigured' | 'pending' | 'connected'
+type CatalogGuidedConnectionStatus = CatalogMcpConnectionStatus | 'skill-available'
 export type CatalogCliProbeState = 'loading' | 'ready' | 'failed'
-export type CatalogCliConnectionStatus = 'checking' | 'unavailable' | 'unconfigured' | 'connected'
+type CatalogCliConnectionStatus = 'checking' | 'unavailable' | 'unconfigured' | 'connected'
 
 /** 目录卡片排序优先级：已连接 > 待授权 > 未配置。 */
 export function getCatalogMcpStatusRank(status: CatalogMcpConnectionStatus): number {
@@ -117,15 +117,6 @@ export function getCatalogGuidedConnectionStatus(
   return getCatalogMcpConnectionStatus(integration.serverName, installedMcpNames, enabledMcpNames, verifiedMcpNames)
 }
 
-export function getCatalogMcpConnectionState(
-  serverName: string | undefined,
-  installedMcpNames: Set<string>,
-  enabledMcpNames: Set<string>,
-): { configured: boolean; enabled: boolean } {
-  const configured = Boolean(serverName && installedMcpNames.has(serverName))
-  return { configured, enabled: Boolean(serverName && enabledMcpNames.has(serverName)) }
-}
-
 /** Never render an unprobed or failed local CLI check as an unconfigured integration. */
 export function getCatalogCliConnectionStatus(
   id: string,
@@ -156,7 +147,7 @@ const CLI_CONNECTION_ACCEPTANCE_INSTRUCTION = `
 const GUIDED_CONNECTION_ACCEPTANCE_INSTRUCTION = `
 完成状态必须按实际接入类型如实报告：若最终接入 MCP，只有它已写入当前 Proma workspace 的 MCP 配置、启用，并完成真实 SDK handshake 与 listTools 验证后，才能显示为「已连接」并可通过 # 调用；若最终接入 CLI，只有官方 CLI 已真实认证且已在当前 Proma workspace 的目录中被允许/启用后，才能显示为「已连接」。仅在会话环境、OpenClaw/mcporter、临时 shell 中可用，或只安装了 Skill，都不等于 Proma MCP/CLI 已连接。`
 
-export const MCP_CREDENTIAL_SETUP_INSTRUCTION = `
+const MCP_CREDENTIAL_SETUP_INSTRUCTION = `
 
 如果配置需要 API Key、Access Token、授权码或其他必须由用户手动获取的内容：请使用 Proma 内置浏览器打开对应的官方获取或授权页面，先让我自行完成登录、注册、申请权限或授权。不要代替我输入密码、验证码，也不要读取或导出 Cookie、浏览器登录态或其他凭据。页面成功显示需要配置的凭据后，请让我将该凭据直接发送到当前 Agent 对话；收到后仅将其用于本次配置，绝不在回复、日志、AGENTS.md、mcp.json 或其他普通项目文件中回显或保存，并优先使用 Proma/系统提供的安全凭据存储。${MCP_CONNECTION_ACCEPTANCE_INSTRUCTION}`
 

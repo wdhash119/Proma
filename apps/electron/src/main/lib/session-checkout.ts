@@ -9,16 +9,16 @@
 import type { SessionCheckoutEntry } from '@proma/shared'
 
 /** 检出日志最多保留的条数；超出后丢弃最旧的记录。 */
-export const MAX_CHECKOUT_HISTORY = 20
+const MAX_CHECKOUT_HISTORY = 20
 
-export interface CheckoutActiveWorktree {
+interface CheckoutActiveWorktree {
   path: string
   mainRepoRoot: string
   branch: string
   selectedAt: number
 }
 
-export interface ResolveSessionCheckoutInput {
+interface ResolveSessionCheckoutInput {
   history?: SessionCheckoutEntry[]
   activeWorktree?: CheckoutActiveWorktree
   /** 缺失时按 session 工作台处理，兼容历史数据。 */
@@ -30,7 +30,7 @@ export interface ResolveSessionCheckoutInput {
   isDirectory: (path: string) => boolean
 }
 
-export interface ResolvedSessionCheckout extends SessionCheckoutEntry {
+interface ResolvedSessionCheckout extends SessionCheckoutEntry {
   /** 最新记录已不存在、使用了更早的目录或默认检出。 */
   fellBack: boolean
 }

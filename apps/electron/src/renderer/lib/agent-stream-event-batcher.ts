@@ -1,6 +1,6 @@
 import type { AgentStreamEvent } from '@proma/shared'
 
-export interface AgentStreamEventBatcherOptions {
+interface AgentStreamEventBatcherOptions {
   dispatch: (event: AgentStreamEvent) => void
   requestFrame?: (callback: FrameRequestCallback) => number
   cancelFrame?: (handle: number) => void

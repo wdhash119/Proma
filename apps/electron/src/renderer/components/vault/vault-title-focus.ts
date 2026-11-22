@@ -2,7 +2,7 @@ import type { Text } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 
 /** 只识别首部 YAML 边界（含空 YAML/BOM），不依赖 Properties 能否编辑。 */
-export function getVaultBodyStart(doc: Text): number {
+function getVaultBodyStart(doc: Text): number {
   const lines = doc.iterLines()
   const firstLine = lines.next().value
   if (firstLine.replace(/^\uFEFF/, '') !== '---') return 0

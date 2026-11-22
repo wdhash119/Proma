@@ -21,7 +21,7 @@ import { loadWindowsEnv } from './windows-env'
  * 获取用户默认 Shell 路径
  * 优先使用 SHELL 环境变量，fallback 到 /bin/zsh
  */
-export function getUserShell(): string {
+function getUserShell(): string {
   return process.env.SHELL || '/bin/zsh'
 }
 
@@ -84,7 +84,7 @@ function parseEnvOutput(output: string): Record<string, string> {
  * @param shell - Shell 可执行文件路径
  * @returns 环境变量键值对
  */
-export async function getShellEnv(shell: string): Promise<Record<string, string>> {
+async function getShellEnv(shell: string): Promise<Record<string, string>> {
   // 使用标记来定位环境变量输出的开始位置
   // 这样可以过滤掉 Shell 启动时的其他输出
   const marker = '__PROMA_ENV_START__'

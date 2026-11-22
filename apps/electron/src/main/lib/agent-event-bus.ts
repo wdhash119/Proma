@@ -12,10 +12,10 @@
 import type { AgentStreamPayload } from '@proma/shared'
 
 /** 事件监听器 */
-export type AgentEventHandler = (sessionId: string, payload: AgentStreamPayload) => void
+type AgentEventHandler = (sessionId: string, payload: AgentStreamPayload) => void
 
 /** 中间件：可修改事件或执行副作用，调用 next() 继续链路 */
-export type AgentEventMiddleware = (
+type AgentEventMiddleware = (
   sessionId: string,
   payload: AgentStreamPayload,
   next: () => void,

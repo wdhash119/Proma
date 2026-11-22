@@ -221,7 +221,7 @@ function sameLines(left: Set<number>, right: Set<number>): boolean {
 }
 
 /** 仅识别原生滚动条 gutter，图表画布本身的点击仍应进入源码编辑。 */
-export function isMermaidScrollbarPointer(event: MouseEvent, target: HTMLElement): boolean {
+function isMermaidScrollbarPointer(event: MouseEvent, target: HTMLElement): boolean {
   const scroller = target.closest<HTMLElement>('.mermaid-block-scroll')
   if (!scroller) return false
   const verticalScrollbarWidth = scroller.offsetWidth - scroller.clientWidth
@@ -796,6 +796,3 @@ export function createLiveMarkdownBlockPreview(
   }),
   ]
 }
-
-/** Default extension for consumers that do not need local-media resolution. */
-export const liveMarkdownBlockPreview = createLiveMarkdownBlockPreview()

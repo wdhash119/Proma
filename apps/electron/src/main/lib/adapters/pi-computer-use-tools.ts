@@ -19,7 +19,7 @@ interface ToolSdk {
   defineTool: (definition: never) => unknown
 }
 
-export interface ComputerUseToolsContext {
+interface ComputerUseToolsContext {
   sessionId: string
 }
 

@@ -30,7 +30,7 @@ export type AutomationScheduleType = 'interval' | 'daily' | 'weekly' | 'monthly'
  * - activeWeekdays 为空或未设置表示每天；非空时 0=周日，1=周一 … 6=周六。
  * - 窗口与运行日可以单独使用，但实际产品通常组合为“工作日 10:00–22:00 每 20 分钟”。
  */
-export interface AutomationActiveWindow {
+interface AutomationActiveWindow {
   activeWindowStart?: string
   activeWindowEnd?: string
   activeWeekdays?: number[]
@@ -57,7 +57,7 @@ export type AutomationSessionMode = 'daily' | 'reuse'
 export const AUTOMATION_DEFAULT_SESSION_MODE: AutomationSessionMode = 'daily'
 
 /** 定时任务通知触发条件 */
-export type AutomationNotificationTrigger = 'always' | 'success' | 'error'
+type AutomationNotificationTrigger = 'always' | 'success' | 'error'
 
 /** 飞书通知目标 */
 export interface AutomationFeishuNotificationTarget {

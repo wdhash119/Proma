@@ -1,6 +1,6 @@
 import { BROWSER_RISK_DISCLAIMER_VERSION } from '../../types/settings'
 
-export interface BrowserRiskDisclaimerSettings {
+interface BrowserRiskDisclaimerSettings {
   browserRiskDisclaimerVersion?: number
 }
 

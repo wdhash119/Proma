@@ -5,7 +5,7 @@
  * 空态只在当前根目录至少成功加载一次后展示，后台刷新期间保持已确认的空态。
  */
 
-export interface FileBrowserEmptyStateInput {
+interface FileBrowserEmptyStateInput {
   /** 当前 FileBrowser 实际消费的根目录稳定签名。 */
   currentRootsKey: string
   /** 最近一次成功完成目录读取的根目录签名。 */

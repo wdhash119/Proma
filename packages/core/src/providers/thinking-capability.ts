@@ -14,7 +14,7 @@
 import { resolveReasoningProfile, type ProviderType } from '@proma/shared'
 
 /** 思考协议能力 */
-export type ThinkingMode =
+type ThinkingMode =
   /** 仅支持 adaptive（Opus 4.7 / Mythos Preview） */
   | 'adaptive-only'
   /** 同时支持 adaptive 和 manual，推荐用 adaptive（Opus 4.6 / Sonnet 5） */
@@ -27,13 +27,13 @@ export type ThinkingMode =
   | 'none'
 
 /** 禁用思考的方式（用于标题生成等） */
-export type ThinkingDisableStrategy =
+type ThinkingDisableStrategy =
   /** 显式发送 `thinking: {type: 'disabled'}` */
   | 'explicit-disabled'
   /** 省略 thinking 字段（Mythos Preview 不接受 disabled） */
   | 'omit-field'
 
-export interface ThinkingCapability {
+interface ThinkingCapability {
   mode: ThinkingMode
   disableStrategy: ThinkingDisableStrategy
   /** adaptive effort 模型的默认强度；仅在支持 output_config.effort 时设置。 */

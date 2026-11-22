@@ -23,7 +23,7 @@ import { getMcpApiKeyEnvironment, getMcpOAuthHeaders } from './mcp-oauth-service
 /**
  * MCP 验证结果
  */
-export interface McpValidationResult {
+interface McpValidationResult {
   /** 服务器名称 */
   name: string
   /** 是否验证通过 */

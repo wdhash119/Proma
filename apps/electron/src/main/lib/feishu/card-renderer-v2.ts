@@ -20,7 +20,7 @@ const MIN_TOOLS_TO_COLLAPSE = 3
 const TOOL_BODY_MAX = 4000
 const TEXT_BLOCK_MAX = 20_000
 
-export interface RenderOptions {
+interface RenderOptions {
   /** 卡片底部"如何终止"的提示文字。running 终态时展示。 */
   stopHint?: string
   /** 是否展示工具调用块（Bot 偏好里可关）。默认 true。 */

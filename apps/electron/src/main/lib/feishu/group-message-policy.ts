@@ -3,19 +3,19 @@ import type {
   FeishuGroupInfo,
 } from '@proma/shared'
 
-export interface SingleUserGroupInput {
+interface SingleUserGroupInput {
   groupInfo: Pick<FeishuGroupInfo, 'members' | 'userCount'> | null | undefined
   senderOpenId: string
   botOpenId?: string | null
   binding?: Pick<FeishuChatBinding, 'userId'> | null
 }
 
-export interface GroupMessageAccessInput extends SingleUserGroupInput {
+interface GroupMessageAccessInput extends SingleUserGroupInput {
   isSessionMirrorGroup: boolean
   isBotMentioned: boolean
 }
 
-export interface GroupMessageAccessResult {
+interface GroupMessageAccessResult {
   accepted: boolean
   reason: 'session-mirror' | 'bot-mentioned' | 'single-user-group' | 'needs-mention'
 }
@@ -30,7 +30,7 @@ export interface GroupMessageAccessResult {
  * 注意：加人后 user_count 自动 ≥2，会回到「必须 @」，符合
  * 「只有 2 人群免 @，多人群谁都要 @（含建群者）」的预期。
  */
-export function isSingleUserGroupForSender(input: SingleUserGroupInput): boolean {
+function isSingleUserGroupForSender(input: SingleUserGroupInput): boolean {
   const bindingUserId = input.binding?.userId
   const bindingMismatch =
     !!bindingUserId && bindingUserId !== 'unknown' && bindingUserId !== input.senderOpenId

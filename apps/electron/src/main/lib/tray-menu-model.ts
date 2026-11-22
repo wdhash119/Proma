@@ -1,7 +1,7 @@
 import type { AgentSessionMeta, AgentWorkspace } from '@proma/shared'
 
-export const TRAY_RECENT_LIMIT = 3
-export const TRAY_MORE_LIMIT = 10
+const TRAY_RECENT_LIMIT = 3
+const TRAY_MORE_LIMIT = 10
 
 export interface TrayRecentSessionItem {
   id: string
@@ -9,7 +9,7 @@ export interface TrayRecentSessionItem {
   subtitle: string
 }
 
-export interface TrayMenuModel {
+interface TrayMenuModel {
   runningSessions: TrayRecentSessionItem[]
   recentSessions: TrayRecentSessionItem[]
   moreSessions: TrayRecentSessionItem[]

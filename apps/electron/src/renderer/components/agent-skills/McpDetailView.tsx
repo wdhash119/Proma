@@ -12,7 +12,7 @@ import { McpServerForm } from '@/components/settings/McpServerForm'
 import { cn } from '@/lib/utils'
 import type { McpServerEntry } from '@proma/shared'
 
-export interface McpDetailViewProps {
+interface McpDetailViewProps {
   name: string
   entry: McpServerEntry
   workspaceSlug: string

@@ -6,7 +6,7 @@
  */
 
 /** 已知工具的必需参数映射 */
-export const TOOL_REQUIRED_PARAMS: ReadonlyMap<string, ReadonlyArray<string>> = new Map([
+const TOOL_REQUIRED_PARAMS: ReadonlyMap<string, ReadonlyArray<string>> = new Map([
   ['Write', ['file_path', 'content']],
   ['Edit', ['file_path', 'old_string', 'new_string']],
   ['Bash', ['command']],
@@ -19,7 +19,7 @@ export const TOOL_REQUIRED_PARAMS: ReadonlyMap<string, ReadonlyArray<string>> = 
 ])
 
 /** 校验失败结果，与 PermissionResult deny 形状一致 */
-export interface ToolValidationFailure {
+interface ToolValidationFailure {
   behavior: 'deny'
   message: string
 }

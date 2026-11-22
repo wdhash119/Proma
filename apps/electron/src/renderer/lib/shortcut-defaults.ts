@@ -11,7 +11,7 @@
 export type ShortcutCategory = 'app' | 'edit' | 'navigation' | 'global'
 
 /** 快捷键定义（不可变，内置于代码） */
-export interface ShortcutDefinition {
+interface ShortcutDefinition {
   /** 唯一标识（如 'open-settings'） */
   id: string
   /** 中文名称 */

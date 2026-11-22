@@ -20,7 +20,7 @@ import type { VoiceDictationSettings } from '../../types'
 /** 可能需要被长按管理器消费的指针事件类型。 */
 type PressPointerEvent = React.PointerEvent<HTMLElement>
 
-export interface UseVoicePressToTalkResult {
+interface UseVoicePressToTalkResult {
   /** 「按住说话」是否可用；不可用时按钮保持原有点击 toggle 行为 */
   available: boolean
   /** 绑定到麦克风按钮的 pointerdown */

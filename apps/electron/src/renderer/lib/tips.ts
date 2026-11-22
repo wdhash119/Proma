@@ -5,7 +5,7 @@
  * Tips 内容可后续手动扩充。
  */
 
-export type Platform = 'mac' | 'windows'
+type Platform = 'mac' | 'windows'
 
 export interface Tip {
   id: string
@@ -23,7 +23,7 @@ export function getPlatform(): Platform {
 }
 
 /** 所有 Tips 数据 */
-export const TIPS: Tip[] = [
+const TIPS: Tip[] = [
   // macOS 快捷键
   { id: 'mac-shortcut-new', text: '按 ⌘N 快速创建新对话', platform: 'mac' },
   { id: 'mac-shortcut-search', text: '按 ⌘⇧F 搜索历史对话', platform: 'mac' },

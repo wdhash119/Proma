@@ -1,6 +1,6 @@
 import type { TranscriptTurn } from './transcript'
 
-export interface SelectOptions {
+interface SelectOptions {
   /** 闭区间 turn 下标 [a, b]（含两端）。 */
   range?: [number, number]
   /** 取前 N 个 turn。 */

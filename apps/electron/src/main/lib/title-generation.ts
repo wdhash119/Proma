@@ -5,7 +5,7 @@ export const TITLE_PROMPT = '根据用户的第一条消息，生成一个简短
 export const SHORT_MESSAGE_THRESHOLD = 4
 
 /** 最大标题长度 */
-export const MAX_TITLE_LENGTH = 20
+const MAX_TITLE_LENGTH = 20
 
 const TITLE_PUNCTUATION = /^["'“”‘’「《]+|["'“”‘’」》]+$/g
 const MARKDOWN_PREFIX = /^(?:[#>*\-\d.)]\s*)+/

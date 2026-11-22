@@ -12,7 +12,7 @@ const INSTRUCTION_FILE_CANDIDATES = [
 const MAX_SOURCE_BYTES = 64 * 1024
 const MAX_TOTAL_BYTES = 128 * 1024
 
-export type ProjectInstructionKind = (typeof INSTRUCTION_FILE_CANDIDATES)[number]['kind']
+type ProjectInstructionKind = (typeof INSTRUCTION_FILE_CANDIDATES)[number]['kind']
 
 export interface ProjectInstructionSource {
   /** Canonical path, used as the auditable source identifier. */
@@ -26,7 +26,7 @@ export interface ProjectInstructionSource {
   contentHash: string
 }
 
-export interface ProjectInstructionDiagnostic {
+interface ProjectInstructionDiagnostic {
   path: string
   message: string
 }
@@ -43,7 +43,7 @@ export function hasRootProjectAgentsInstruction(manifest: ProjectInstructionMani
   return manifest?.sources.some((source) => source.kind === 'agents' && source.scopeRoot === '.') ?? false
 }
 
-export interface ResolveProjectInstructionsOptions {
+interface ResolveProjectInstructionsOptions {
   /** The user-authorized project root. Proma never walks above it. */
   projectRoot: string
   /**

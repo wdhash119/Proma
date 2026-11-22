@@ -1,4 +1,4 @@
-export type ResolveLiveMarkdownMediaCandidate = (candidate: string) => Promise<string | null>
+type ResolveLiveMarkdownMediaCandidate = (candidate: string) => Promise<string | null>
 
 function stripQueryAndHash(value: string): string {
   return value.replace(/[?#].*$/, '')
@@ -22,7 +22,7 @@ function isSafeRelativeMediaSource(src: string): boolean {
  * 返回交给主进程的原始相对 source。安全校验只能以主进程的 realpath 结果为准，
  * 因此 renderer 不拼接绝对路径或预览根作为回退候选。
  */
-export function getLiveMarkdownMediaCandidates(_markdownFilePath: string, src: string): string[] {
+function getLiveMarkdownMediaCandidates(_markdownFilePath: string, src: string): string[] {
   const source = src.trim()
   return isSafeRelativeMediaSource(source) ? [source] : []
 }
@@ -42,7 +42,7 @@ export function createLiveMarkdownImageResolver(
 }
 
 /** 只接受主进程按当前 Markdown 所在目录授权并换成 token-gated URL 的本地图片结果。 */
-export async function resolveLiveMarkdownImageSrc(
+async function resolveLiveMarkdownImageSrc(
   markdownFilePath: string,
   src: string,
   resolveCandidate: ResolveLiveMarkdownMediaCandidate,

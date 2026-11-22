@@ -54,7 +54,7 @@ function normalizeCredentials(value: unknown): XaiOAuthCredentials {
   return { access: credential.access, refresh: credential.refresh, expires: credential.expires }
 }
 
-export interface XaiLoginCallbacks {
+interface XaiLoginCallbacks {
   /** 将 device code 推送到 UI，供浏览器未预填时手动填写。 */
   onDeviceCode?: (deviceCode: XaiOAuthDeviceCode) => void
 }

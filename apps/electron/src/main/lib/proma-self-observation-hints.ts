@@ -79,7 +79,7 @@ export function describeWaitTimeout(kind: 'text' | 'selector', value: string, vi
   return `等待${target}超时，未在界面上出现。${screen}请重新调用 PromaObserve 确认当前界面后再决定下一步，不要重复同一个等待。`
 }
 
-export interface ObstructionDetails {
+interface ObstructionDetails {
   role: string
   name: string
 }

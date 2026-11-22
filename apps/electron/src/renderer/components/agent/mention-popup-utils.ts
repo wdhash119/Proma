@@ -85,7 +85,7 @@ export function shouldClearEscSuppressionOnExit(
  * TipTap 会并发等待每次 items() 的异步结果。请求编号在发起时递增，因此旧请求即使
  * 最后返回，也无法覆盖当前触发符或当前 query 的弹窗。
  */
-export interface LatestSuggestionRequestGuard<T> {
+interface LatestSuggestionRequestGuard<T> {
   startRequest: () => number
   attachResult: (requestId: number, items: T[]) => T[]
   isLatest: (items: T[]) => boolean
@@ -170,7 +170,7 @@ export function createMentionPopup(content: HTMLElement): HTMLDivElement {
   return popup
 }
 
-export interface PositionOptions {
+interface PositionOptions {
   /** 底部锚定：弹窗底部固定对齐光标上方，高度变化时向上生长 */
   anchorBottom?: boolean
 }

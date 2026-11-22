@@ -17,7 +17,7 @@ import { LABEL_CLASS, DESCRIPTION_CLASS } from './SettingsUIConstants'
 import { cn } from '@/lib/utils'
 
 /** 选项定义 */
-export interface SelectOption {
+interface SelectOption {
   value: string
   label: string
   /** 选项图标 URL（可选） */

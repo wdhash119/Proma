@@ -1,16 +1,16 @@
 import type { VaultReadResult } from '@proma/shared'
 
-export type VaultDocumentWriteRequest = {
+type VaultDocumentWriteRequest = {
   relativePath: string
   content: string
   expectedSha256: string
 }
 
-export type VaultDocumentWriteResult =
+type VaultDocumentWriteResult =
   | { ok: true; relativePath: string; sha256: string; modifiedAt: number }
   | { ok: false; reason: 'conflict' | 'error'; message?: string }
 
-export type VaultDocumentSnapshot = {
+type VaultDocumentSnapshot = {
   base: VaultReadResult
   draft: string
   saving: boolean
@@ -18,7 +18,7 @@ export type VaultDocumentSnapshot = {
   remoteConflict: VaultReadResult | null
 }
 
-export type VaultDocumentRemoteDisposition = 'ignored' | 'adopted' | 'conflict'
+type VaultDocumentRemoteDisposition = 'ignored' | 'adopted' | 'conflict'
 
 type Listener = () => void
 type Write = (request: VaultDocumentWriteRequest) => Promise<VaultDocumentWriteResult>

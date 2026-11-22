@@ -94,7 +94,7 @@ import { resolveRuntimeAdditionalDirectories } from './agent-orchestrator-vault-
  */
 type AgentRunInput = AgentSendInput & { runGeneration?: number }
 
-export interface SessionCallbacks {
+interface SessionCallbacks {
   /** 发送流式错误 */
   onError: (error: string, opts?: { runGeneration?: number }) => void
   /** 发送流式完成（携带已持久化的消息列表） */

@@ -34,7 +34,7 @@ interface ExecError extends Error {
   stderr?: string
 }
 
-export interface TextInsertionResult {
+interface TextInsertionResult {
   success: boolean
   mode: 'cursor' | 'clipboard'
   message: string

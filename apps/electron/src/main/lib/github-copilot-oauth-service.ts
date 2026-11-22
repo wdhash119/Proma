@@ -63,7 +63,7 @@ function normalizeCredentials(value: unknown): GithubCopilotOAuthCredentials {
   }
 }
 
-export interface GithubCopilotLoginOptions {
+interface GithubCopilotLoginOptions {
   /** GitHub Enterprise Server 域名；空值代表 github.com。 */
   enterpriseUrl?: string
   onDeviceCode?: (deviceCode: GithubCopilotOAuthDeviceCode) => void

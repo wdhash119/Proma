@@ -1,10 +1,10 @@
-export interface HorizontalScrollViewport {
+interface HorizontalScrollViewport {
   scrollLeft: number
   clientWidth: number
   scrollWidth: number
 }
 
-export interface HorizontalTabBounds {
+interface HorizontalTabBounds {
   offsetLeft: number
   offsetWidth: number
 }

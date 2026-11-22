@@ -21,7 +21,7 @@ const TERMINAL_FONT_FALLBACKS = [
   'monospace',
 ].join(', ')
 
-export interface TerminalTabContentProps {
+interface TerminalTabContentProps {
   terminalId: string
   sessionId: string
   cwd?: string

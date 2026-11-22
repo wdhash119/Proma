@@ -8,7 +8,7 @@
  *   application/x-proma-file-panel → JSON string of FilePanelDragItem[]
  */
 
-export const FILE_PANEL_DRAG_MIME = 'application/x-proma-file-panel'
+const FILE_PANEL_DRAG_MIME = 'application/x-proma-file-panel'
 
 /**
  * 三点菜单「引用到 Agent」触发的事件名。

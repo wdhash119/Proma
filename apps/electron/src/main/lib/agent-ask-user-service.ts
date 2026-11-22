@@ -37,7 +37,7 @@ interface PendingAskUser {
  *
  * 单例模式，管理所有会话的 AskUser 请求。
  */
-export class AgentAskUserService {
+class AgentAskUserService {
   /** 待处理的 AskUser 请求 Map（requestId → PendingAskUser） */
   private pendingRequests = new Map<string, PendingAskUser>()
 

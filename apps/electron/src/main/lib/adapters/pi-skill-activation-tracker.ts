@@ -1,6 +1,6 @@
 import type { SkillActivation } from '@proma/shared'
 
-export interface PendingPromptSkillActivation {
+interface PendingPromptSkillActivation {
   id: number
   prompt: string
   userMessageUuid: string

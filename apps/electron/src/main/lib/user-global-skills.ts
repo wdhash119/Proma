@@ -33,7 +33,7 @@ export function isUserGlobalSkillSlug(skillSlug: string): boolean {
 }
 
 /** 用户全局 Skill 的磁盘路径（仅用于只读展示与错误提示）。 */
-export function getUserGlobalSkillPath(skillSlug: string): string {
+function getUserGlobalSkillPath(skillSlug: string): string {
   return join(getUserAgentsSkillsDir(), skillSlug)
 }
 

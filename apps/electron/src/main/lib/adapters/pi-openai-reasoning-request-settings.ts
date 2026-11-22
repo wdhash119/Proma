@@ -8,7 +8,7 @@ import {
 
 type ProviderPayload = Record<string, unknown>
 
-export interface OpenAIReasoningRequestSettings {
+interface OpenAIReasoningRequestSettings {
   profile?: ReasoningProfile
   thinkingLevel?: AgentThinkingLevel
 }

@@ -9,31 +9,21 @@
 import { execFile } from 'node:child_process'
 import type {
   ComputerUseInstallation,
-  ComputerUseInstallationStatus as ComputerUseInstallationState,
   ComputerUsePlatform,
 } from '@proma/shared'
 import { ComputerUseDriverError, computerUseDriverPath } from './computer-use-driver'
 import { parseCuaDriverVersion } from './computer-use-version'
 
 /** 平台归类，便于 UI 直接展示文案。 */
-export type ComputerUseInstallationPlatform = ComputerUsePlatform
-
-/**
- * 安装状态：
- * - `installed`：驱动存在且版本可识别；
- * - `not_installed`：找不到驱动；
- * - `needs_attention`：找到驱动但版本输出异常，需要用户重新安装或修复；
- * - `unsupported`：当前平台不支持 Computer Use。
- */
-export type ComputerUseInstallationStatus = ComputerUseInstallationState
+type ComputerUseInstallationPlatform = ComputerUsePlatform
 
 /** 检测结果：与 shared 层的 ComputerUseInstallation 完全一致，可直接过 IPC。 */
-export type ComputerUseInstallationResult = ComputerUseInstallation
+type ComputerUseInstallationResult = ComputerUseInstallation
 
 /** 版本字符串上限，防止异常输出进入 UI。 */
 const DRIVER_VERSION_MAX_LENGTH = 120
 
-export interface ComputerUseInstallationDependencies {
+interface ComputerUseInstallationDependencies {
   platform: NodeJS.Platform
   /** 解析驱动路径；找不到时抛 ComputerUseDriverError('driver_not_found')。 */
   resolvePath: () => string

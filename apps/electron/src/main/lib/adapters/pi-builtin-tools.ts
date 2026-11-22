@@ -103,7 +103,7 @@ type PiSdk = typeof import('@earendil-works/pi-coding-agent')
 
 // ===== 通用 =====
 
-export interface PiBuiltinToolsContext {
+interface PiBuiltinToolsContext {
   sessionId: string
   channelId: string
   modelId?: string
@@ -1619,7 +1619,7 @@ function buildPromaCloudTools(_sdk: PiSdk, _ctx: PiBuiltinToolsContext): ToolDef
 
 // ===== 统一入口 =====
 
-export interface PiBuiltinToolsResult {
+interface PiBuiltinToolsResult {
   tools: ToolDefinition[]
   collaborationAvailable: boolean
 }

@@ -2,13 +2,13 @@ import { accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 import { assertTerminalProfileSupported, type TerminalProfile } from '@proma/shared'
 
-export interface ResolvedTerminalShell {
+interface ResolvedTerminalShell {
   file: string
   args: string[]
   title: string
 }
 
-export interface TerminalShellResolverOptions {
+interface TerminalShellResolverOptions {
   platform?: string
   env?: NodeJS.ProcessEnv
   canExecute?: (path: string) => boolean

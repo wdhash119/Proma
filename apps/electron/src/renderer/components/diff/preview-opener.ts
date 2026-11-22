@@ -27,7 +27,7 @@ import { agentDiffPanelTabAtom, agentSidePanelOpenAtomFamily, getPreviewSidePane
 type JotaiStore = ReturnType<typeof useStore>
 
 /** 兼容旧调用方；右侧工作区方案下不再使用 mode。 */
-export interface OpenPreviewOptions {
+interface OpenPreviewOptions {
   mode?: 'tab' | 'split'
 }
 
@@ -36,7 +36,7 @@ export interface OpenPreviewOptions {
  *
  * 供 React Hook 和 IPC 事件处理器共同复用，保证计划审批等外部事件不会绕过预览 Tab 的状态约定。
  */
-export function openPreviewInStore(store: JotaiStore, sessionId: string, file: PreviewFile): void {
+function openPreviewInStore(store: JotaiStore, sessionId: string, file: PreviewFile): void {
   const previewId = getPreviewFileId(file)
   store.set(previewFilesMapAtom, (prev) => {
     const next = new Map(prev)

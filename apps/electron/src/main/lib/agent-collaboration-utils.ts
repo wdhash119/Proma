@@ -51,7 +51,7 @@ export function createToolCallIdempotencyCache<T>(maxEntries = 512): {
   }
 }
 
-export interface RecoveredDelegationState {
+interface RecoveredDelegationState {
   delegationId: string
   parentSessionId: string
   childSessionId: string
@@ -169,7 +169,7 @@ export function normalizeDelegationStatus(value: unknown): AgentDelegationStatus
 }
 
 /** 委派目标的最小状态视图，用于异常结束判定。 */
-export interface DelegationStatusSummary {
+interface DelegationStatusSummary {
   status: AgentDelegationStatus
 }
 

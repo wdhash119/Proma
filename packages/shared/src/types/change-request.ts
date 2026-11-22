@@ -5,7 +5,7 @@
  * 归一化后是判断「同一条 PR」的唯一依据，避免同一链接的大小写或尾斜杠造成重复绑定。
  */
 
-export type ChangeRequestState = 'OPEN' | 'MERGED' | 'CLOSED'
+type ChangeRequestState = 'OPEN' | 'MERGED' | 'CLOSED'
 
 export interface ChangeRequestCheck {
   name: string
@@ -47,7 +47,7 @@ export interface ChangeRequestBinding {
   error?: string
 }
 
-export type ChangeRequestsAction = 'list' | 'discover' | 'refresh' | 'track' | 'dismiss' | 'restore' | 'remove'
+type ChangeRequestsAction = 'list' | 'discover' | 'refresh' | 'track' | 'dismiss' | 'restore' | 'remove'
 
 export interface ChangeRequestsActionInput {
   sessionId: string
@@ -87,7 +87,7 @@ function isSegment(value: string): boolean {
   return SEGMENT.test(value) && value !== '.' && value !== '..'
 }
 
-export interface ChangeRequestRef {
+interface ChangeRequestRef {
   host: string
   owner: string
   repo: string
@@ -118,7 +118,7 @@ export function parseChangeRequestUrl(input: string): ChangeRequestRef | null {
   return { host, owner, repo, number }
 }
 
-export function changeRequestUrlOf(ref: ChangeRequestRef): string {
+function changeRequestUrlOf(ref: ChangeRequestRef): string {
   return `https://${ref.host.toLowerCase()}/${ref.owner}/${ref.repo}/pull/${ref.number}`
 }
 

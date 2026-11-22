@@ -35,7 +35,7 @@ function getMentionToken(paragraphText: string, triggerOffset: number): MentionT
 }
 
 /** URL 中的 `/`、`#`、`@` 和 `&` 都是合法字符，不能作为引用菜单触发符。 */
-export function isMentionTriggerInsideUrl(paragraphText: string, triggerOffset: number): boolean {
+function isMentionTriggerInsideUrl(paragraphText: string, triggerOffset: number): boolean {
   const token = getMentionToken(paragraphText, triggerOffset)
   if (!token) return false
 

@@ -18,7 +18,7 @@ import { getToolPhrase } from '@/components/agent/tool-phrase'
 import { ToolResultRenderer } from '@/components/agent/tool-result-renderers'
 import { PreviewOpenButton } from '@/components/agent/tool-result-renderers/preview-open-button'
 
-export interface ChatToolBlockProps {
+interface ChatToolBlockProps {
   toolName: string
   input: Record<string, unknown>
   result?: string

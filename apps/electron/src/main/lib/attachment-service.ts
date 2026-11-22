@@ -10,7 +10,7 @@
  * - 文件选择对话框：Electron dialog → 小文件读取为 base64，大文件返回本地路径引用
  */
 
-import { readFileSync, writeFileSync, unlinkSync, existsSync, rmSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from 'node:fs'
 import { extname, basename, join, isAbsolute, normalize } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { dialog, BrowserWindow } from 'electron'
@@ -120,7 +120,7 @@ export function isImageAttachment(mediaType: string): boolean {
 /**
  * 根据扩展名获取 MIME 类型
  */
-export function getMimeType(ext: string): string {
+function getMimeType(ext: string): string {
   const normalized = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`
   return MIME_MAP[normalized] || 'application/octet-stream'
 }
@@ -216,26 +216,6 @@ export function deleteAttachment(localPath: string): void {
       console.log(`[附件服务] 已删除附件: ${localPath}`)
     } catch (error) {
       console.warn(`[附件服务] 删除附件失败: ${localPath}`, error)
-    }
-  }
-}
-
-/**
- * 删除对话的全部附件
- *
- * 删除整个 ~/.proma/attachments/{conversationId}/ 目录。
- *
- * @param conversationId 对话 ID
- */
-export function deleteConversationAttachments(conversationId: string): void {
-  const dir = join(resolveAttachmentPath(''), conversationId)
-
-  if (existsSync(dir)) {
-    try {
-      rmSync(dir, { recursive: true, force: true })
-      console.log(`[附件服务] 已删除对话附件目录: ${conversationId}`)
-    } catch (error) {
-      console.warn(`[附件服务] 删除对话附件目录失败: ${conversationId}`, error)
     }
   }
 }

@@ -45,7 +45,7 @@ export function resolveVaultWikiLink(target: string, source: string, files: read
 }
 
 /** 使用 Markdown 语法树排除代码、HTML 和已有链接；转义与嵌入保持原样。 */
-export function canRenderVaultWikiLink(state: EditorState, from: number): boolean {
+function canRenderVaultWikiLink(state: EditorState, from: number): boolean {
   const preceding = state.sliceDoc(state.doc.lineAt(from).from, from)
   if (preceding.endsWith('!') || (preceding.match(/\\+$/)?.[0].length ?? 0) % 2 === 1) return false
   for (let node = syntaxTree(state).resolveInner(from, 1); node; node = node.parent!) {

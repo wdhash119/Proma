@@ -15,7 +15,7 @@ import {
 
 const UNKNOWN_STATUS: CuaUpdateStatus = { status: 'unknown' }
 
-export interface ComputerUseUpdateStatusState {
+interface ComputerUseUpdateStatusState {
   /** 当前更新状态 */
   status: CuaUpdateStatus
   /** 主动检查后写入本地状态 */

@@ -88,7 +88,7 @@ export interface WeChatMessageItem {
 }
 
 /** iLink 媒体信息（CDN 加密引用） */
-export interface WeChatMediaInfo {
+interface WeChatMediaInfo {
   encrypt_query_param: string
   aes_key: string
   encrypt_type: number

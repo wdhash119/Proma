@@ -76,7 +76,7 @@ import packImageZen from '@/assets/sound/uisfx/packs/zen.webp'
 
 // ===== 音频资源注册表 =====
 
-export interface NotificationSoundMeta {
+interface NotificationSoundMeta {
   id: NotificationSoundPackId
   label: string
   description: string
@@ -284,7 +284,7 @@ async function preloadSound(soundId: string, url: string): Promise<void> {
 }
 
 /** 批量预加载所有通知音 */
-export async function preloadAllSounds(): Promise<void> {
+async function preloadAllSounds(): Promise<void> {
   await Promise.all(
     NOTIFICATION_SOUNDS.flatMap((sound) => SOUND_CUES.map((type) => (
       preloadSound(`${sound.id}:${type}`, sound.urls[type])
@@ -366,7 +366,7 @@ export async function playNotificationSoundForType(
 // ===== 桌面通知 =====
 
 /** 发送桌面通知的附加选项 */
-export interface DesktopNotificationOptions {
+interface DesktopNotificationOptions {
   /** 通知音场景类型（启用时按此类型播放对应音效） */
   soundType?: NotificationSoundType
   /** 是否播放提示音 */

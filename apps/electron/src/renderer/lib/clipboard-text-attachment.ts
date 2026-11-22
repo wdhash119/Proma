@@ -1,12 +1,12 @@
 import type { AgentPendingFile } from '@proma/shared'
 
-export interface ClipboardTextDraft {
+interface ClipboardTextDraft {
   filename: string
   mediaType: string
   size: number
 }
 
-export interface ShouldConvertClipboardTextInput {
+interface ShouldConvertClipboardTextInput {
   enabled: boolean
   plainText: string
   normalizedText: string

@@ -31,7 +31,7 @@ interface UpdateCacheState {
   macDifferentialCache?: MacDifferentialCacheState
 }
 
-export interface UpdateCacheCleanupResult {
+interface UpdateCacheCleanupResult {
   status: 'not-needed' | 'retained' | 'cleaned' | 'skipped-unsafe' | 'failed'
   deletedCount: number
 }
@@ -41,7 +41,7 @@ export function shouldDeferUpdateCacheCleanup(hasActiveDownload: boolean, isDown
   return hasActiveDownload || isDownloading
 }
 
-export interface UpdateCacheCleanupOptions {
+interface UpdateCacheCleanupOptions {
   /** Proma 自己拥有的状态文件，不写入 electron-updater 的私有状态。 */
   stateFilePath: string
   /** electron-updater 使用的系统级缓存根目录。 */

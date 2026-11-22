@@ -38,7 +38,7 @@ const MAX_JOURNAL_BYTES = 8 * 1024 * 1024
 const MIGRATION_ID_PATTERN = /^[a-f0-9-]{36}$/
 
 /** 迁移运行上下文：只依赖工作区，便于测试注入隔离的记忆根目录。 */
-export interface ProfileMigrationContext {
+interface ProfileMigrationContext {
   workspaceSlug: string
   /** 默认允许；只读、自动化与协作子会话传 false。 */
   allowProfileMigration?: boolean
@@ -62,9 +62,9 @@ export interface ProfileMigrationProposal {
 }
 
 /** 一次迁移要写的目标。 */
-export type ProfileMigrationEditTarget = 'global' | 'preferences' | 'source-index' | 'index'
+type ProfileMigrationEditTarget = 'global' | 'preferences' | 'source-index' | 'index'
 
-export interface ProfileMigrationEdit {
+interface ProfileMigrationEdit {
   target: ProfileMigrationEditTarget
   /** 目标文件绝对路径；日志里存路径，便于 `resumeId` 在同样的位置续跑。 */
   path: string
@@ -88,7 +88,7 @@ export interface ProfileMigrationJournal {
   archivedSourceTo?: string
 }
 
-export interface ProfileMigrationSuccess {
+interface ProfileMigrationSuccess {
   status: 'migrated'
   migrationId: string
   journalPath: string
@@ -97,7 +97,7 @@ export interface ProfileMigrationSuccess {
   writtenTargets: string[]
 }
 
-export interface ProfileMigrationReconciliation {
+interface ProfileMigrationReconciliation {
   status: 'reconciliation_required'
   saved: false
   operation: 'migration'
@@ -114,7 +114,7 @@ export interface ProfileMigrationReconciliation {
  * 此前的目标可能已经落盘，因此不能再返回 `saved:false`；这里如实报告已处于
  * 目标状态的文件，并保留 pending 日志，调用方可以稍后 `resumeId` 续跑。
  */
-export interface ProfileMigrationApplyPending {
+interface ProfileMigrationApplyPending {
   status: 'apply_incomplete'
   saved: true
   migrationId: string
@@ -132,7 +132,7 @@ export type ProfileMigrationResult =
   | ProfileMigrationReconciliation
   | ProfileMigrationApplyPending
 
-export interface ProfileMigrationReplan {
+interface ProfileMigrationReplan {
   status: 'needs-merge'
   supersededId: string
   next: string

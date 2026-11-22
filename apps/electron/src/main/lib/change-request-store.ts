@@ -50,7 +50,7 @@ function bindingsOf(session: { changeRequests?: ChangeRequestBinding[] } | undef
   return Array.isArray(session?.changeRequests) ? session.changeRequests : []
 }
 
-export function dedupeBindings(bindings: ChangeRequestBinding[]): ChangeRequestBinding[] {
+function dedupeBindings(bindings: ChangeRequestBinding[]): ChangeRequestBinding[] {
   const result: ChangeRequestBinding[] = []
   for (const binding of bindings) {
     if (result.some((item) => sameChangeRequestUrl(item.url, binding.url))) continue

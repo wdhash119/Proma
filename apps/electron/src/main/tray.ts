@@ -8,7 +8,7 @@ import { createTrayMenuModel, type TrayRecentSessionItem } from './lib/tray-menu
 
 let tray: Tray | null = null
 
-export interface TrayActions {
+interface TrayActions {
   showMainWindow: () => void
   openAgentSession: (sessionId: string, title: string) => void
   createAgentSession: () => void

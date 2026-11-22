@@ -15,7 +15,7 @@ import { normalizeChangeRequestUrl } from '@proma/shared'
 /** 单条输出最多解析 512KB，避免把超大日志整段正则扫描。 */
 const MAX_OUTPUT_LENGTH = 512 * 1024
 
-export interface PushedBranch {
+interface PushedBranch {
   /** 远端名或 URL，来自 `To <remote>` 行 */
   remote: string
   branch: string
@@ -55,7 +55,7 @@ export function isPushCommand(command: string | null): boolean {
   return /\bgit(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*\s+push\b/.test(flattenCommand(command))
 }
 
-export interface PullRequestToolUse {
+interface PullRequestToolUse {
   id: string
   command: string
 }

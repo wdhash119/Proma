@@ -15,7 +15,7 @@ interface AgentSessionsIndex {
 }
 
 /** 读取会话索引；文件不存在或损坏时返回空列表。 */
-export function readSessionIndex(opts: PathOptions = {}): AgentSessionMeta[] {
+function readSessionIndex(opts: PathOptions = {}): AgentSessionMeta[] {
   const indexPath = getSessionsIndexPath(opts)
   if (!existsSync(indexPath)) return []
   try {
@@ -33,11 +33,11 @@ export function listSessions(opts: PathOptions = {}): AgentSessionMeta[] {
   )
 }
 
-export function getSessionMeta(id: string, opts: PathOptions = {}): AgentSessionMeta | undefined {
+function getSessionMeta(id: string, opts: PathOptions = {}): AgentSessionMeta | undefined {
   return readSessionIndex(opts).find((s) => s.id === id)
 }
 
-export interface ResolvedSession {
+interface ResolvedSession {
   id: string
   filePath: string
   meta?: AgentSessionMeta

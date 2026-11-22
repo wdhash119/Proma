@@ -321,7 +321,7 @@ function readProcessError(error: unknown): DriverProcessError {
   return error instanceof Error ? error as DriverProcessError : new Error(String(error))
 }
 
-export interface CallComputerUseDriverOptions {
+interface CallComputerUseDriverOptions {
   /** 覆盖驱动路径解析，测试或自定义安装位置使用。 */
   resolveDriver?: () => string
 }

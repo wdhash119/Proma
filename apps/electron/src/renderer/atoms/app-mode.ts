@@ -12,7 +12,7 @@
 
 import { atom } from 'jotai'
 
-export type AppMode = 'chat' | 'agent'
+type AppMode = 'chat' | 'agent'
 
 /** 当前唯一生效模式。setter 拒绝任何非 agent 切换。 */
 export const appModeAtom = atom<AppMode, [AppMode], void>(

@@ -153,7 +153,7 @@ export const chatMessageRefreshAtom = atom<Map<string, number>>(new Map())
 // ===== Agent 模式推荐 =====
 
 /** Agent 模式推荐数据（由 suggest_agent_mode 工具结果写入） */
-export interface AgentRecommendation {
+interface AgentRecommendation {
   /** 推荐理由（AI 生成，描述 Agent 如何帮助用户） */
   reason: string
   /** 建议的 Agent 初始提示词 */

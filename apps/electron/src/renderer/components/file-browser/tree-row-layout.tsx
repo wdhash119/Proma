@@ -29,7 +29,7 @@ export function canBeSticky(depth: number): boolean {
  */
 export const STICKY_ROW_BASE_CLASS = 'sticky file-tree-sticky-row'
 
-export interface TreeRowLayout {
+interface TreeRowLayout {
   paddingLeft: number
   guideLeft: number
   stickyTop: number

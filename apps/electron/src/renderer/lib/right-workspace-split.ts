@@ -10,7 +10,7 @@ export interface RightWorkspaceSplitState {
   ratio: number
 }
 
-export interface RightWorkspaceSplitResolution {
+interface RightWorkspaceSplitResolution {
   split: RightWorkspaceSplitState | null
   activeTab: AgentSidePanelTab
 }

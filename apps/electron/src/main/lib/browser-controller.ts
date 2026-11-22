@@ -134,13 +134,13 @@ type BrowserPresentation = {
   revision: number
 }
 
-export interface ConfigureBrowserSessionInput {
+interface ConfigureBrowserSessionInput {
   profileKey: string
   allowedRoots?: string[]
   executionSource?: BrowserExecutionSource
 }
 
-export interface BrowserObservation {
+interface BrowserObservation {
   tabId: string
   url: string
   title: string
@@ -214,7 +214,7 @@ function describeBrowserScriptException(response: CdpResponse): string {
   return textValue(record.exception) || textValue(record.text) || '页面 JavaScript 执行失败。'
 }
 
-export class BrowserController {
+class BrowserController {
   private owner: BrowserWindow | null = null
   private readonly sessions = new Map<string, BrowserSessionRecord>()
   private readonly configurations = new Map<string, BrowserSessionConfiguration>()

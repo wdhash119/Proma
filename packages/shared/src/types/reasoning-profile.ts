@@ -37,16 +37,16 @@ export function inferReasoningTransport(provider: ProviderType | undefined): Rea
 }
 
 /** 编译器据此生成 runtime 专属请求参数。 */
-export type ReasoningEncodingKind =
+type ReasoningEncodingKind =
   | 'adaptive-effort'
   | 'deepseek-output-effort'
   | 'openai-reasoning-effort'
   | 'zai-thinking-effort'
 
 /** 每个产品等级映射为目标协议可接受的 effort 值。 */
-export type ReasoningEffortMap = Partial<Record<AgentThinkingLevel, string | null>>
+type ReasoningEffortMap = Partial<Record<AgentThinkingLevel, string | null>>
 
-export interface ReasoningEncoding {
+interface ReasoningEncoding {
   kind: ReasoningEncodingKind
   effortMap: ReasoningEffortMap
 }
@@ -60,7 +60,7 @@ export interface ReasoningProfile {
 }
 
 /** Pi model catalog 中与会话级 reasoning 选择有关的最小元数据。 */
-export interface PiCatalogReasoningMetadata {
+interface PiCatalogReasoningMetadata {
   reasoning?: boolean
   thinkingLevelMap?: Partial<Record<AgentThinkingLevel, string | null>>
 }
@@ -77,12 +77,12 @@ export interface ReasoningCapability {
   defaultLevel: AgentThinkingLevel
 }
 
-export interface ResolveReasoningCapabilityInput {
+interface ResolveReasoningCapabilityInput {
   profile?: ReasoningProfile
   catalog?: PiCatalogReasoningMetadata
 }
 
-export interface ResolveReasoningProfileInput {
+interface ResolveReasoningProfileInput {
   modelId: string | undefined
   transport: ReasoningTransport
 }

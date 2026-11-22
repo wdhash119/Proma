@@ -1,10 +1,10 @@
 import type { RetryAttempt } from '@proma/shared'
 
 /** 前 N 次 Pi native retry 不通知 UI，与 Claude runtime 的自动恢复体验保持一致。 */
-export const PI_RETRY_VISIBILITY_THRESHOLD = 5
+const PI_RETRY_VISIBILITY_THRESHOLD = 5
 
 /** 将 Pi native retry 与当前 renderer stream 绑定，拒绝迟到事件污染下一轮。 */
-export interface PiRetryEventContext {
+interface PiRetryEventContext {
   runStartedAt: number
 }
 

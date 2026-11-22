@@ -54,7 +54,7 @@ export function isValidImageBytes(mimeType: string, bytes: Buffer): boolean {
 }
 
 /** Reject empty, malformed, unsupported, or MIME-mismatched image content before Pi serializes it. */
-export function isValidImageContent(content: ImageContent): boolean {
+function isValidImageContent(content: ImageContent): boolean {
   if (typeof content.data !== 'string' || typeof content.mimeType !== 'string') return false
   const bytes = decodeBase64(content.data)
   return bytes !== undefined && isValidImageBytes(content.mimeType, bytes)

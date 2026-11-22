@@ -12,7 +12,7 @@ function stripQueryAndHash(value: string): string {
  * 仅接受不含协议、盘符、UNC 或上溯片段的相对路径；最终还要在 realpath 后
  * 确认没有借符号链接逃出当前 Markdown 所在目录。
  */
-export function isSafeMarkdownRelativeMediaSource(src: string): boolean {
+function isSafeMarkdownRelativeMediaSource(src: string): boolean {
   const raw = stripQueryAndHash(src.trim())
   if (!raw || raw.includes('\0')) return false
 

@@ -1,4 +1,4 @@
-export type LiveMarkdownTableAlignment = 'left' | 'center' | 'right' | null
+type LiveMarkdownTableAlignment = 'left' | 'center' | 'right' | null
 
 export interface LiveMarkdownTable {
   header: string[]

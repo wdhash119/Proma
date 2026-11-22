@@ -4,14 +4,14 @@ export type FeishuBindingViewMode = 'active' | 'archived'
 export type FeishuBindingTypeFilter = 'all' | 'group' | 'p2p'
 export type FeishuBindingSourceFilter = 'all' | 'feishu' | 'session-mirror'
 
-export interface FeishuBindingFilters {
+interface FeishuBindingFilters {
   viewMode: FeishuBindingViewMode
   chatType: FeishuBindingTypeFilter
   source: FeishuBindingSourceFilter
   query: string
 }
 
-export interface GroupedFeishuBindings {
+interface GroupedFeishuBindings {
   groupBindings: FeishuChatBinding[]
   p2pBindings: FeishuChatBinding[]
 }

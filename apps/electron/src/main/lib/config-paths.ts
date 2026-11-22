@@ -523,7 +523,7 @@ export function isRetiredDefaultSkill(slug: string): boolean {
 }
 
 /** 清理 ~/.proma/default-skills/ 中已退役的内置 Skill 缓存。 */
-export function removeRetiredDefaultSkills(dir = getDefaultSkillsDir()): void {
+function removeRetiredDefaultSkills(dir = getDefaultSkillsDir()): void {
   for (const slug of RETIRED_DEFAULT_SKILL_SLUGS) {
     const target = join(dir, slug)
     if (!existsSync(target)) continue

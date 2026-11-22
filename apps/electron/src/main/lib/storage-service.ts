@@ -25,7 +25,7 @@ import { listAgentWorkspaces } from './agent-workspace-manager'
 
 // ─── 类型定义 ───
 
-export type StorageCategoryKey =
+type StorageCategoryKey =
   | 'agent-sessions'
   | 'sdk-config'
   | 'workspaces'
@@ -33,7 +33,7 @@ export type StorageCategoryKey =
   | 'attachments'
   | 'temp-files'
 
-export interface StorageCategory {
+interface StorageCategory {
   label: string
   key: StorageCategoryKey
   bytes: number
@@ -45,26 +45,26 @@ export interface StorageCategory {
   orphanItemsTruncated: boolean
 }
 
-export interface StorageOrphanItem {
+interface StorageOrphanItem {
   kind: 'file' | 'directory'
   path: string
   bytes: number
   count: number
 }
 
-export interface StorageStats {
+interface StorageStats {
   categories: StorageCategory[]
   totalBytes: number
   calculatedAt: number
 }
 
-export interface CleanupOptions {
+interface CleanupOptions {
   categories: StorageCategoryKey[]
   orphansOnly: boolean
   archivedBeforeDays: number
 }
 
-export interface CleanupResult {
+interface CleanupResult {
   freedBytes: number
   deletedCount: number
   errors: string[]

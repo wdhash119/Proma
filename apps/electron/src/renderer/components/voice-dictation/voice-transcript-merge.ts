@@ -15,7 +15,7 @@ export interface VoiceDictationTranscriptMergeState {
   currentSessionId: string
 }
 
-export interface VoiceDictationTranscriptMergeResult {
+interface VoiceDictationTranscriptMergeResult {
   state: VoiceDictationTranscriptMergeState
   text: string
 }

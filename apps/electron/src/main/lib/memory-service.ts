@@ -30,7 +30,7 @@ import { getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspac
 import { writeTextFileAtomic } from './safe-file'
 
 /** 记忆目标层级：全局画像、项目索引、项目主题文件。 */
-export type MemoryTargetKind = 'global-profile' | 'project-index' | 'project-theme'
+type MemoryTargetKind = 'global-profile' | 'project-index' | 'project-theme'
 
 /** 全局画像文件名；与项目 `user-profile` 语义区分。 */
 export const GLOBAL_PROFILE_TARGET = 'global-profile'
@@ -59,7 +59,7 @@ const TARGET_BUDGET_CHARS: Record<string, number> = {
   'MEMORY.md': 3500,
 }
 
-export interface MemoryTargetInfo {
+interface MemoryTargetInfo {
   target: string
   kind: MemoryTargetKind
   label: string
@@ -71,7 +71,7 @@ export interface MemoryTargetInfo {
   budgetChars?: number
 }
 
-export interface MemoryDocument {
+interface MemoryDocument {
   target: string
   kind: MemoryTargetKind
   content: string
@@ -81,7 +81,7 @@ export interface MemoryDocument {
   budgetChars?: number
 }
 
-export interface MemoryRevisionSummary {
+interface MemoryRevisionSummary {
   id: string
   target: string
   createdAt: number
@@ -89,7 +89,7 @@ export interface MemoryRevisionSummary {
   chars: number
 }
 
-export interface MemorySearchHit {
+interface MemorySearchHit {
   /** 展示用来源：`全局画像` 或 `项目记忆/MEMORY.md` 等。 */
   source: string
   target: string
@@ -108,7 +108,7 @@ export interface MemoryEntryOperation {
   after?: string
 }
 
-export interface MemoryUpdateInput {
+interface MemoryUpdateInput {
   target: string
   revision: string
   summary: string
@@ -116,7 +116,7 @@ export interface MemoryUpdateInput {
   operations?: MemoryEntryOperation[]
 }
 
-export interface MemoryUpdateResult {
+interface MemoryUpdateResult {
   target: string
   revision: string
   chars: number
@@ -133,7 +133,7 @@ export interface MemoryFileSnapshot {
 }
 
 /** 一份旧画像来源；`id` 是路径哈希，跨调用保持稳定。 */
-export interface LegacyProfileLocation extends MemoryFileSnapshot {
+interface LegacyProfileLocation extends MemoryFileSnapshot {
   id: string
 }
 
@@ -683,7 +683,7 @@ function assertWritableMemoryContent(target: string, content: string): void {
 }
 
 /** 统计正文里 `- ` 事实条目数，供全局画像预算校验。 */
-export function countProfileFacts(content: string): number {
+function countProfileFacts(content: string): number {
   return content.split('\n').filter((line) => /^\s*-\s+\S/.test(line)).length
 }
 
@@ -818,7 +818,7 @@ function resumeArchiveJournal(slug: string, projectDir: string, journal: MemoryA
   return false
 }
 
-export interface MemoryArchiveRecoveryResult {
+interface MemoryArchiveRecoveryResult {
   /** 已自动处理并清理 journal 的目标。 */
   recovered: string[]
   /** 无法安全处理、保留 journal 的项目。 */

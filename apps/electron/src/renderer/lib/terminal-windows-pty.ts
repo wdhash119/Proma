@@ -1,4 +1,4 @@
-export interface WindowsPtyOptions {
+interface WindowsPtyOptions {
   backend: 'conpty'
   buildNumber: number
 }

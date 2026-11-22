@@ -16,18 +16,18 @@ const execFileAsync = promisify(execFile)
 const GIT_TIMEOUT_MS = 20_000
 const GIT_MAX_BUFFER = 1024 * 1024
 
-export interface RestorableWorktreeRecord {
+interface RestorableWorktreeRecord {
   path: string
   branch: string
   baseCommit?: string
 }
 
-export interface WorktreeRestoreRequest extends RestorableWorktreeRecord {
+interface WorktreeRestoreRequest extends RestorableWorktreeRecord {
   /** worktree 所属主仓库根目录 */
   repoPath: string
 }
 
-export type WorktreeRestorePlan =
+type WorktreeRestorePlan =
   | { ok: true; branchRecreated: boolean }
   | { ok: false; reason: 'invalid-record' | 'branch-unavailable' }
 

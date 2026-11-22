@@ -4,7 +4,7 @@ import type {
   FeishuSessionMirrorSettings,
 } from '@proma/shared'
 
-export const DEFAULT_FEISHU_SESSION_MIRROR: FeishuSessionMirrorSettings = { mode: 'off' }
+const DEFAULT_FEISHU_SESSION_MIRROR: FeishuSessionMirrorSettings = { mode: 'off' }
 
 export function normalizeFeishuSessionMirrorSettings(
   settings: FeishuSessionMirrorSettings | undefined,

@@ -26,7 +26,7 @@ export function normalizeWatchFilename(filename: string | Buffer | null): string
  * 只有直接影响 `git diff HEAD` 结果的 Git 元数据才触发刷新。
  * 远端 fetch 产生的 FETCH_HEAD、refs/remotes 与 objects 均不在范围内，避免重现刷新循环。
  */
-export function isGitDiffStatePath(normalizedPath: string): boolean {
+function isGitDiffStatePath(normalizedPath: string): boolean {
   const segments = normalizedPath.split('/').filter(Boolean)
   const gitIndex = segments.lastIndexOf('.git')
   if (gitIndex < 0) return false

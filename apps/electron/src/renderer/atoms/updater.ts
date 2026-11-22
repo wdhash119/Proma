@@ -8,7 +8,7 @@
 import { atom } from 'jotai'
 
 /** 下载进度 */
-export interface DownloadProgress {
+interface DownloadProgress {
   percent: number
   transferred: number
   total: number

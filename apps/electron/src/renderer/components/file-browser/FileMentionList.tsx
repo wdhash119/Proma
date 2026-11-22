@@ -47,7 +47,7 @@ class MentionErrorBoundary extends React.Component<
 
 // ===== 树形结构类型 =====
 
-export interface FileTreeNode {
+interface FileTreeNode {
   name: string
   /** 保留原始相对路径，供 @ 引用插入。 */
   path: string
@@ -62,7 +62,7 @@ export interface FileTreeNode {
 
 // ===== Props & Ref =====
 
-export interface FileMentionListProps {
+interface FileMentionListProps {
   sessionEntries: FileIndexEntry[]
   workspaceEntries: FileIndexEntry[]
   onSelect: (item: Pick<FileIndexEntry, 'name' | 'path' | 'type' | 'source'>) => void
@@ -87,7 +87,7 @@ function getTreeNodeKey(node: Pick<FileTreeNode, 'source' | 'treePath'>): string
 }
 
 /** 从两种来源的扁平条目构建一个连续树，来源只用于权限语义和 badge。 */
-export function buildFileMentionTree(entries: FileIndexEntry[]): FileTreeNode[] {
+function buildFileMentionTree(entries: FileIndexEntry[]): FileTreeNode[] {
   const pathMap = new Map<string, FileTreeNode>()
   const roots: FileTreeNode[] = []
 

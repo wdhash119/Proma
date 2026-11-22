@@ -2,12 +2,12 @@
  * FAQ 内容数据：按主题分组，供 Onboarding FAQ 页与全局 FAQ 弹窗共用。
  */
 
-export interface FaqItem {
+interface FaqItem {
   q: string
   a: string
 }
 
-export interface FaqGroup {
+interface FaqGroup {
   topic: string
   items: FaqItem[]
 }

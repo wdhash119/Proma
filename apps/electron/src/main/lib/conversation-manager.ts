@@ -284,7 +284,7 @@ export function appendMessage(id: string, message: ChatMessage): void {
  * @param id 对话 ID
  * @param messages 完整消息列表
  */
-export function saveConversationMessages(id: string, messages: ChatMessage[]): void {
+function saveConversationMessages(id: string, messages: ChatMessage[]): void {
   const filePath = getConversationMessagesPath(id)
 
   try {

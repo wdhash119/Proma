@@ -1,4 +1,4 @@
-export type StopGenerationTarget =
+type StopGenerationTarget =
   | { kind: 'agent'; sessionId: string }
   | { kind: 'chat'; sessionId: string }
 

@@ -39,7 +39,7 @@ export interface TabItem {
 }
 
 /** Tab 持久化数据（保存到 settings.json） */
-export interface PersistedTabState {
+interface PersistedTabState {
   tabs: TabItem[]
   activeTabId: string | null
 }
@@ -51,7 +51,7 @@ export type SessionView = 'session' | 'preview'
  * 每会话的视图状态（仅运行期内存态，不持久化到磁盘）。
  * 用于在切走再切回同一会话时，重建预览 Tab 并回到上次停留的视图。
  */
-export interface SessionViewState {
+interface SessionViewState {
   /** 该会话的预览 Tab 是否处于"打开"状态（用户主动关闭后置 false） */
   previewTabOpen: boolean
   /** 上次激活的是会话对话还是文件预览 */
@@ -59,7 +59,7 @@ export interface SessionViewState {
 }
 
 /** 切回会话时重建预览 Tab 的提示（由调用方读取 atom 后传入纯函数 openTab） */
-export interface OpenTabRestore {
+interface OpenTabRestore {
   /** 该会话是否应重建预览 Tab（previewTabOpen && 存在预览文件时为 true） */
   previewTabOpen: boolean
   /** 预览 Tab 标题（重建时使用） */

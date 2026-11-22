@@ -16,10 +16,10 @@ export type ComputerUsePreviewTarget = 'window' | 'desktop'
  * - `error`：最近一次采集失败，可重试；
  * - `finished`：Agent 已调用 finish，主进程会在 2 秒后清理。
  */
-export type ComputerUsePreviewStatus = 'running' | 'error' | 'finished'
+type ComputerUsePreviewStatus = 'running' | 'error' | 'finished'
 
 /** 预览传输方式；当前只支持快照轮询，保留字段以便未来区分原生实时流。 */
-export type ComputerUsePreviewTransport = 'snapshot'
+type ComputerUsePreviewTransport = 'snapshot'
 
 /** 主进程返回给 renderer 的预览状态快照。 */
 export interface ComputerUsePreviewState {
@@ -92,7 +92,7 @@ export interface ComputerUseInstallation {
  * - `available`：CDN 上有更新版本；
  * - `error`：本地版本或清单无法解析，更新检查本身失败。
  */
-export type CuaUpdateStatusKind = 'unknown' | 'current' | 'available' | 'error'
+type CuaUpdateStatusKind = 'unknown' | 'current' | 'available' | 'error'
 
 /** 更新检查结果；版本号均为纯 SemVer 字符串（不含 `cua-driver` 前缀）。 */
 export interface CuaUpdateStatus {

@@ -79,7 +79,7 @@ export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' |
 // Model-specific reasoning profiles and level normalization live in reasoning-profile.ts.
 
 /** 支持 ChatGPT Codex Fast Mode（priority service tier）的模型。 */
-export const CODEX_FAST_MODE_MODEL_IDS = [
+const CODEX_FAST_MODE_MODEL_IDS = [
   'gpt-5.4',
   'gpt-5.5',
   'gpt-5.6-sol',
@@ -279,7 +279,7 @@ export interface SDKSystemMessage {
 }
 
 /** SDK thinking token 估算消息（Claude Agent SDK 0.3.156+） */
-export interface SDKThinkingTokensMessage {
+interface SDKThinkingTokensMessage {
   type: 'system'
   subtype: 'thinking_tokens'
   estimated_tokens: number
@@ -289,7 +289,7 @@ export interface SDKThinkingTokensMessage {
 }
 
 /** SDK 后台任务摘要（result / hook 中可能出现） */
-export interface SDKBackgroundTaskSummary {
+interface SDKBackgroundTaskSummary {
   id: string
   type: string
   status: string
@@ -302,7 +302,7 @@ export interface SDKBackgroundTaskSummary {
 }
 
 /** SDK 会话级定时任务摘要（result / hook 中可能出现） */
-export interface SDKSessionCronSummary {
+interface SDKSessionCronSummary {
   id: string
   schedule: string
   recurring: boolean
@@ -310,7 +310,7 @@ export interface SDKSessionCronSummary {
 }
 
 /** SDK tool_progress 消息（工具执行心跳） */
-export interface SDKToolProgressMessage {
+interface SDKToolProgressMessage {
   type: 'tool_progress'
   tool_use_id: string
   tool_name: string
@@ -322,14 +322,14 @@ export interface SDKToolProgressMessage {
 }
 
 /** SDK prompt_suggestion 消息 */
-export interface SDKPromptSuggestionMessage {
+interface SDKPromptSuggestionMessage {
   type: 'prompt_suggestion'
   suggestion?: string
   session_id?: string
 }
 
 /** SDK tool_use_summary 消息 */
-export interface SDKToolUseSummaryMessage {
+interface SDKToolUseSummaryMessage {
   type: 'tool_use_summary'
   summary?: string
   preceding_tool_use_ids?: string[]
@@ -439,7 +439,7 @@ export interface AgentEventUsage {
 }
 
 /** SDK 子任务 / SubAgent 用量统计 */
-export interface TaskUsage {
+interface TaskUsage {
   /** 总 Token 数 */
   totalTokens: number
   /** 工具调用次数 */
@@ -491,14 +491,14 @@ export interface RetryAttempt {
  * Agent 事件类型
  *
 /** MCP 工具结果中的图片附件 */
-export interface AgentToolResultImage {
+interface AgentToolResultImage {
   localPath: string
   filename: string
   mediaType: string
 }
 
 /** 计划阶段状态变化来源 */
-export type AgentPlanModeChangeSource = 'initial' | 'tool' | 'permission'
+type AgentPlanModeChangeSource = 'initial' | 'tool' | 'permission'
 
 /**
  * Agent 事件流类型
@@ -660,7 +660,7 @@ export interface AgentActiveWorktree {
 }
 
 /** 会话执行目录的检出类型：私有工作台、项目根或 linked worktree。 */
-export type SessionCheckoutKind = 'workbench' | 'project' | 'worktree'
+type SessionCheckoutKind = 'workbench' | 'project' | 'worktree'
 
 /**
  * 会话检出日志项。按时间追加，解析 cwd 时从最新一项向前找仍存在的目录，
@@ -966,9 +966,6 @@ export interface AgentGenerateTitleInput {
 /** MCP 传输类型；Proma 将 Streamable HTTP 规范化存储为 http */
 export type McpTransportType = 'stdio' | 'http' | 'sse'
 
-/** 外部配置中常见的 Streamable HTTP 别名 */
-export type McpTransportTypeAlias = 'streamableHttp' | 'streamable-http' | 'streamable_http'
-
 /**
  * MCP 的非敏感 OAuth 客户端元数据。
  *
@@ -1158,7 +1155,7 @@ export interface OtherWorkspaceSkillsGroup {
 // ===== Skill 批量导入 =====
 
 /** 批量导入单个 Skill 的结果状态 */
-export type BulkImportSkillStatus = 'imported' | 'skipped' | 'failed'
+type BulkImportSkillStatus = 'imported' | 'skipped' | 'failed'
 
 /** 批量导入单个 Skill 的条目结果 */
 export interface BulkImportSkillItemResult {
@@ -1231,7 +1228,7 @@ export interface WorkspaceMemoryFileChange {
 }
 
 /** 工作区记忆文件摘要 */
-export interface WorkspaceMemoryFileSummary {
+interface WorkspaceMemoryFileSummary {
   /** 文件是否存在 */
   exists: boolean
   /** 绝对路径 */
@@ -1717,7 +1714,7 @@ export interface ExitPlanModeRequest {
 }
 
 /** ExitPlanMode 用户选择行为 */
-export type ExitPlanModeAction = 'approve_bypass' | 'deny' | 'feedback'
+type ExitPlanModeAction = 'approve_bypass' | 'deny' | 'feedback'
 
 /** ExitPlanMode 响应（渲染进程 → 主进程） */
 export interface ExitPlanModeResponse {
@@ -1732,34 +1729,13 @@ export interface ExitPlanModeResponse {
 // ===== 权限系统类型 =====
 
 /** 当前 Proma 支持的权限模式，值直接映射 SDK 原生 permissionMode */
-export const PROMA_PERMISSION_MODES = ['bypassPermissions', 'plan'] as const
+const PROMA_PERMISSION_MODES = ['bypassPermissions', 'plan'] as const
 
 export type PromaPermissionMode = typeof PROMA_PERMISSION_MODES[number]
 
 export const PROMA_DEFAULT_PERMISSION_MODE: PromaPermissionMode = 'bypassPermissions'
 
-export interface PromaPermissionModeConfig {
-  /** 对应 Claude Agent SDK 的 permissionMode */
-  sdkMode: PromaPermissionMode
-  label: string
-  description: string
-}
-
-/** Proma 权限模式的单一配置来源 */
-export const PROMA_PERMISSION_MODE_CONFIG = {
-  bypassPermissions: {
-    sdkMode: 'bypassPermissions',
-    label: '完全自动',
-    description: '所有工具调用自动允许',
-  },
-  plan: {
-    sdkMode: 'plan',
-    label: '计划模式',
-    description: '仅规划不执行，查看工具使用计划',
-  },
-} as const satisfies Record<PromaPermissionMode, PromaPermissionModeConfig>
-
-export function isPromaPermissionMode(mode: string): mode is PromaPermissionMode {
+function isPromaPermissionMode(mode: string): mode is PromaPermissionMode {
   return (PROMA_PERMISSION_MODES as readonly string[]).includes(mode)
 }
 

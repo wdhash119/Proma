@@ -3,9 +3,9 @@ import type { AgentStreamState } from '@/atoms/agent-atoms'
 import type { TabItem } from '@/atoms/tab-atoms'
 
 /** 顶部入口与 TabItem 保持同一类型契约，避免已删除的入口类型回流。 */
-export type ExternalAgentRunTab = TabItem
+type ExternalAgentRunTab = TabItem
 
-export interface ExternalAgentRunActivationInput {
+interface ExternalAgentRunActivationInput {
   tabs: ExternalAgentRunTab[]
   sessions: AgentSessionMeta[]
   sessionId: string
@@ -17,7 +17,7 @@ export interface ExternalAgentRunActivationInput {
   currentStreamState?: AgentStreamState
 }
 
-export interface ExternalAgentRunActivation {
+interface ExternalAgentRunActivation {
   tabs: ExternalAgentRunTab[]
   activeTabId: string
   title: string

@@ -41,7 +41,7 @@ function probeCliIntegrationStatuses(workspaceSlug: string): Promise<CliIntegrat
   return request
 }
 
-export interface AgentSkillsData {
+interface AgentSkillsData {
   /** 当前工作区（未选中时为 null） */
   workspaceSlug: string
   workspaceName: string

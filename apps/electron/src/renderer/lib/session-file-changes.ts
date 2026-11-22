@@ -7,13 +7,13 @@ export function arePathsEqual(leftPath: string, rightPath: string, caseInsensiti
   return normalizePath(leftPath, caseInsensitive) === normalizePath(rightPath, caseInsensitive)
 }
 
-export function isPathWithinRoot(rootPath: string, targetPath: string, caseInsensitive = false): boolean {
+function isPathWithinRoot(rootPath: string, targetPath: string, caseInsensitive = false): boolean {
   const root = normalizePath(rootPath, caseInsensitive)
   const target = normalizePath(targetPath, caseInsensitive)
   return target === root || target.startsWith(`${root}/`)
 }
 
-export interface SessionWatcherOwnershipScope {
+interface SessionWatcherOwnershipScope {
   sessionExists: boolean
   sessionPath?: string
   sessionAttachedDirectories: readonly string[]
@@ -56,7 +56,7 @@ export function getOwnedSessionWatcherPaths(
   ))
 }
 
-export type SessionFileChangeKind = "created" | "edited";
+type SessionFileChangeKind = "created" | "edited";
 
 export interface SessionFileChange {
   path: string;

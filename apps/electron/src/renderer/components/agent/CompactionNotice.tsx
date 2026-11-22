@@ -30,7 +30,7 @@ export function buildCompactionNoticeText(progress: ContextCompactionProgress): 
   }
 }
 
-export interface CompactionNoticeProps {
+interface CompactionNoticeProps {
   progress: ContextCompactionProgress
 }
 

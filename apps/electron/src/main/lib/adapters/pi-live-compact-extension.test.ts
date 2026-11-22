@@ -1,0 +1,534 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type {
+  ContextEditEntryDraft,
+  ExtensionAPI,
+  ExtensionContext,
+  ExtensionToolContext,
+  ProjectedSessionEntry,
+  SessionMessageEntry,
+  ToolDefinition,
+  TurnEndEvent,
+} from '@earendil-works/pi-coding-agent'
+import type {
+  AssistantMessage,
+  ImageContent,
+  Message,
+  TextContent,
+  ToolResultMessage,
+  Usage,
+  UserMessage,
+} from '@earendil-works/pi-ai'
+import type { CompactionEntry } from '@earendil-works/pi-coding-agent'
+import * as bundledAlgorithm from '@proma/live-compact'
+import {
+  createLiveCompactExtension,
+  type LiveCompactCutRecord,
+  type LiveCompactExtensionOptions,
+} from './pi-live-compact-extension'
+import {
+  computeLiveCompactThresholds,
+  type LiveCompactThresholdOverrides,
+} from './live-compact-thresholds'
+
+const TIMESTAMP = '2026-11-22T10:00:00.000Z'
+const temporaryRoots: string[] = []
+
+function createTemporaryRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'proma-live-compact-'))
+  temporaryRoots.push(root)
+  return root
+}
+
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+function emptyUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  }
+}
+
+function messageEntry(id: string, message: Message): ProjectedSessionEntry {
+  const sourceEntry: SessionMessageEntry = {
+    type: 'message',
+    id,
+    parentId: null,
+    timestamp: TIMESTAMP,
+    message,
+  }
+  return { sourceEntry, messages: [message] }
+}
+
+function userEntry(id: string, text: string): ProjectedSessionEntry {
+  const message: UserMessage = { role: 'user', content: text, timestamp: 0 }
+  return messageEntry(id, message)
+}
+
+function toolCallEntry(id: string, callId: string, name: string, text: string): ProjectedSessionEntry {
+  const message: AssistantMessage = {
+    role: 'assistant',
+    content: [
+      { type: 'text', text },
+      { type: 'toolCall', id: callId, name, arguments: { path: 'big.ts' } },
+    ],
+    api: 'anthropic-messages',
+    provider: 'anthropic',
+    model: 'test-model',
+    usage: emptyUsage(),
+    stopReason: 'toolUse',
+    timestamp: 0,
+  }
+  return messageEntry(id, message)
+}
+
+function toolResultEntry(id: string, callId: string, name: string, text: string): ProjectedSessionEntry {
+  const content: TextContent[] = [{ type: 'text', text }]
+  const message: ToolResultMessage = {
+    role: 'toolResult',
+    toolCallId: callId,
+    toolName: name,
+    content,
+    isError: false,
+    timestamp: 0,
+  }
+  return messageEntry(id, message)
+}
+
+function compactionEntry(id: string, summary: string): ProjectedSessionEntry {
+  const sourceEntry: CompactionEntry = {
+    type: 'compaction',
+    id,
+    parentId: null,
+    timestamp: TIMESTAMP,
+    summary,
+    firstKeptEntryId: 'u1',
+    tokensBefore: 1000,
+  }
+  const message: UserMessage = { role: 'user', content: summary, timestamp: 0 }
+  return { sourceEntry, messages: [message] }
+}
+
+/** 一段“足够大但不含硬事实”的工具输出：纯 ASCII，1 token ≈ 4 字符。 */
+function bigToolText(tokens: number): string {
+  const line = 'const alphaWidget = buildWidget();\n'
+  const repeats = Math.max(1, Math.ceil((tokens * 4) / line.length))
+  return line.repeat(repeats)
+}
+
+/**
+ * 四个已结束工具轮，每个结果约 15000 token（与上游 select 测试同形）：
+ * 32000 的保留轮预算能装下最新两轮，因此切段落在第 1、2 轮。
+ */
+function toolRounds(count: number, resultTokens: number): ProjectedSessionEntry[] {
+  const entries: ProjectedSessionEntry[] = []
+  for (let index = 0; index < count; index += 1) {
+    const n = index + 1
+    entries.push(toolCallEntry(`a${n}`, `c${n}`, 'bash', 'calling'))
+    entries.push(toolResultEntry(`t${n}`, `c${n}`, 'bash', bigToolText(resultTokens)))
+  }
+  return entries
+}
+
+function cuttableProjection(): ProjectedSessionEntry[] {
+  return [
+    userEntry('u1', 'please build the widget'),
+    ...toolRounds(4, 15000),
+    // 尾部 assistant 会被算法走掉，只用来模拟真实回合结束形态。
+    toolCallEntry('a5', 'c5', 'bash', 'done'),
+  ]
+}
+
+interface FakeContextOptions {
+  sessionFile?: string
+  tokens?: number | null
+  provider?: string
+  baseUrl?: string
+}
+
+/** 构造最小的 Pi ExtensionContext；只填胶层真正读取的成员。 */
+function createFakeContext(options: FakeContextOptions = {}): ExtensionContext {
+  const model = options.baseUrl === undefined && options.provider === undefined
+    ? undefined
+    : { provider: options.provider ?? 'ollama', baseUrl: options.baseUrl ?? 'http://127.0.0.1:11434', id: 'test-model' }
+  const ctx = {
+    ui: {},
+    mode: 'rpc',
+    hasUI: false,
+    cwd: process.cwd(),
+    sessionManager: {
+      getSessionFile: () => options.sessionFile,
+    } as unknown as ExtensionContext['sessionManager'],
+    modelRegistry: { getAll: () => [] } as unknown as ExtensionContext['modelRegistry'],
+    model: model as unknown as ExtensionContext['model'],
+    scopedModels: [],
+    isIdle: () => true,
+    isProjectTrusted: () => true,
+    signal: undefined,
+    abort: () => undefined,
+    hasPendingMessages: () => false,
+    shutdown: () => undefined,
+    getContextUsage: () => ({
+      tokens: options.tokens ?? null,
+      contextWindow: 200000,
+      percent: options.tokens === undefined || options.tokens === null
+        ? null
+        : options.tokens / 200000,
+    }),
+    compact: () => undefined,
+    getSystemPrompt: () => '',
+  }
+  return ctx as unknown as ExtensionContext
+}
+
+function createTurnEndEvent(contextEntries: ProjectedSessionEntry[]): TurnEndEvent {
+  const message: ToolResultMessage = {
+    role: 'toolResult',
+    toolCallId: 'test-call',
+    toolName: 'test',
+    content: [],
+    isError: false,
+    timestamp: 0,
+  }
+  return {
+    type: 'turn_end',
+    turnIndex: 1,
+    message,
+    toolResults: [],
+    messageEntryId: 'a5',
+    toolResultEntryIds: [],
+    entries: [],
+    continue: false,
+    outcome: 'completed',
+    context: {
+      contextEntries,
+      contextMessages: [],
+      llmMessages: [],
+      pendingMessages: [],
+      canContinue: false,
+    },
+  }
+}
+
+interface FakePi {
+  api: ExtensionAPI
+  handlers: Map<string, (event: TurnEndEvent, ctx: ExtensionContext) => unknown>
+  tools: ToolDefinition[]
+}
+
+function createFakePi(): FakePi {
+  const handlers = new Map<string, (event: TurnEndEvent, ctx: ExtensionContext) => unknown>()
+  const tools: ToolDefinition[] = []
+  const api = {
+    on(event: string, handler: (event: TurnEndEvent, ctx: ExtensionContext) => unknown) {
+      handlers.set(event, handler)
+      return () => undefined
+    },
+    registerTool(tool: ToolDefinition) {
+      tools.push(tool)
+    },
+  } as unknown as ExtensionAPI
+  return { api, handlers, tools }
+}
+
+/** 测试用阈值：三条主线压到很小，其余沿用上游默认（CHUNK_MIN=1000 决定 fixture 规模）。 */
+function testThresholds(overrides: LiveCompactThresholdOverrides = {}) {
+  return computeLiveCompactThresholds(200000, {
+    minPressureTokens: 1000,
+    keepRoundTokens: 500,
+    urgentTokens: 2000,
+    bigGateTokens: 1000000,
+    ...overrides,
+  })
+}
+
+interface Harness {
+  pi: FakePi
+  ctx: ExtensionContext
+  records: LiveCompactCutRecord[]
+}
+
+function install(options: {
+  isEnabled?: () => boolean
+  thresholds?: LiveCompactExtensionOptions['thresholds']
+  sessionFile?: string
+  tokens?: number | null
+  now?: () => number
+} = {}): Harness {
+  const pi = createFakePi()
+  const records: LiveCompactCutRecord[] = []
+  const extension = createLiveCompactExtension({
+    isEnabled: options.isEnabled ?? (() => true),
+    sessionId: 'session-1',
+    algorithm: bundledAlgorithm,
+    thresholds: options.thresholds ?? testThresholds(),
+    onCut: (record) => records.push(record),
+    ...(options.now ? { now: options.now } : {}),
+  })
+  extension(pi.api)
+  const ctx = createFakeContext({
+    sessionFile: options.sessionFile,
+    tokens: options.tokens ?? 60400,
+    provider: 'ollama',
+    baseUrl: 'http://127.0.0.1:11434',
+  })
+  return { pi, ctx, records }
+}
+
+function runTurnEnd(harness: Harness, contextEntries: ProjectedSessionEntry[]) {
+  const handler = harness.pi.handlers.get('turn_end')
+  if (!handler) throw new Error('turn_end handler 未注册')
+  return handler(createTurnEndEvent(contextEntries), harness.ctx) as
+    | { entries: ContextEditEntryDraft[] }
+    | undefined
+}
+
+describe('Live Compact 胶层：开关与压力', () => {
+  test('Given 会话开关关闭 When turn_end Then 零 entries 且不记录 cut', () => {
+    const harness = install({ isEnabled: () => false })
+    const result = runTurnEnd(harness, cuttableProjection())
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 上下文占用低于触发线 When turn_end Then 不切段', () => {
+    const harness = install({ tokens: 999 })
+    const result = runTurnEnd(harness, cuttableProjection())
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 拿不到 usage When turn_end Then 退回逐条估算的总量判定', () => {
+    const harness = install({ tokens: null })
+    const result = runTurnEnd(harness, cuttableProjection())
+    // 四个 15000 token 工具轮远超触发线，因此仍会切段。
+    expect(result?.entries.length).toBeGreaterThan(0)
+  })
+
+  test('Given 上下文占用超过停手线 When turn_end Then 完全让位给官方压缩', () => {
+    const harness = install({ tokens: 1000000 })
+    expect(runTurnEnd(harness, cuttableProjection())).toBeUndefined()
+  })
+})
+
+describe('Live Compact 胶层：切段草案', () => {
+  test('Given 本地端点且达到触发线 When turn_end Then 首条替换成卡片、其余省略', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection())
+    expect(result).toBeDefined()
+    const drafts = result?.entries ?? []
+    // 四个已结束工具轮保留最新两轮，切段覆盖第 1、2 轮（各一条调用 + 一条结果）。
+    expect(drafts).toHaveLength(4)
+    const first = drafts[0]
+    expect(first?.type).toBe('context_edit')
+    expect(first?.targetId).toBe('a1')
+    const replacement = first?.replacement
+    expect(replacement).not.toBeNull()
+    const content = replacement?.content
+    const text = Array.isArray(content) && content[0] && content[0].type === 'text'
+      ? content[0].text
+      : ''
+    expect(text.startsWith('Spine extract.')).toBe(true)
+    expect(text).toContain('原文存档')
+    for (const draft of drafts.slice(1)) {
+      expect(draft.replacement).toBeNull()
+    }
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['a1', 't1', 'a2', 't2'])
+  })
+
+  test('Given 切段成功 When onCut Then 记录段 token、节省、卡片 id 与 recall ref', () => {
+    const harness = install()
+    runTurnEnd(harness, cuttableProjection())
+    expect(harness.records).toHaveLength(1)
+    const record = harness.records[0]
+    expect(record?.sessionId).toBe('session-1')
+    expect(record?.engine).toBe('local')
+    expect(record?.engineSource).toBe('address')
+    expect(record?.drain).toBe(false)
+    expect(record?.hostTokens).toBe(60400)
+    expect(record?.simulatedTokens).toBeLessThan(record?.hostTokens ?? 0)
+    expect(record?.savedTokens).toBeGreaterThan(0)
+    expect(record?.spans).toHaveLength(1)
+    const span = record?.spans[0]
+    expect(span?.cardEntryId).toBe('a1')
+    expect(span?.omittedEntryIds).toEqual(['t1', 'a2', 't2'])
+    expect(span?.spanTokens).toBeGreaterThan(span?.cardTokens ?? 0)
+    expect(span?.savedTokens).toBe((span?.spanTokens ?? 0) - (span?.cardTokens ?? 0))
+    expect(span?.recallRefs).toEqual(['t1', 't2'])
+    expect(span?.pointerOnly).toBe(false)
+    expect(span?.turn).toBe(1)
+  })
+
+  test('Given 没有可切段 When turn_end Then 无草案也不记录', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, [userEntry('u1', 'short')])
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+})
+
+describe('Live Compact 胶层：官方压缩冷却', () => {
+  test('Given 官方压缩刚落地且在冷却窗内 When turn_end Then 让过一刀', () => {
+    const harness = install({
+      thresholds: testThresholds({ cooldownMs: 300000 }),
+      // 压缩落地后 1 秒：落在 5 分钟冷却窗内，但已过身份规则的首见基线阶段。
+      now: () => Date.parse(TIMESTAMP) + 1000,
+    })
+    const projected = [compactionEntry('c1', '官方压缩摘要'), ...cuttableProjection()]
+    const result = runTurnEnd(harness, projected)
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 恢复会话里已有旧摘要 When 首轮 Then 只建基线不阻止切段', () => {
+    const harness = install()
+    const projected = [compactionEntry('c1', '官方压缩摘要'), ...cuttableProjection()]
+    const result = runTurnEnd(harness, projected)
+    expect(result?.entries.length).toBeGreaterThan(0)
+    expect(harness.records).toHaveLength(1)
+  })
+
+  test('Given 第二轮出现新的官方压缩 When turn_end Then 正好让过这一刀', () => {
+    const harness = install()
+    const firstTurn = runTurnEnd(harness, cuttableProjection())
+    expect(firstTurn?.entries.length).toBeGreaterThan(0)
+
+    const liveCompaction = [compactionEntry('c2', '新的官方压缩摘要'), ...cuttableProjection()]
+    const secondTurn = runTurnEnd(harness, liveCompaction)
+    expect(secondTurn).toBeUndefined()
+
+    // 同一个压缩 id 再来一次不会重复让行，切段恢复。
+    const thirdTurn = runTurnEnd(harness, liveCompaction)
+    expect(thirdTurn?.entries.length).toBeGreaterThan(0)
+    expect(harness.records).toHaveLength(2)
+  })
+})
+
+describe('Live Compact 胶层：spine_recall 工具', () => {
+  test('Given 工厂加载 When 检查注册 Then spine_recall 以 typebox 参数模式注册', () => {
+    const harness = install()
+    expect(harness.pi.tools).toHaveLength(1)
+    const tool = harness.pi.tools[0]
+    expect(tool?.name).toBe('spine_recall')
+    expect(tool?.parameters).toMatchObject({ type: 'object' })
+    expect(tool?.promptGuidelines?.length).toBeGreaterThan(0)
+  })
+
+  test('Given 已有切段 When 用卡片 ref 调用 spine_recall Then 返回原文并存进 sidecar', async () => {
+    const root = createTemporaryRoot()
+    const sessionFile = join(root, 'session.jsonl')
+    const harness = install({ sessionFile })
+
+    runTurnEnd(harness, cuttableProjection())
+    const sidecar = readFileSync(`${sessionFile}.spine.jsonl`, 'utf8')
+    expect(sidecar).toContain('"id":"t1"')
+
+    const tool = harness.pi.tools[0]
+    if (!tool) throw new Error('spine_recall 未注册')
+    const result = await tool.execute(
+      'call-1',
+      { ref: 't1' },
+      undefined,
+      undefined,
+      harness.ctx as unknown as ExtensionToolContext,
+    )
+    const textBlocks = result.content.filter((block): block is TextContent => block.type === 'text')
+    expect(textBlocks[0]?.text).toContain('的存档原文')
+    expect(textBlocks[0]?.text).toContain('spine-recall-t1.txt')
+    expect(result.details).toEqual({ found: true })
+  })
+
+  test('Given 未知 ref When 调用 spine_recall Then 返回未找到而不是抛错', async () => {
+    const root = createTemporaryRoot()
+    const harness = install({ sessionFile: join(root, 'session.jsonl') })
+    const tool = harness.pi.tools[0]
+    if (!tool) throw new Error('spine_recall 未注册')
+    const result = await tool.execute(
+      'call-2',
+      { ref: 'missing' },
+      undefined,
+      undefined,
+      harness.ctx as unknown as ExtensionToolContext,
+    )
+    expect(result.details).toEqual({ found: false })
+    const textBlocks = result.content.filter((block): block is TextContent => block.type === 'text')
+    expect(textBlocks[0]?.text).toContain('没有找到')
+  })
+
+  test('Given 无会话文件 When 切段 Then 存档退化为内存态且不影响草案', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection())
+    expect(result?.entries.length).toBe(4)
+  })
+})
+
+describe('Live Compact 胶层：engine 判定', () => {
+  test('Given 云端地址 When turn_end Then 未到紧急线不切段', () => {
+    const pi = createFakePi()
+    const records: LiveCompactCutRecord[] = []
+    createLiveCompactExtension({
+      isEnabled: () => true,
+      sessionId: 'session-cloud',
+      algorithm: bundledAlgorithm,
+      thresholds: testThresholds({ urgentTokens: 100000 }),
+      onCut: (record) => records.push(record),
+    })(pi.api)
+
+    const ctx = createFakeContext({
+      tokens: 60400,
+      provider: 'deepseek-official',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+    })
+    const result = pi.handlers.get('turn_end')?.(createTurnEndEvent(cuttableProjection()), ctx)
+    expect(result).toBeUndefined()
+    expect(records).toHaveLength(0)
+  })
+
+  test('Given 云端地址且达到紧急线 When turn_end Then drain 切段并记录 engine', () => {
+    const pi = createFakePi()
+    const records: LiveCompactCutRecord[] = []
+    createLiveCompactExtension({
+      isEnabled: () => true,
+      sessionId: 'session-cloud',
+      algorithm: bundledAlgorithm,
+      thresholds: testThresholds({ urgentTokens: 2000 }),
+      onCut: (record) => records.push(record),
+    })(pi.api)
+
+    const ctx = createFakeContext({
+      tokens: 60400,
+      provider: 'deepseek-official',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+    })
+    const result = pi.handlers.get('turn_end')?.(createTurnEndEvent(cuttableProjection()), ctx) as
+      | { entries: ContextEditEntryDraft[] }
+      | undefined
+    expect(result?.entries.length).toBeGreaterThan(0)
+    expect(records[0]?.engine).toBe('cloud')
+    expect(records[0]?.drain).toBe(true)
+  })
+})
+
+describe('Live Compact 胶层：图片与自定义消息', () => {
+  test('Given 含图片块的消息 When turn_end Then 只按文本块估算', () => {
+    const image: ImageContent = { type: 'image', data: 'AAAA', mimeType: 'image/png' }
+    const withImage: UserMessage = {
+      role: 'user',
+      content: [{ type: 'text', text: 'see screenshot' }, image],
+      timestamp: 0,
+    }
+    const entry = messageEntry('u-image', withImage)
+    const harness = install({ tokens: 2000 })
+    expect(runTurnEnd(harness, [entry])).toBeUndefined()
+  })
+})

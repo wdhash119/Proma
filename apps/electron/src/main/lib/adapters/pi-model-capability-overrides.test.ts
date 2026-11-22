@@ -11,6 +11,35 @@ import {
 /** 目录与名称推断都无法识别的模型 ID。 */
 const UNKNOWN_MODEL_ID = 'totally-unknown-model-xyz'
 
+/**
+ * Pi SDK 的纯类型别名：只参与类型检查，编译后擦除，因此不受其他测试文件
+ * 用 mock.module 覆盖 `@earendil-works/pi-coding-agent` 的全局影响。
+ */
+type PiSdk = typeof import('@earendil-works/pi-coding-agent')
+
+/**
+ * 构造最小 fake SDK，隔离其他测试文件对 Pi SDK 的 mock.module 全局泄漏。
+ * buildModel 本来就是依赖注入设计（sdk 作为入参），fake 只需覆盖 custom 路径
+ * 实际用到的 ModelRuntime 表面：create / registerProvider / getModel。
+ */
+function createFakeSdk(): PiSdk {
+  // 按 provider 名记录注册配置，getModel 直接取回注册时写入的 model 对象，
+  // 因此 buildModel 写入的 contextWindow/maxTokens/input/reasoning 等字段会被原样带回。
+  const registered = new Map<string, { models: Array<{ id: string }> }>()
+
+  return {
+    ModelRuntime: {
+      create: async () => ({
+        registerProvider: (name: string, config: { models: Array<{ id: string }> }) => {
+          registered.set(name, config)
+        },
+        getModel: (provider: string, id: string) =>
+          registered.get(provider)?.models.find((model) => model.id === id),
+      }),
+    },
+  } as unknown as PiSdk
+}
+
 describe('模型能力手动覆盖：推理能力', () => {
   test('Given 未识别模型且无覆盖 When 解析推理能力 Then 返回 undefined', async () => {
     expect(await resolvePiReasoningCapability('custom', UNKNOWN_MODEL_ID)).toBeUndefined()
@@ -74,8 +103,7 @@ describe('模型能力手动覆盖：自动检测摘要', () => {
 
 describe('模型能力手动覆盖：Pi 模型注册', () => {
   test('Given 未识别模型配置手动覆盖 When 注册 Then 上下文/输出/模态/推理全部生效', async () => {
-    const sdk = await import('@earendil-works/pi-coding-agent')
-    const { model } = await buildModel(sdk, {
+    const { model } = await buildModel(createFakeSdk(), {
       sessionId: 'capability-overrides-test',
       prompt: 'hi',
       model: UNKNOWN_MODEL_ID,
@@ -100,8 +128,7 @@ describe('模型能力手动覆盖：Pi 模型注册', () => {
   })
 
   test('Given 未识别模型无覆盖 When 注册 Then 保持保守默认值', async () => {
-    const sdk = await import('@earendil-works/pi-coding-agent')
-    const { model } = await buildModel(sdk, {
+    const { model } = await buildModel(createFakeSdk(), {
       sessionId: 'capability-overrides-test-default',
       prompt: 'hi',
       model: UNKNOWN_MODEL_ID,
@@ -119,8 +146,7 @@ describe('模型能力手动覆盖：Pi 模型注册', () => {
   })
 
   test('Given 非法覆盖字段 When 注册 Then 丢弃非法值不影响其余字段', async () => {
-    const sdk = await import('@earendil-works/pi-coding-agent')
-    const { model } = await buildModel(sdk, {
+    const { model } = await buildModel(createFakeSdk(), {
       sessionId: 'capability-overrides-test-invalid',
       prompt: 'hi',
       model: UNKNOWN_MODEL_ID,

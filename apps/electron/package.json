@@ -1,6 +1,6 @@
 {
   "name": "@proma/electron",
-  "version": "0.19.129",
+  "version": "0.19.130",
   "description": "Proma，为专业用户设计的 Agent",
   "main": "dist/main.cjs",
   "author": {
@@ -15,11 +15,11 @@
     "dev:vite": "vite dev",
     "dev:kill": "bun run scripts/dev-kill.ts",
     "dev:electron": "bun run dev:kill && bun run sync:runtime-deps:dev && bun run rebuild:node-pty && bun run build:native-helpers && bun run prepare:officecli && bun run build:resources && bun run scripts/dev-bundle-readiness.ts --prepare && concurrently -k -n main,agent-runtime,terminal-runtime,preload,app -c yellow,red,blue,magenta,cyan \"bun run watch:main\" \"bun run watch:agent-runtime\" \"bun run watch:terminal-runtime\" \"bun run watch:preload\" \"bun run scripts/dev-bundle-readiness.ts --wait && bunx electronmon .\"",
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:jiti",
     "build:agent-runtime": "esbuild src/utility/agent-runtime.ts --bundle --platform=node --format=cjs --outfile=dist/agent-runtime.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:jiti",
     "build:terminal-runtime": "esbuild src/utility/terminal-runtime.ts --bundle --platform=node --format=cjs --outfile=dist/terminal-runtime.cjs --external:electron --external:node-pty",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
-    "watch:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --watch=forever",
+    "watch:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:jiti --watch=forever",
     "watch:agent-runtime": "esbuild src/utility/agent-runtime.ts --bundle --platform=node --format=cjs --outfile=dist/agent-runtime.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:jiti --watch=forever",
     "watch:terminal-runtime": "esbuild src/utility/terminal-runtime.ts --bundle --platform=node --format=cjs --outfile=dist/terminal-runtime.cjs --external:electron --external:node-pty --watch=forever",
     "watch:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron --watch=forever",

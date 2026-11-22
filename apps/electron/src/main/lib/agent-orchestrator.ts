@@ -52,9 +52,10 @@ import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, getWorks
 import { getLocalProjectRootStatus } from './project-root-health'
 import { getMcpApiKeyEnvironment, getMcpOAuthHeaders } from './mcp-oauth-service'
 import { existsSync } from 'node:fs'
-import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir, getUserAgentsSkillsDir } from './config-paths'
+import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getConfigDir, getSdkConfigDir, getWorkspaceSkillsDir, getUserAgentsSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
+import { buildLiveCompactQueryInput } from './live-compact-settings'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
 import { getPersonaConfig } from './persona-manager'
 import { resolveProjectInstructions } from './project-instruction-resolver'
@@ -1381,6 +1382,15 @@ export class AgentOrchestrator {
       }
       const piCustomTools = [...piBuiltinTools, ...piMcpTools, ...(extensions.piCustomTools ?? [])]
       let githubCopilotCredentialsSnapshot = githubCopilotOAuthCredentials
+      // Live Compact：会话覆盖 ?? 全局默认 ?? 关闭。阈值与 fork env 只在这里求值一次，
+      // 关闭时返回 undefined，查询输入不带该字段 → 子进程不加 extension、不注入 SPINE_*。
+      const liveCompact = buildLiveCompactQueryInput({
+        meta: sessionMeta,
+        settings: appSettings,
+        modelId: selectedModelId,
+        modelCapabilities: selectedChannelModel?.capabilities,
+        configDir: getConfigDir(),
+      })
       const queryOptions: PiAgentQueryOptions = {
         sessionId,
         prompt: finalPrompt,
@@ -1429,6 +1439,7 @@ export class AgentOrchestrator {
         ...(mentionedSkills?.length ? { skillMentions: mentionedSkills } : {}),
         onSkillActivated: recordSkillActivation,
         ...(isCompactCommand ? { compactRequest: true } : {}),
+        ...(liveCompact ? { liveCompact } : {}),
         ...(sessionMeta?.codexFastMode && channel.provider === 'openai-codex' ? { codexFastMode: true } : {}),
         ...(codexOAuthCredentials && {
           codexOAuthCredentials,

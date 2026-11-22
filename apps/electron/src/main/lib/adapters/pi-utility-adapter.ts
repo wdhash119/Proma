@@ -54,7 +54,17 @@ export class PiUtilityAdapter {
 
   async *query(input: PiAgentQueryOptions): AsyncIterable<SDKMessage> {
     const queryId = randomUUID()
-    const client = new AgentRuntimeClient({ sessionId: input.sessionId })
+    // Live Compact 的算法层（vendored select.ts）在模块加载时读 SPINE_* 求值模块级常量，
+    // 所以阈值只能靠 fork env 注入。env 记录直接取自主进程同一次求值的 thresholds.env，
+    // 这里**不再重复计算**：一旦两处各算一次，胶层参数与子进程常量就可能分叉。
+    const liveCompactEnv = input.liveCompact?.enabled ? input.liveCompact.thresholds.env : undefined
+    const client = new AgentRuntimeClient({
+      sessionId: input.sessionId,
+      ...(liveCompactEnv ? { env: { ...liveCompactEnv } } : {}),
+    })
+    if (liveCompactEnv) {
+      console.log(`[Live Compact] 已注入 fork env: ${Object.entries(liveCompactEnv).map(([key, value]) => `${key}=${value}`).join(' ')}`)
+    }
     const pending: PendingQuery = {
       queryId,
       sessionId: input.sessionId,

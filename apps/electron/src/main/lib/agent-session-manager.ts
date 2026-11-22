@@ -656,7 +656,7 @@ export function getAgentSessionSDKMessages(id: string): SDKMessage[] {
  */
 export function updateAgentSessionMeta(
   id: string,
-  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'projectInstructionState' | 'codexFastMode' | 'reasoningLevel' | 'personaId' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
+  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'projectInstructionState' | 'codexFastMode' | 'liveCompact' | 'reasoningLevel' | 'personaId' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
 ): AgentSessionMeta {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)
@@ -720,6 +720,9 @@ export function deleteAgentSession(id: string): void {
     }
   }
 
+  // Live Compact 存档随会话一起清：否则 Pi artifact 保留会让 sidecar 永远悬空。
+  removeLiveCompactSidecar(removed.piSessionFile)
+
   // 清理 session 工作目录
   if (removed.workspaceId) {
     const ws = getAgentWorkspace(removed.workspaceId)
@@ -738,6 +741,24 @@ export function deleteAgentSession(id: string): void {
 
   console.log(`[Agent 会话] 已删除会话: ${removed.title} (${removed.id})`)
 
+}
+
+/**
+ * 删除 Live Compact 的 sidecar 存档（`<piSessionFile>.spine.jsonl`）。
+ *
+ * 现状：Pi session artifact 本身不随会话删除（只删 Proma 消息文件与 session 工作目录），
+ * 所以这里只清 Proma 自己写在 artifact 旁边的存档文件，不动 artifact。
+ * 存档是可选衍生物：不存在就跳过，删除失败只告警，不影响会话删除主流程。
+ */
+function removeLiveCompactSidecar(piSessionFile: string | undefined): void {
+  if (!piSessionFile) return
+  const sidecar = `${piSessionFile}.spine.jsonl`
+  if (!existsSync(sidecar)) return
+  try {
+    unlinkSync(sidecar)
+  } catch (error) {
+    console.warn(`[Agent 会话] 删除 Live Compact sidecar 失败: ${sidecar}`, error)
+  }
 }
 
 /**

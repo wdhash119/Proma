@@ -43,6 +43,7 @@ import { isDisabledUserGlobalSkill } from '../user-global-skill-filter'
 import type {
   AgentSession,
   AgentSessionEvent,
+  ExtensionAPI,
   ResourceLoader,
   Skill,
   ToolDefinition,
@@ -94,6 +95,9 @@ import { DEFAULT_CONTEXT_WINDOW, buildModel } from './pi-model-registry'
 import { PendingPromptSkillActivationTracker } from './pi-skill-activation-tracker'
 import { normalizePiToolResultDetails, serializePiToolResultPayload } from './pi-tool-result-json'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
+import { createLiveCompactExtension } from './pi-live-compact-extension'
+import { resolveLiveCompactAlgorithm } from './live-compact-algorithm-loader'
+import type { LiveCompactQueryInput } from '../live-compact-settings'
 import {
   closePiRequestProxyDispatcher,
   createPiRequestProxyDispatcher,
@@ -211,6 +215,11 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   onXaiOAuthCredentialsRefreshed?: (credentials: XaiOAuthCredentials) => void | Promise<void>
   /** 会话级 OpenAI（Codex OAuth / Responses API）思考深度。 */
   openAIThinkingLevel?: AgentThinkingLevel
+  /**
+   * Live Compact 参数。仅在会话生效开关为 true 时由主进程组装后下发（见 live-compact-settings）；
+   * 缺省时不会加载第五个 extension factory，也不会注入 SPINE_* env。
+   */
+  liveCompact?: LiveCompactQueryInput
 }
 
 interface ActivePiSession {
@@ -229,6 +238,17 @@ interface ActivePiSession {
   skillWorkspaceSlug?: string
   pendingSkillActivations: PendingPromptSkillActivationTracker
   onSkillActivated?: (activations: SkillActivation[], userMessageUuid: string) => void
+  /**
+   * Live Compact 会话开关的可变引用。
+   * 本批初始化为查询输入值；P4 的中途切换只需改这里（工厂每轮 turn_end 现读），
+   * 不需要重建会话或热换 extension。
+   */
+  liveCompact?: LiveCompactEnabledRef
+}
+
+/** Live Compact 开关引用；与 Pi extension 共享同一个对象，写入即生效于下一轮。 */
+interface LiveCompactEnabledRef {
+  enabled: boolean
 }
 
 interface PendingInterruptPrompt {
@@ -1354,12 +1374,56 @@ function installRuntimeGuardHooks(session: AgentSession, guard: AgentRuntimeGuar
   }
 }
 
+/**
+ * 组装 Live Compact 的第五个 extension factory。
+ *
+ * 只在查询输入已解析为启用时调用（关闭时整个函数不会被走到）：
+ * - 算法经 `resolveLiveCompactAlgorithm` 双路加载（bundled / 同步覆盖层），
+ *   覆盖层损坏只告警并回落内置算法；
+ * - 任何加载异常都降级为“本会话不启用”：Live Compact 是可选的上下文优化，
+ *   不能让它把用户正常会话的 turn 弄挂。
+ * - `isEnabled` 读 active 会话上的可变 ref，P4 的中途切换改 ref 即可于下一轮生效。
+ */
+async function createLiveCompactExtensionFactories(
+  liveCompact: LiveCompactQueryInput,
+  sessionId: string,
+  active: ActivePiSession,
+): Promise<Array<(pi: ExtensionAPI) => void>> {
+  try {
+    const resolved = await resolveLiveCompactAlgorithm(liveCompact.configDir, {
+      warn: (message) => console.warn(`[Live Compact] ${message}`),
+    })
+    if (resolved.source === 'override' && resolved.override) {
+      console.log(`[Live Compact] 使用同步覆盖层算法 ${resolved.override.version}（${resolved.override.sha.slice(0, 7)}）`)
+    }
+    const enabledRef: LiveCompactEnabledRef = active.liveCompact ?? { enabled: liveCompact.enabled }
+    active.liveCompact = enabledRef
+    return [
+      createLiveCompactExtension({
+        isEnabled: () => enabledRef.enabled,
+        sessionId,
+        algorithm: resolved.algorithm,
+        thresholds: liveCompact.thresholds,
+        // utility 进程没有 UI 落点（FINDINGS §5.7）：cut 事件 v1 只落结构化日志，
+        // 前缀固定为 [live-compact]，便于从开发终端/主进程日志里 grep 复盘。
+        onCut: (record) => console.log('[live-compact] ' + JSON.stringify(record)),
+      }),
+    ]
+  } catch (error) {
+    console.warn('[Live Compact] 算法加载失败，本会话不启用:', error)
+    return []
+  }
+}
+
 export class PiAgentAdapter implements AgentProviderAdapter {
   private activeSessions = new Map<string, ActivePiSession>()
 
   async *query(input: PiAgentQueryOptions): AsyncIterable<SDKMessage> {
     const active = createActivePiSession()
     this.activeSessions.set(input.sessionId, active)
+    // Live Compact 开关引用：本批固定为查询输入值（未启用时恒为 false），
+    // P4 的中途切换控制消息只需要改写 active.liveCompact.enabled。
+    active.liveCompact = { enabled: input.liveCompact?.enabled === true }
     const queue = createAsyncQueue<SDKMessage>()
     const runtimeGuard = createAgentRuntimeGuard(input)
     // 同一 session 的新请求可能在旧 IPC 事件之后开始；所有 retry 生命周期均携带这一轮标识。
@@ -1507,6 +1571,11 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           : []),
         ...(input.provider === 'openai-codex' && input.codexFastMode
           ? [createCodexFastModeExtension({ fastMode: true })]
+          : []),
+        // 第五个工厂：Live Compact。默认关闭时 input.liveCompact 为 undefined，
+        // 这里不加载算法、不注册 spine_recall、不注入任何提示，行为与从前完全一致。
+        ...(input.liveCompact?.enabled
+          ? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active)
           : []),
       ]
       const resourceLoader = new sdk.DefaultResourceLoader({

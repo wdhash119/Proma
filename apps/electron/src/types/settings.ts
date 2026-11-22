@@ -283,6 +283,18 @@ export interface ProductivityToolsSettings {
   obsidianEnabled: boolean
 }
 
+/**
+ * Live Compact 全局设置。
+ *
+ * 缺省关闭：只有显式打开后 Agent 会话才把长工具输出就地压成卡片（可经 spine_recall 取回原文）。
+ * 本字段是**主闸**：关闭时硬停全部会话（即使会话 meta 上写了 liveCompact=true）；
+ * 开启后每个会话默认启用，可经会话级 liveCompact=false 单独关闭。
+ */
+export interface LiveCompactSettings {
+  /** 全局主闸；缺省 false。false 时无论会话设置如何都不生效，运行链路零变化。 */
+  enabled: boolean
+}
+
 export const DEFAULT_PRODUCTIVITY_TOOLS_SETTINGS: ProductivityToolsSettings = {
   todosEnabled: true,
   calendarEnabled: true,
@@ -375,6 +387,8 @@ export interface AppSettings {
   feishuSessionMirror?: FeishuSessionMirrorSettings
   /** 无视觉输入能力 Agent 的视觉助手路由 */
   visionRelay?: VisionRelaySettings
+  /** Live Compact 全局主闸（关闭即硬停全部会话）；缺省关闭。 */
+  liveCompact?: LiveCompactSettings
   /** 已确认的受管浏览器风险告知版本；低于当前版本时首次使用会再次要求确认。 */
   browserRiskDisclaimerVersion?: number
   /** Todo、日程与 Obsidian 的可见性和 Agent 工具注入开关，默认全部开启。 */

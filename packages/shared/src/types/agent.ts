@@ -758,6 +758,13 @@ export interface AgentSessionMeta {
   }
   /** ChatGPT Codex Fast Mode 开关；仅 Pi + ChatGPT OAuth 的受支持模型实际生效。 */
   codexFastMode?: boolean
+  /**
+   * Live Compact（就地压缩长工具输出）的会话级开关。
+   * 全局开关是主闸：全局关闭时本字段无效（硬停所有会话）；
+   * 全局开启时 undefined = 继承（默认启用），false = 本会话单独关闭，true 与继承等价。
+   * 每一轮组装查询时解析为 effective 值，未启用时运行链路零变化。
+   */
+  liveCompact?: boolean
   /** 本会话的推理深度；未设置时兼容旧版全局思考设置。 */
   reasoningLevel?: AgentThinkingLevel
   /** 本会话选择的人设 ID；未设置时使用人设配置的默认人设。 */

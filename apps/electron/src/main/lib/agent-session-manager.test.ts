@@ -676,6 +676,52 @@ describe('Agent 会话删除墓碑', () => {
   })
 })
 
+describe('Live Compact sidecar 清理', () => {
+  function writeSidecarFixture(artifactSuffix: string): { piSessionFile: string; sidecar: string } {
+    const dir = join(tempHome, '.proma', 'sdk-config', 'sessions')
+    mkdirSync(dir, { recursive: true })
+    const piSessionFile = join(dir, `artifact-${artifactSuffix}.jsonl`)
+    writeFileSync(piSessionFile, '', 'utf-8')
+    const sidecar = `${piSessionFile}.spine.jsonl`
+    writeFileSync(sidecar, `${JSON.stringify({ id: 'entry-1', text: '原文' })}\n`, 'utf-8')
+    return { piSessionFile, sidecar }
+  }
+
+  test('Given 会话带 Pi artifact 与 sidecar When 删除会话 Then 连带删除 sidecar', () => {
+    const id = 'session-with-spine-sidecar'
+    const { piSessionFile, sidecar } = writeSidecarFixture('with-sidecar')
+    // agentRuntime: 'pi' 避免索引迁移把旧会话判成退役 Claude 并清空 piSessionFile。
+    writeAgentSessionsIndex([{ id, title: '带存档会话', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1, agentRuntime: 'pi', piSessionFile }])
+
+    expect(existsSync(sidecar)).toBe(true)
+    manager.deleteAgentSession(id)
+
+    expect(existsSync(sidecar)).toBe(false)
+    // Pi artifact 本身不随会话删除（现状），本批只清 Proma 自己的衍生文件。
+    expect(existsSync(piSessionFile)).toBe(true)
+  })
+
+  test('Given 会话没有 sidecar When 删除会话 Then 正常删除且不报错', () => {
+    const id = 'session-without-spine-sidecar'
+    const dir = join(tempHome, '.proma', 'sdk-config', 'sessions')
+    mkdirSync(dir, { recursive: true })
+    const piSessionFile = join(dir, 'artifact-without-sidecar.jsonl')
+    writeFileSync(piSessionFile, '', 'utf-8')
+    writeAgentSessionsIndex([{ id, title: '无存档会话', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1, agentRuntime: 'pi', piSessionFile }])
+
+    expect(() => manager.deleteAgentSession(id)).not.toThrow()
+    expect(manager.getAgentSessionMeta(id)).toBeUndefined()
+  })
+
+  test('Given 会话未记录 Pi artifact When 删除会话 Then 跳过 sidecar 清理且不报错', () => {
+    const id = 'session-without-pi-artifact'
+    writeAgentSessionsIndex([{ id, title: '无 artifact 会话', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1 }])
+
+    expect(() => manager.deleteAgentSession(id)).not.toThrow()
+    expect(manager.getAgentSessionMeta(id)).toBeUndefined()
+  })
+})
+
 describe('后台元数据不改变归档态', () => {
   test('Given 已归档会话 When 仅写入 PR 状态或检出日志 Then 保持归档且不刷新排序时间', () => {
     writeAgentSessionsIndex([{

@@ -9,9 +9,17 @@ import { readFileSync, existsSync } from 'node:fs'
 import { getSettingsPath } from './config-paths'
 import { writeJsonFileAtomic } from './safe-file'
 import { DEFAULT_THEME_MODE, normalizeDisabledUserSkillSlugs, normalizeProductivityToolsSettings } from '../../types'
-import type { AppSettings } from '../../types'
+import type { AppSettings, LiveCompactSettings } from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 
+/**
+ * 容错读取 Live Compact 设置：只有显式 true 才启用，未知/损坏值一律视为关闭。
+ * 手写 settings.json 可能写成 `{}` 或非布尔值，不能让它们变成“意外开启”。
+ */
+function normalizeLiveCompactSettings(input: unknown): LiveCompactSettings {
+  const raw = input && typeof input === 'object' ? input as Partial<LiveCompactSettings> : {}
+  return { enabled: raw.enabled === true }
+}
 
 function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {
   return isTerminalProfile(input) && getTerminalProfilesForPlatform('win32').includes(input)
@@ -37,6 +45,7 @@ export function getSettings(): AppSettings {
       richTextRenderingEnabled: false,
       feishuSessionMirror: { mode: 'off' },
       visionRelay: { enabled: false },
+      liveCompact: { enabled: false },
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
@@ -76,6 +85,8 @@ export function getSettings(): AppSettings {
       richTextRenderingEnabled: data.richTextRenderingEnabled ?? false,
       feishuSessionMirror: data.feishuSessionMirror ?? { mode: 'off' },
       visionRelay: data.visionRelay ?? { enabled: false },
+      // 缺省关闭：老配置文件没有该字段时，Live Compact 不参与任何会话。
+      liveCompact: normalizeLiveCompactSettings(data.liveCompact),
       windowsShellPreference: settings.windowsShellPreference ?? 'auto',
       lastWindowsTerminalProfile: process.platform === 'win32'
         ? sanitizeWindowsTerminalProfile(settings.lastWindowsTerminalProfile ?? legacyLastTerminalProfile)
@@ -100,6 +111,7 @@ export function getSettings(): AppSettings {
       richTextRenderingEnabled: false,
       feishuSessionMirror: { mode: 'off' },
       visionRelay: { enabled: false },
+      liveCompact: { enabled: false },
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
@@ -126,6 +138,10 @@ export function updateSettings(updates: Partial<AppSettings>): AppSettings {
     disabledUserSkillSlugs: updates.disabledUserSkillSlugs === undefined
       ? normalizeDisabledUserSkillSlugs(current.disabledUserSkillSlugs)
       : normalizeDisabledUserSkillSlugs(updates.disabledUserSkillSlugs),
+    // Live Compact 写入同样容错：非布尔 enabled 一律落回 false，避免“意外开启”。
+    liveCompact: updates.liveCompact === undefined
+      ? normalizeLiveCompactSettings(current.liveCompact)
+      : normalizeLiveCompactSettings({ ...current.liveCompact, ...updates.liveCompact }),
   }
   const filePath = getSettingsPath()
 

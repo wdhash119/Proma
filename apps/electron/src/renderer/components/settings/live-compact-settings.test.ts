@@ -10,6 +10,16 @@ function readAppFile(relativePath: string): string {
 }
 
 const SETTINGS_PAGE = 'src/renderer/components/settings/LiveCompactSettings.tsx'
+const SEGMENTED_CONTROL = 'src/renderer/components/settings/primitives/SettingsSegmentedControl.tsx'
+
+/** 按起止标记切出源码片段，避免整页断言互相串味。 */
+function sliceBetween(source: string, startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker)
+  expect(start).toBeGreaterThan(-1)
+  const end = source.indexOf(endMarker, start + startMarker.length)
+  expect(end).toBeGreaterThan(start)
+  return source.slice(start, end)
+}
 
 describe('Live Compact 设置页注册与主闸语义', () => {
   test('Given 设置标签页清单 When 检查 Then 含 live-compact 且可被归一化保留', () => {
@@ -40,6 +50,17 @@ describe('Live Compact 设置页注册与主闸语义', () => {
     expect(settings).toContain('spine_recall')
   })
 
+  test('Given 页头标题 When 检查开关文案 Then 开关叫「总开关」，不再与标题重复', () => {
+    const settings = readAppFile(SETTINGS_PAGE)
+
+    // 页头只有一个 Live Compact 标题，开关不再叫 Live Compact。
+    expect(settings.split('Live Compact</h2>').length - 1).toBe(1)
+    expect(settings).not.toContain('label="Live Compact"')
+    expect(settings).toContain('label="总开关"')
+    // 主闸问号仍保留「缺省关闭 / 硬停所有会话 / 工具栏可单独关」的语义。
+    expect(settings).toContain('helpLabel="全局主闸说明"')
+  })
+
   test('Given 主闸 When 检查 Then 经既有 settings 更新通道落盘且工具提示声明硬停语义', () => {
     const settings = readAppFile(SETTINGS_PAGE)
 
@@ -63,7 +84,7 @@ describe('Live Compact 设置页：新布局（开关行 → 阈值设置 → �
   const settings = readAppFile(SETTINGS_PAGE)
 
   test('Given 设置页 When 检查分节顺序 Then 开关行在阈值设置之前、阈值设置在算法更新之前', () => {
-    const toggleRowIndex = settings.indexOf('label="Live Compact"')
+    const toggleRowIndex = settings.indexOf('label="总开关"')
     const thresholdIndex = settings.indexOf('title="阈值设置"')
     const updateIndex = settings.indexOf('title="算法更新"')
 
@@ -85,17 +106,29 @@ describe('Live Compact 设置页：新布局（开关行 → 阈值设置 → �
     }
   })
 
-  test('Given 开关行 When 检查 Then 主闸与结束轮保护并排在同一张卡里', () => {
-    const toggleCard = settings.slice(
-      settings.indexOf('<SettingsCard divided={false}>'),
-      settings.indexOf('title="阈值设置"'),
-    )
+  test('Given 开关行 When 检查 Then 去掉卡片外壳，两个开关同一 flex 行且保护格随主闸条件渲染', () => {
+    const toggleRow = sliceBetween(settings, '{/* 开关行', '{/* 阈值设置')
 
-    expect(toggleCard).toContain('label="Live Compact"')
-    expect(toggleCard).toContain('label="结束轮保护"')
-    expect(toggleCard).toContain('md:grid-cols-2')
-    // 窄屏堆叠：上下分隔线在小屏生效。
-    expect(toggleCard).toContain('divide-y')
+    // 不再套 SettingsCard：开关行直接落在页面内容里，水平对齐由页面容器内边距提供。
+    expect(toggleRow).not.toContain('SettingsCard')
+    expect(toggleRow).toContain('flex flex-wrap items-center gap-x-8')
+    expect(toggleRow).toContain('label="总开关"')
+    expect(toggleRow).toContain('label="结束轮保护"')
+
+    // enabled=false 时保护开关整格不渲染（不是只 disabled）。
+    expect(toggleRow).toContain('{settings.enabled && (')
+    const protectGuard = toggleRow.slice(toggleRow.indexOf('{settings.enabled && ('))
+    expect(protectGuard).toContain('label="结束轮保护"')
+    expect(protectGuard).toContain('onCheckedChange={(checked) => void updateProtectCurrentTurn(checked)}')
+    // 主闸格在条件块之外，始终可见。
+    expect(toggleRow.indexOf('label="总开关"')).toBeLessThan(toggleRow.indexOf('{settings.enabled && ('))
+
+    // 一格内部：标签 + 问号 + Switch 同一行。
+    const inlineCell = sliceBetween(settings, 'function ToggleInline', 'export function LiveCompactSettings')
+    expect(inlineCell).toContain('flex items-center gap-2')
+    expect(inlineCell).toContain('<SettingsHelpTip')
+    expect(inlineCell).toContain('<Switch')
+    expect(inlineCell).not.toContain('justify-between')
   })
 
   test('Given 结束轮保护 When 检查 Then 独立开关经 settings 通道落盘且工具提示声明保护语义与缺省开', () => {
@@ -113,10 +146,68 @@ describe('Live Compact 设置页：新布局（开关行 → 阈值设置 → �
 describe('Live Compact 设置页：阈值设置', () => {
   const settings = readAppFile(SETTINGS_PAGE)
 
-  test('Given 卡顶 When 检查 Then 用既有分段控件选原算法/自定义，切来源只发 lineMode', () => {
-    expect(settings).toContain('label="取值来源"')
-    expect(settings).toContain("label: '原算法（上游默认）'")
-    expect(settings).toContain("label: '自定义'")
+  test('Given 主闸关闭 When 检查 Then 阈值设置整节条件渲染，草稿状态留在父组件不被卸载重置', () => {
+    const sectionIndex = settings.indexOf('title="阈值设置"')
+    const guardIndex = settings.lastIndexOf('{settings.enabled && (', sectionIndex)
+
+    expect(guardIndex).toBeGreaterThan(-1)
+    // 条件表达式直接包住 SettingsSection 本身：关掉主闸后整节连同输入框一起卸载。
+    expect(settings.slice(guardIndex + '{settings.enabled && ('.length, sectionIndex).trim())
+      .toBe('<SettingsSection')
+
+    // 草稿与生效档位的 state 全部声明在 LiveCompactSettings 里，不在被卸载的子树中，
+    // 因此重新开启主闸后取值来源、比例/绝对值档位与未保存输入都还在。
+    const componentBody = settings.slice(
+      settings.indexOf('export function LiveCompactSettings'),
+      settings.indexOf('return (\n    <div className="w-full space-y-8">'),
+    )
+    for (const stateSetter of [
+      'setSource',
+      'setCustomMode',
+      'setRatioDraft',
+      'setAbsoluteDraft',
+      'setPreviewWindowDraft',
+    ]) {
+      expect(componentBody).toContain(stateSetter)
+    }
+    expect(settings).toContain('阈值设置：主开关关闭时整节不渲染；草稿状态在父组件里，重新开启后原样恢复')
+  })
+
+  test('Given 卡顶 When 检查 Then 两个无标签分段控件并排，不再有「取值来源」标签', () => {
+    const topRow = sliceBetween(settings, '{/* 顶行', '{isCustom ? (')
+
+    expect(topRow).not.toContain('label="取值来源"')
+    // 整个页面的分段控件都不再传 label（「取值来源」这个词只留在代码注释里）。
+    expect(settings).not.toContain('label="取值来源"')
+    expect((settings.match(/<SettingsSegmentedControl/g) ?? []).length).toBe(2)
+    // 两个分段控件都不再传 label（只有行尾问号自带 aria-label）：按钮文案已经自解释。
+    const controlTags = topRow.split('<SettingsSegmentedControl').slice(1)
+    expect(controlTags.length).toBe(2)
+    for (const tag of controlTags) {
+      expect(tag.slice(0, tag.indexOf('/>'))).not.toContain('label')
+    }
+    expect(topRow).toContain('options={SOURCE_OPTIONS}')
+    expect(topRow).toContain('options={CUSTOM_MODE_OPTIONS}')
+    expect(topRow).toContain('flex items-center gap-2')
+    // 行尾一个问题号，内容沿用原算法说明（选段旋钮 + 模块加载期求值）。
+    expect(topRow).toContain('ml-auto')
+    expect(topRow).toContain('content={ORIGIN_COLUMN_HELP}')
+    expect(topRow.indexOf('ml-auto')).toBeGreaterThan(topRow.indexOf('options={CUSTOM_MODE_OPTIONS}'))
+    expect(settings).toContain('单段最小 1000 / 单段最大 32000 / 指针化 32000 / 保留轮数 3 / 冷却窗 0ms')
+    expect(settings).toContain('运行期再改无效')
+  })
+
+  test('Given 原算法生效 When 检查 Then 比例/绝对值分段不渲染，切来源仍只发 lineMode', () => {
+    const topRow = sliceBetween(settings, '{/* 顶行', '{isCustom ? (')
+    const modeGuard = topRow.slice(
+      topRow.indexOf('{isCustom && ('),
+      topRow.indexOf('options={CUSTOM_MODE_OPTIONS}'),
+    )
+
+    expect(modeGuard).toContain('<SettingsSegmentedControl')
+    expect(modeGuard).toContain('value={customMode}')
+    expect(modeGuard).not.toContain('options={SOURCE_OPTIONS}')
+
     // origin 只发 lineMode，其它字段由主进程合并磁盘现值。
     expect(settings).toContain('window.electronAPI.updateSettings({ liveCompact: { lineMode: nextMode } })')
     expect(settings).toContain("next === 'origin' ? 'origin' : customMode")
@@ -126,57 +217,92 @@ describe('Live Compact 设置页：阈值设置', () => {
     expect(settings).not.toContain('react-radio-group')
   })
 
-  test('Given 左列原算法 When 检查 Then 用模块行数据只读渲染，没有任何输入控件', () => {
-    const originColumn = settings.slice(
-      settings.indexOf('LIVE_COMPACT_ORIGIN_LINE_ROWS.map'),
-      settings.indexOf('{/* 右列：自定义'),
-    )
-
-    expect(originColumn).toContain('describeOriginRow(row)')
-    expect(originColumn).toContain('formatTokenCount(row.value)')
-    expect(originColumn).toContain('ReadonlyValue')
-    expect(originColumn).not.toContain('<SettingsInput')
-    expect(originColumn).not.toContain('<Input')
-    // 只读列不绑定任何变更回调。
-    expect(originColumn).not.toContain('onChange')
-    // 列头问题号必须讲清选段旋钮与“加载期求值、运行期改无效”。
-    expect(settings).toContain('单段最小 1000 / 单段最大 32000 / 指针化 32000 / 保留轮数 3 / 冷却窗 0ms')
-    expect(settings).toContain('运行期再改无效')
+  test('Given 两列列头 When 检查 Then 不再重复渲染 原算法/自定义 两个列头 span', () => {
+    expect(settings).not.toContain('text-sm font-medium text-foreground">原算法')
+    expect(settings).not.toContain('text-sm font-medium text-foreground">自定义')
+    // 两个分段控件都在卡顶同一行，列头里不再内嵌任何分段控件。
+    expect(settings.indexOf('options={SOURCE_OPTIONS}'))
+      .toBeLessThan(settings.indexOf('options={CUSTOM_MODE_OPTIONS}'))
   })
 
-  test('Given 两列生效关系 When 检查 Then 生效列正常、非生效列整体 dim', () => {
-    expect(settings).toContain("isCustom && 'opacity-55'")
-    expect(settings).toContain("!isCustom && 'opacity-55'")
+  test('Given 自定义主体 When 检查 Then 单一 grid 里四条线逐行成对渲染（同一 fragment 左右 cell）', () => {
+    const customBody = sliceBetween(settings, '/* 主体（自定义）', '/* 主体（原算法）')
+
+    expect(customBody).toContain('grid border-t border-border/25 md:grid-cols-2')
+    expect(customBody).toContain('THRESHOLD_LINES.map((line, index) =>')
+
+    const row = sliceBetween(customBody, '<React.Fragment key={line.key}>', '</React.Fragment>')
+    // 同一 fragment 内左 cell（Origin 只读）与右 cell（可编辑）成对出现。
+    expect(row).toContain('describeOriginRow(line.origin)')
+    expect(row).toContain('LINE_HELP[line.key][customMode]')
+    // 两列同 padding、同高控件（h-8）、宽度相等：行与行天然对齐。
+    expect((row.match(/px-4 py-2/g) ?? []).length).toBe(2)
+    expect(row).toContain('ReadonlyValue')
+    expect((row.match(/className="h-8 /g) ?? []).length).toBe(2)
+    // 右列与左列之间的竖分隔。
+    expect(row).toContain('md:border-l')
+    // 自定义生效时左列整体 dim。
+    expect(row).toContain('opacity-55')
+    // 窄屏堆叠时右 cell 仍有上分隔线，桌面端去掉避免与 grid 顶线重叠。
+    expect(row).toContain('index === 0 && \'md:border-t-0\'')
+  })
+
+  test('Given 四条线之后 When 检查 Then 仅右列追加参考窗口行与保存行，左列留空占位', () => {
+    const customBody = sliceBetween(settings, '/* 主体（自定义）', '/* 主体（原算法）')
+    const tail = customBody.slice(customBody.indexOf('{/* 参考上下文长度'))
+
+    // 左列空占位保持 grid 行结构（窄屏隐藏，避免多出空行）。
+    expect(tail).toContain('aria-hidden="true"')
+    expect(tail).toContain('hidden border-t border-border/25 md:block')
+    expect((tail.match(/aria-hidden="true"/g) ?? []).length).toBe(2)
+
+    expect(tail).toContain('参考上下文长度')
+    expect(tail).toContain('PREVIEW_WINDOW_DEFAULT')
+    expect(tail).toContain('previewWindowDraft')
+    expect(tail).toContain('previewWindow.error')
+    // 校验仍复用模型的纯函数。
+    expect(settings).toContain('parsePreviewWindow(previewWindowDraft)')
+    expect(settings).toContain('不是保存值')
+
+    // 底行：文案在按钮左侧，按钮靠右。
+    const saveRow = tail.slice(tail.indexOf('justify-end'))
+    expect(saveRow).toContain('保存后下一条消息生效')
+    expect(saveRow.indexOf('保存后下一条消息生效')).toBeLessThan(saveRow.indexOf('saveLines()'))
+    expect(saveRow).toContain('恢复默认值')
   })
 
   test('Given 右列自定义 When 检查 Then 比例/绝对值输入并排，非生效框 readOnly+disabled 且显示换算预览', () => {
-    const customColumn = settings.slice(
-      settings.indexOf('{/* 右列：自定义'),
-      settings.indexOf('{/* 算法更新'),
-    )
+    const customBody = sliceBetween(settings, '/* 主体（自定义）', '/* 主体（原算法）')
 
-    expect(customColumn).toContain('ratioActive ? ratioDraft[key] : conversionText(key)')
-    expect(customColumn).toContain('ratioActive ? conversionText(key) : absoluteDraft[key]')
-    expect(customColumn).toContain('readOnly={!ratioActive}')
-    expect(customColumn).toContain('readOnly={ratioActive}')
-    expect(customColumn).toContain('disabled={loading || !isCustom || !ratioActive}')
-    expect(customColumn).toContain('disabled={loading || !isCustom || ratioActive}')
+    expect(customBody).toContain('ratioActive ? ratioDraft[line.key] : conversionText(line.key)')
+    expect(customBody).toContain('ratioActive ? conversionText(line.key) : absoluteDraft[line.key]')
+    expect(customBody).toContain('readOnly={!ratioActive}')
+    expect(customBody).toContain('readOnly={ratioActive}')
+    expect(customBody).toContain('disabled={loading || !ratioActive}')
+    expect(customBody).toContain('disabled={loading || ratioActive}')
     // 切换比例/绝对值分段时，可编辑那一列读回各自草稿（不是把另一列的值搬过来）。
     expect(settings).toContain("customMode === 'ratio' ? ratioDraft : absoluteDraft")
+    expect(settings).toContain('calculateConversionPreview')
   })
 
-  test('Given 换算预览 When 检查 Then 参考上下文长度复用缺省窗口，且明确灰框不是保存值', () => {
-    expect(settings).toContain('参考上下文长度')
-    expect(settings).toContain('PREVIEW_WINDOW_DEFAULT')
-    expect(settings).toContain('calculateConversionPreview')
-    expect(settings).toContain('不是保存值')
-    expect(settings).toContain('parsePreviewWindow')
+  test('Given 原算法生效 When 检查 Then 改单列全宽只读行，不渲染 grid/输入框/保存行', () => {
+    const originBody = sliceBetween(settings, '/* 主体（原算法）', '</SettingsCard>')
+
+    expect(originBody).toContain('divide-y divide-border/25 border-t border-border/25')
+    expect(originBody).toContain('describeOriginRow(line.origin)')
+    expect(originBody).toContain('formatTokenCount(line.origin.value)')
+    expect(originBody).toContain('ReadonlyValue')
+    expect(originBody).not.toContain('<Input')
+    expect(originBody).not.toContain('onChange')
+    expect(originBody).not.toContain('md:grid-cols-2')
+    expect(originBody).not.toContain('opacity-55')
+    expect(originBody).not.toContain('保存后下一条消息生效')
   })
 
   test('Given 保存与恢复默认 When 检查 Then 非法禁用、Enter 仍保存、恢复只重置生效组草稿', () => {
-    expect(settings).toContain('disabled={loading || lineSaving || !isCustom || !validation.ok}')
+    expect(settings).toContain('disabled={loading || lineSaving || !validation.ok}')
     expect(settings).toContain('恢复默认值')
-    expect(settings).toContain('disabled={loading || lineSaving || !isCustom}')
+    expect(settings).toContain('disabled={loading || lineSaving}')
     expect(settings).toContain("event.key === 'Enter'")
     expect(settings).toContain('void saveLines()')
     expect(settings).toContain('ratiosToDraft(RENDERER_DEFAULT_LINE_RATIOS)')
@@ -215,6 +341,7 @@ describe('Live Compact 设置页：阈值设置', () => {
   })
 
   test('Given 四条线与保护 When 检查生效时机文案 Then 是“保存后下一条消息生效”而非“需要新建会话”', () => {
+    expect(settings).toContain('保存后下一条消息生效')
     expect(settings).toContain('下一条消息生效')
     expect(settings).toContain('当前进行中的那一轮不受影响')
     expect(settings).not.toContain('需要新建会话')
@@ -270,5 +397,25 @@ describe('Live Compact 设置页：算法更新与问号提示原语', () => {
 
     const primitives = readAppFile('src/renderer/components/settings/primitives/index.ts')
     expect(primitives).toContain("export * from './SettingsHelpTip'")
+  })
+})
+
+describe('SettingsSegmentedControl：标签可选', () => {
+  const segmented = readAppFile(SEGMENTED_CONTROL)
+
+  test('Given 分段控件 When 检查 props Then label 可选，缺省时不渲染标签行', () => {
+    expect(segmented).toContain('label?: React.ReactNode')
+    expect(segmented).toContain('{(label || description) && (')
+    expect(segmented).toContain('{label && <div className={LABEL_CLASS}>{label}</div>}')
+    // 按钮组本身保持不变：既有调用方的 label/description 仍会渲染。
+    expect(segmented).toContain('value === option.value')
+    expect(segmented).toContain('disabled={disabled}')
+  })
+
+  test('Given 既有调用方 When 检查 Then 仍显式传 label，行为不受可选化影响', () => {
+    const appearance = readAppFile('src/renderer/components/settings/AppearanceSettings.tsx')
+
+    expect(appearance).toContain('label="主题模式"')
+    expect(appearance).toContain('label="Markdown 字号"')
   })
 })

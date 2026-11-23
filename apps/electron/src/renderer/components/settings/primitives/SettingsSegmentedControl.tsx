@@ -3,6 +3,7 @@
  *
  * 用于少量选项的快速切换（如外观主题选择）。
  * 水平排列的按钮组，高亮当前选中项。
+ * 标签可选：不传 `label` 时只渲染按钮组，适合选项文案本身已自解释的场景。
  */
 
 import * as React from 'react'
@@ -16,8 +17,13 @@ interface SegmentOption {
 }
 
 interface SettingsSegmentedControlProps {
-  /** 标签文本；需要挂问号提示时可传 ReactNode */
-  label: React.ReactNode
+  /**
+   * 标签文本；需要挂问号提示时可传 ReactNode。
+   *
+   * 省略时不渲染标签行：分段按钮的文案本身已经足够自解释时（例如并排的
+   * 「原算法 / 自定义」「比例 / 绝对值」），再加一层 label 只会重复说明。
+   */
+  label?: React.ReactNode
   /** 描述文本（可选） */
   description?: string
   /** 当前值 */
@@ -40,12 +46,14 @@ export function SettingsSegmentedControl({
 }: SettingsSegmentedControlProps): React.ReactElement {
   return (
     <div className="px-4 py-3 space-y-2">
-      <div>
-        <div className={LABEL_CLASS}>{label}</div>
-        {description && (
-          <div className={cn(DESCRIPTION_CLASS, 'mt-0.5')}>{description}</div>
-        )}
-      </div>
+      {(label || description) && (
+        <div>
+          {label && <div className={LABEL_CLASS}>{label}</div>}
+          {description && (
+            <div className={cn(DESCRIPTION_CLASS, 'mt-0.5')}>{description}</div>
+          )}
+        </div>
+      )}
       <div className="inline-flex rounded-lg bg-muted p-1 gap-0.5">
         {options.map((option) => (
           <button

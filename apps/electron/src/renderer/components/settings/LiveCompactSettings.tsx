@@ -2,18 +2,23 @@
  * LiveCompactSettings - Live Compact 设置页
  *
  * 三段式布局（顺序即页面顺序）：
- * 1. 开关行：一张卡里并排两个主开关——全局主闸 `liveCompact.enabled`
+ * 1. 开关行：没有卡片外壳，纯 flex 行——「总开关」`liveCompact.enabled`
  *    （关闭即硬停所有会话；开启后会话默认启用，可在会话工具栏单独关）与
- *    结束轮保护 `liveCompact.protectCurrentTurn`（缺省开，关闭回到上游行为）。
- * 2. 阈值设置：卡顶用分段控件选「原算法（上游默认）/ 自定义」。
- *    左列是只读的上游 Origin 四线；右列可编辑四条线，比例与绝对值两组输入并排，
- *    非生效一侧灰显显示按「参考上下文长度」实时换算的预览。保存是显式按钮（Enter 同效）。
+ *    「结束轮保护」`liveCompact.protectCurrentTurn`（缺省开，关闭回到上游行为）。
+ *    主开关关闭时保护开关无意义，直接不渲染。
+ * 2. 阈值设置（主开关关闭时整节不渲染）：卡顶是两个无标签分段控件——
+ *    「原算法（上游默认）/ 自定义」与「比例 / 绝对值」（原算法生效时后者不渲染）。
+ *    自定义生效时单一 `md:grid-cols-2` 网格逐行成对渲染：左 cell 是上游 Origin 只读值，
+ *    右 cell 可编辑四条线，比例与绝对值两组输入并排，非生效一侧灰显显示按「参考上下文长度」
+ *    实时换算的预览；保存是显式按钮（Enter 同效）。原算法生效时改单列全宽只读行。
  * 3. 算法更新：内置 / 当前生效 / 上游最新三行 + 检查、同步（三重闸）、回退。
  *    下载、解包、测试闸全部在主进程完成，本页只展示结论。
  *
  * 说明文字一律收进问号 tooltip（`SettingsHelpTip`），页面本身只留标题与控件。
  * 状态管理刻意保持页面内瞬态（与 ComputerUseSettings 一致）：版本状态与四条线草稿都不进
  * 全局 atom，离开设置页后重新挂载再拉一次即可，避免过期状态在其它视图里被误读。
+ * 草稿一律留在本组件的 `useState` 里：阈值设置整节按主开关条件渲染会卸载子树，
+ * 但草稿不在子树内，重新开启后仍是上次的取值来源、档位与尚未保存的输入。
  * 唯一的例外是主闸：会话工具栏按钮读 `liveCompactGlobalEnabledAtom`，保存成功后必须同步。
  */
 
@@ -93,13 +98,9 @@ const MASTER_HELP =
 const PROTECT_HELP =
   '缺省开启。刚结束的这一轮（末条消息与工具结果）与投影尾部永不被切；关闭则回到上游行为：当前轮也可能被切成卡片，历史上曾在长输出收尾处静默截断任务。保存后下一条消息生效。'
 
-/** 原算法列头问号：选段旋钮 + 求值时机。 */
+/** 原算法问号：选段旋钮 + 求值时机。 */
 const ORIGIN_COLUMN_HELP =
   '上游 dsh-live-compact 的原值：绝对 token 数，不随模型窗口变化。选段旋钮（单段最小 1000 / 单段最大 32000 / 指针化 32000 / 保留轮数 3 / 冷却窗 0ms）在上游模块加载期求值成常量，运行期再改无效，所以这一列只读。'
-
-/** 自定义取值方式问号。 */
-const CUSTOM_MODE_HELP =
-  '比例：按当前模型上下文窗口换算，换模型不必重配；绝对值：直接填 token 数，不随窗口变化。'
 
 /** 参考上下文长度问号：灰框预览的语义边界。 */
 const PREVIEW_WINDOW_HELP =
@@ -160,7 +161,7 @@ function describeOriginRow(row: LiveCompactOriginRow): string {
   return `${row.note}；${configurability}。`
 }
 
-/** 只读值框：与输入框同高，避免两列行高错位。 */
+/** 只读值框：与输入框同高（h-8），保证同一行左右两列基线对齐。 */
 function ReadonlyValue({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
     <span className="inline-flex h-8 w-32 shrink-0 items-center justify-end rounded-md border border-border/60 bg-muted/40 px-2 text-sm tabular-nums text-muted-foreground">
@@ -169,8 +170,25 @@ function ReadonlyValue({ children }: { children: React.ReactNode }): React.React
   )
 }
 
-/** 开关行的一格：标签 + 问号 + 右侧 Switch。 */
-function ToggleCell({
+/**
+ * 阈值网格的一行：线名 + 上游 Origin 只读行。
+ *
+ * 两份常量（LIVE_COMPACT_LINE_KEYS 与 LIVE_COMPACT_ORIGIN_LINE_ROWS）在模型里同序同键；
+ * 万一上游行缺失就跳过该行，不渲染空值行（漂移由 live-compact-line-model.test.ts 兜住）。
+ */
+interface ThresholdLine {
+  key: LiveCompactLineKey
+  label: string
+  origin: LiveCompactOriginRow
+}
+
+const THRESHOLD_LINES: readonly ThresholdLine[] = LIVE_COMPACT_LINE_KEYS.flatMap((key) => {
+  const origin = LIVE_COMPACT_ORIGIN_LINE_ROWS.find((row) => row.key === key)
+  return origin === undefined ? [] : [{ key, label: LIVE_COMPACT_LINE_LABELS[key], origin }]
+})
+
+/** 开关行的一格：标签 + 问号 + 开关，无卡片外壳（水平内边距由页面内容容器提供）。 */
+function ToggleInline({
   label,
   help,
   helpLabel,
@@ -186,11 +204,9 @@ function ToggleCell({
   onCheckedChange: (checked: boolean) => void
 }): React.ReactElement {
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <SettingsHelpTip content={help} label={helpLabel} />
-      </div>
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <SettingsHelpTip content={help} label={helpLabel} />
       <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
     </div>
   )
@@ -502,18 +518,18 @@ export function LiveCompactSettings(): React.ReactElement {
         <SettingsHelpTip content={HEADER_HELP} label="Live Compact 工作原理" />
       </div>
 
-      {/* 开关行：主闸与结束轮保护并排，窄屏堆叠 */}
-      <SettingsCard divided={false}>
-        <div className="grid divide-y divide-border/25 md:grid-cols-2 md:divide-x md:divide-y-0">
-          <ToggleCell
-            label="Live Compact"
-            help={MASTER_HELP}
-            helpLabel="全局主闸说明"
-            checked={settings.enabled}
-            disabled={saving || loading}
-            onCheckedChange={(checked) => void updateEnabled(checked)}
-          />
-          <ToggleCell
+      {/* 开关行：无卡片外壳，与页面内容左对齐；主开关关闭时保护开关无意义，整格不渲染 */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+        <ToggleInline
+          label="总开关"
+          help={MASTER_HELP}
+          helpLabel="全局主闸说明"
+          checked={settings.enabled}
+          disabled={saving || loading}
+          onCheckedChange={(checked) => void updateEnabled(checked)}
+        />
+        {settings.enabled && (
+          <ToggleInline
             label="结束轮保护"
             help={PROTECT_HELP}
             helpLabel="结束轮保护说明"
@@ -521,106 +537,111 @@ export function LiveCompactSettings(): React.ReactElement {
             disabled={protectSaving || loading}
             onCheckedChange={(checked) => void updateProtectCurrentTurn(checked)}
           />
-        </div>
-      </SettingsCard>
+        )}
+      </div>
 
-      {/* 阈值设置：左列上游 Origin 只读，右列自定义可编辑 */}
-      <SettingsSection title="阈值设置">
-        <SettingsCard>
-          <SettingsSegmentedControl
-            label="取值来源"
-            value={source}
-            onValueChange={(value) => void updateLineSource(value)}
-            options={SOURCE_OPTIONS}
-            disabled={loading || lineSaving}
-          />
-
-          <div className="grid divide-y divide-border/25 md:grid-cols-2 md:divide-x md:divide-y-0">
-            {/* 左列：原算法（上游 Origin），永远只读 */}
-            <div className={cn('min-w-0 transition-opacity', isCustom && 'opacity-55')}>
-              <div className="flex items-center gap-1.5 px-4 pb-2 pt-3">
-                <span className="text-sm font-medium text-foreground">原算法</span>
+      {/* 阈值设置：主开关关闭时整节不渲染；草稿状态在父组件里，重新开启后原样恢复 */}
+      {settings.enabled && (
+        <SettingsSection title="阈值设置">
+          <SettingsCard divided={false}>
+            {/* 顶行：两个无标签分段控件并排（文案自解释），行尾一个问题号讲原算法语义 */}
+            <div className="flex items-center gap-2">
+              <SettingsSegmentedControl
+                value={source}
+                onValueChange={(value) => void updateLineSource(value)}
+                options={SOURCE_OPTIONS}
+                disabled={loading || lineSaving}
+              />
+              {isCustom && (
+                <SettingsSegmentedControl
+                  value={customMode}
+                  onValueChange={(value) => setCustomMode(value === 'absolute' ? 'absolute' : 'ratio')}
+                  options={CUSTOM_MODE_OPTIONS}
+                  disabled={loading}
+                />
+              )}
+              <span className="ml-auto pr-4">
                 <SettingsHelpTip content={ORIGIN_COLUMN_HELP} label="原算法取值说明" />
-              </div>
-              <div className="divide-y divide-border/25 border-t border-border/25">
-                {LIVE_COMPACT_ORIGIN_LINE_ROWS.map((row) => (
-                  <div key={row.key} className="flex items-center justify-between gap-3 px-4 py-2">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate text-sm text-foreground">{row.label}</span>
-                      <SettingsHelpTip content={describeOriginRow(row)} label={`${row.label}原算法说明`} />
-                    </div>
-                    <ReadonlyValue>
-                      {formatTokenCount(row.value)} {row.unit}
-                    </ReadonlyValue>
-                  </div>
-                ))}
-              </div>
+              </span>
             </div>
 
-            {/* 右列：自定义（比例 / 绝对值），非生效一侧灰框显示换算预览 */}
-            <div className={cn('flex min-w-0 flex-col transition-opacity', !isCustom && 'opacity-55')}>
-              <SettingsSegmentedControl
-                label={(
-                  <span className="inline-flex items-center gap-1.5">
-                    自定义
-                    <SettingsHelpTip content={CUSTOM_MODE_HELP} label="自定义取值说明" />
-                  </span>
-                )}
-                value={customMode}
-                onValueChange={(value) => setCustomMode(value === 'absolute' ? 'absolute' : 'ratio')}
-                options={CUSTOM_MODE_OPTIONS}
-                disabled={loading || !isCustom}
-              />
-
-              <div className="divide-y divide-border/25 border-t border-border/25">
-                {LIVE_COMPACT_LINE_KEYS.map((key) => {
-                  const error = validation.errors[key]
+            {isCustom ? (
+              /* 主体（自定义）：单一 grid，四条线逐行成对；窄屏堆叠成单列 */
+              <div className="grid border-t border-border/25 md:grid-cols-2">
+                {THRESHOLD_LINES.map((line, index) => {
+                  const error = validation.errors[line.key]
                   return (
-                    <div key={key} className="px-4 py-2">
-                      <div className="flex items-center justify-between gap-3">
+                    <React.Fragment key={line.key}>
+                      {/* 左 cell：上游 Origin 只读值，自定义生效时整列 dim 作参照 */}
+                      <div
+                        className={cn(
+                          'flex items-center justify-between gap-3 px-4 py-2 opacity-55 transition-opacity',
+                          index > 0 && 'border-t border-border/25',
+                        )}
+                      >
                         <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate text-sm text-foreground">
-                            {LIVE_COMPACT_LINE_LABELS[key]}
-                          </span>
+                          <span className="truncate text-sm text-foreground">{line.label}</span>
                           <SettingsHelpTip
-                            content={LINE_HELP[key][customMode]}
-                            label={`${LIVE_COMPACT_LINE_LABELS[key]}自定义说明`}
+                            content={describeOriginRow(line.origin)}
+                            label={`${line.label}原算法说明`}
                           />
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Input
-                            aria-label={`${LIVE_COMPACT_LINE_LABELS[key]}比例（%）`}
-                            inputMode="decimal"
-                            className="h-8 w-20 px-2 text-right text-sm tabular-nums"
-                            value={ratioActive ? ratioDraft[key] : conversionText(key)}
-                            onChange={(event) => setDraft('ratio', key, event.target.value)}
-                            onKeyDown={handleLineKeyDown}
-                            placeholder="50"
-                            readOnly={!ratioActive}
-                            disabled={loading || !isCustom || !ratioActive}
-                            title="比例（%）"
-                          />
-                          <Input
-                            aria-label={`${LIVE_COMPACT_LINE_LABELS[key]}绝对值（token）`}
-                            inputMode="numeric"
-                            className="h-8 w-24 px-2 text-right text-sm tabular-nums"
-                            value={ratioActive ? conversionText(key) : absoluteDraft[key]}
-                            onChange={(event) => setDraft('absolute', key, event.target.value)}
-                            onKeyDown={handleLineKeyDown}
-                            placeholder="20000"
-                            readOnly={ratioActive}
-                            disabled={loading || !isCustom || ratioActive}
-                            title="绝对值（token）"
-                          />
-                        </div>
+                        <ReadonlyValue>
+                          {formatTokenCount(line.origin.value)} {line.origin.unit}
+                        </ReadonlyValue>
                       </div>
-                      {error && <p className="mt-1 text-right text-xs text-destructive">{error}</p>}
-                    </div>
+
+                      {/* 右 cell：可编辑列，比例 / 绝对值两个输入并排，非生效侧灰框换算预览 */}
+                      <div
+                        className={cn(
+                          'flex flex-col justify-center gap-1 border-t border-border/25 px-4 py-2 md:border-l',
+                          index === 0 && 'md:border-t-0',
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm text-foreground">{line.label}</span>
+                            <SettingsHelpTip
+                              content={LINE_HELP[line.key][customMode]}
+                              label={`${line.label}自定义说明`}
+                            />
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Input
+                              aria-label={`${line.label}比例（%）`}
+                              inputMode="decimal"
+                              className="h-8 w-20 px-2 text-right text-sm tabular-nums"
+                              value={ratioActive ? ratioDraft[line.key] : conversionText(line.key)}
+                              onChange={(event) => setDraft('ratio', line.key, event.target.value)}
+                              onKeyDown={handleLineKeyDown}
+                              placeholder="50"
+                              readOnly={!ratioActive}
+                              disabled={loading || !ratioActive}
+                              title="比例（%）"
+                            />
+                            <Input
+                              aria-label={`${line.label}绝对值（token）`}
+                              inputMode="numeric"
+                              className="h-8 w-24 px-2 text-right text-sm tabular-nums"
+                              value={ratioActive ? conversionText(line.key) : absoluteDraft[line.key]}
+                              onChange={(event) => setDraft('absolute', line.key, event.target.value)}
+                              onKeyDown={handleLineKeyDown}
+                              placeholder="20000"
+                              readOnly={ratioActive}
+                              disabled={loading || ratioActive}
+                              title="绝对值（token）"
+                            />
+                          </div>
+                        </div>
+                        {error && <p className="text-right text-xs text-destructive">{error}</p>}
+                      </div>
+                    </React.Fragment>
                   )
                 })}
 
-                {/* 参考上下文长度：只服务非生效列的灰框预览，不参与保存 */}
-                <div className="px-4 py-2">
+                {/* 参考上下文长度：只服务灰框换算预览，不参与保存；左列留空占位保持行结构 */}
+                <div aria-hidden="true" className="hidden border-t border-border/25 md:block" />
+                <div className="border-t border-border/25 px-4 py-2 md:border-l">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <span className="truncate text-sm text-foreground">参考上下文长度</span>
@@ -633,7 +654,7 @@ export function LiveCompactSettings(): React.ReactElement {
                       value={previewWindowDraft}
                       onChange={(event) => setPreviewWindowDraft(event.target.value)}
                       placeholder={String(PREVIEW_WINDOW_DEFAULT)}
-                      disabled={loading || !isCustom}
+                      disabled={loading}
                     />
                   </div>
                   {previewWindow.error && (
@@ -641,11 +662,14 @@ export function LiveCompactSettings(): React.ReactElement {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+                {/* 底行：文案在按钮左侧，按钮靠右 */}
+                <div aria-hidden="true" className="hidden border-t border-border/25 md:block" />
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/25 px-4 py-3 md:border-l">
+                  <span className="text-xs text-muted-foreground">保存后下一条消息生效</span>
                   <Button
                     type="button"
                     size="sm"
-                    disabled={loading || lineSaving || !isCustom || !validation.ok}
+                    disabled={loading || lineSaving || !validation.ok}
                     onClick={() => void saveLines()}
                   >
                     {lineSaving
@@ -656,23 +680,36 @@ export function LiveCompactSettings(): React.ReactElement {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={loading || lineSaving || !isCustom}
+                    disabled={loading || lineSaving}
                     onClick={resetLineDrafts}
                   >
                     <RotateCcw />
                     恢复默认值
                   </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {isCustom
-                      ? '保存后下一条消息生效；比例换算与主进程一致：Math.max(1, Math.round(窗口 × 占比))。'
-                      : '原算法生效，切到「自定义」后可编辑。'}
-                  </span>
                 </div>
               </div>
-            </div>
-          </div>
-        </SettingsCard>
-      </SettingsSection>
+            ) : (
+              /* 主体（原算法）：单列全宽只读行，不 dim、不渲染自定义列 */
+              <div className="divide-y divide-border/25 border-t border-border/25">
+                {THRESHOLD_LINES.map((line) => (
+                  <div key={line.key} className="flex items-center justify-between gap-3 px-4 py-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm text-foreground">{line.label}</span>
+                      <SettingsHelpTip
+                        content={describeOriginRow(line.origin)}
+                        label={`${line.label}原算法说明`}
+                      />
+                    </div>
+                    <ReadonlyValue>
+                      {formatTokenCount(line.origin.value)} {line.origin.unit}
+                    </ReadonlyValue>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SettingsCard>
+        </SettingsSection>
+      )}
 
       {/* 算法更新：内置 / 当前生效 / 上游最新 + 检查、同步、回退 */}
       <SettingsSection

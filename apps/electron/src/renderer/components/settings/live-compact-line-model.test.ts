@@ -22,6 +22,10 @@ import {
   LIVE_COMPACT_ORIGIN_KNOB_ROWS,
   LIVE_COMPACT_ORIGIN_LINE_ROWS,
   LIVE_COMPACT_ORIGIN_ROWS,
+  LINE_RATIO_MAX,
+  LINE_RATIO_MIN,
+  LINE_TOKENS_MAX,
+  LINE_TOKENS_MIN,
   parseLineNumber,
   parsePreviewWindow,
   PREVIEW_WINDOW_COMPARISON,
@@ -50,6 +54,7 @@ function readMainConstant(source: string, name: string): number {
 }
 
 const thresholdSource = readAppFile('src/main/lib/adapters/live-compact-thresholds.ts')
+const settingsServiceSource = readAppFile('src/main/lib/settings-service.ts')
 const modelSource = readAppFile('src/renderer/components/settings/live-compact-line-model.ts')
 
 function draftOf(parts: Partial<LiveCompactLineDraft>): LiveCompactLineDraft {
@@ -112,6 +117,17 @@ describe('Live Compact 四条线：缺省值与主进程漂移守卫', () => {
     expect(byKey.get('keepRounds')).toBe(readMainConstant(thresholdSource, 'UPSTREAM_KEEP_ROUNDS'))
     expect(byKey.get('cooldown')).toBe(readMainConstant(thresholdSource, 'UPSTREAM_COOLDOWN_MS'))
     expect(LIVE_COMPACT_ORIGIN_KNOB_ROWS).toHaveLength(5)
+  })
+
+  test('Given 渲染层 clamp 边界 When 与主进程 settings-service 常量比对 Then 四个边界逐一相等', () => {
+    // 渲染层校验区间是主进程 clamp 区间的副本：主进程放宽/收紧而页面没跟上，
+    // 就会出现“页面接受、落盘被静默夹取”，因此四个边界都必须钉住。
+    expect(LINE_RATIO_MIN).toBe(readMainConstant(settingsServiceSource, 'LINE_RATIO_MIN'))
+    expect(LINE_RATIO_MAX).toBe(readMainConstant(settingsServiceSource, 'LINE_RATIO_MAX'))
+    expect(LINE_TOKENS_MIN).toBe(readMainConstant(settingsServiceSource, 'LINE_TOKENS_MIN'))
+    expect(LINE_TOKENS_MAX).toBe(readMainConstant(settingsServiceSource, 'LINE_TOKENS_MAX'))
+    expect(LINE_RATIO_MIN).toBeLessThan(LINE_RATIO_MAX)
+    expect(LINE_TOKENS_MIN).toBeLessThan(LINE_TOKENS_MAX)
   })
 
   test('Given Origin 每行 When 检查 Then 环境变量键都是主进程真实读取的 env 名', () => {

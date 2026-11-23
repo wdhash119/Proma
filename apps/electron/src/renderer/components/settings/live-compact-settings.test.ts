@@ -79,7 +79,9 @@ describe('Live Compact 设置页：当前轮保护与四条线', () => {
 
   test('Given 当前轮保护开关 When 检查 Then 独立开关经 settings 通道落盘且声明保护语义与缺省开', () => {
     expect(settings).toContain('window.electronAPI.updateSettings({')
-    expect(settings).toContain('liveCompact: { enabled: settings.enabled, protectCurrentTurn }')
+    // 只发保护开关本身：省略 enabled 由主进程保留磁盘现值，避免覆盖其它窗口的主闸。
+    expect(settings).toContain('liveCompact: { protectCurrentTurn },')
+    expect(settings).not.toContain('liveCompact: { enabled: settings.enabled, protectCurrentTurn }')
     expect(settings).toContain('保护刚结束的这一轮')
     expect(settings).toContain('刚结束的这一轮')
     expect(settings).toContain('投影尾部永不被压缩')
@@ -100,7 +102,21 @@ describe('Live Compact 设置页：当前轮保护与四条线', () => {
     expect(settings).toContain('保存四条线')
     // 顺序非法时保存按钮必须被禁用，而不是交给主进程静默回落。
     expect(settings).toContain('disabled={loading || lineSaving || !validation.ok}')
-    expect(settings).toContain('liveCompact: { enabled: settings.enabled, ...payload }')
+    // 保存只发四条线补丁：enabled 一律省略，由主进程合并磁盘现值。
+    expect(settings).toContain('liveCompact: payload,')
+    expect(settings).not.toContain('liveCompact: { enabled: settings.enabled, ...payload }')
+    // 保留在设置页里的主闸保存与补丁保存面（保护开关 / 四条线）不得再回传 enabled。
+    const protectSavingBody = settings.slice(
+      settings.indexOf('const updateProtectCurrentTurn'),
+      settings.indexOf('const currentDraft'),
+    )
+    const saveLinesBody = settings.slice(
+      settings.indexOf('const saveLines'),
+      settings.indexOf('/** 检查上游 HEAD'),
+    )
+    for (const body of [protectSavingBody, saveLinesBody]) {
+      expect(body).not.toContain('settings.enabled')
+    }
   })
 
   test('Given 比例模式 When 检查 Then 有试算输入与官方 0.8 对照，且明确不参与保存', () => {
@@ -127,6 +143,17 @@ describe('Live Compact 设置页：当前轮保护与四条线', () => {
     )
     expect(originSection).not.toContain('<SettingsInput')
     expect(originSection).not.toContain('<Button')
+  })
+
+  test('Given 四条线补丁 When 检查主进程合并 Then 省略字段由磁盘现值保留（含全局主闸）', () => {
+    const service = readAppFile('src/main/lib/settings-service.ts')
+
+    // 写入侧唯一入口：补丁叠在已落盘设置上再归一化，缺省字段不会被清零。
+    expect(service).toContain('normalizeLiveCompactSettings({ ...current, ...patch })')
+    expect(service).toContain('liveCompact: mergeLiveCompactSettings(current.liveCompact, updates.liveCompact)')
+    // 补丁类型必须真正允许省略字段，否则渲染层的部分更新写法会失去类型保护。
+    const types = readAppFile('src/types/settings.ts')
+    expect(types).toContain('export type LiveCompactSettingsPatch = Partial<LiveCompactSettings>')
   })
 
   test('Given 四条线与保护 When 检查生效时机文案 Then 是“保存后下一条消息生效”而非“需要新建会话”', () => {

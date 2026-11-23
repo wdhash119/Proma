@@ -154,7 +154,7 @@ import type {
   LiveCompactCheckResult,
   LiveCompactSyncResult,
 } from '@proma/shared'
-import type { UserProfile, AppSettings } from '../types'
+import type { UserProfile, AppSettings, AppSettingsPatch } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { browserController } from './lib/browser-controller'
 import { computerUsePreview } from './lib/computer-use-preview'
@@ -2130,7 +2130,7 @@ export function registerIpcHandlers(): void {
   // 更新应用设置
   ipcMain.handle(
     SETTINGS_IPC_CHANNELS.UPDATE,
-    async (event, updates: Partial<AppSettings>): Promise<AppSettings> => {
+    async (event, updates: AppSettingsPatch): Promise<AppSettings> => {
       const result = await updateSettings(updates)
 
       if (updates.feishuSessionMirror !== undefined) {
@@ -2167,7 +2167,7 @@ export function registerIpcHandlers(): void {
   // 同步更新应用设置（用于 beforeunload 场景）
   ipcMain.on(
     SETTINGS_IPC_CHANNELS.UPDATE_SYNC,
-    (event, updates: Partial<AppSettings>) => {
+    (event, updates: AppSettingsPatch) => {
       try {
         const result = updateSettings(updates)
         if (updates.feishuSessionMirror !== undefined) {

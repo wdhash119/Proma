@@ -11,9 +11,11 @@ import { writeJsonFileAtomic } from './safe-file'
 import { DEFAULT_THEME_MODE, normalizeDisabledUserSkillSlugs, normalizeProductivityToolsSettings } from '../../types'
 import type {
   AppSettings,
+  AppSettingsPatch,
   LiveCompactLineAbsolute,
   LiveCompactLineRatios,
   LiveCompactSettings,
+  LiveCompactSettingsPatch,
 } from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 import { normalizeVisionRelaySettings } from './vision-relay-policy'
@@ -107,6 +109,20 @@ export function normalizeLiveCompactSettings(input: unknown): LiveCompactSetting
     ratios: normalizeLiveCompactLineRatios(raw.ratios),
     absolute: normalizeLiveCompactLineAbsolute(raw.absolute),
   }
+}
+
+/**
+ * 把 Live Compact 补丁合并到已落盘设置上，再统一归一化。
+ *
+ * 补丁里省略的字段一律保留磁盘现值：渲染层的保存路径因此不必回传 `enabled`
+ * 等与本次改动无关的字段，也不会用页面加载时的旧值覆盖其它窗口刚改过的主闸。
+ */
+export function mergeLiveCompactSettings(
+  current: LiveCompactSettings | undefined,
+  patch: LiveCompactSettingsPatch | undefined,
+): LiveCompactSettings {
+  if (patch === undefined) return normalizeLiveCompactSettings(current)
+  return normalizeLiveCompactSettings({ ...current, ...patch })
 }
 
 function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {
@@ -215,7 +231,7 @@ export function getSettings(): AppSettings {
  *
  * 合并更新字段并写入文件。
  */
-export function updateSettings(updates: Partial<AppSettings>): AppSettings {
+export function updateSettings(updates: AppSettingsPatch): AppSettings {
   const current = getSettings()
   const updated: AppSettings = {
     ...current,
@@ -227,10 +243,8 @@ export function updateSettings(updates: Partial<AppSettings>): AppSettings {
     disabledUserSkillSlugs: updates.disabledUserSkillSlugs === undefined
       ? normalizeDisabledUserSkillSlugs(current.disabledUserSkillSlugs)
       : normalizeDisabledUserSkillSlugs(updates.disabledUserSkillSlugs),
-    // Live Compact 写入同样容错：非布尔 enabled 一律落回 false，避免“意外开启”。
-    liveCompact: updates.liveCompact === undefined
-      ? normalizeLiveCompactSettings(current.liveCompact)
-      : normalizeLiveCompactSettings({ ...current.liveCompact, ...updates.liveCompact }),
+    // Live Compact 写入同样容错：省略字段保留磁盘现值，非布尔 enabled 一律落回 false（避免“意外开启”）。
+    liveCompact: mergeLiveCompactSettings(current.liveCompact, updates.liveCompact),
     // 视觉助手：本次部分更新与已存路由合并后统一归一化，非法 mode 不可能经 IPC 落盘。
     visionRelay: updates.visionRelay === undefined
       ? normalizeVisionRelaySettings(current.visionRelay)

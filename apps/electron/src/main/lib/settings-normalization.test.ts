@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { normalizeLiveCompactSettings } from './settings-service'
+import { mergeLiveCompactSettings, normalizeLiveCompactSettings } from './settings-service'
 
 /**
  * Live Compact 设置的读取侧归一化边界。
@@ -167,5 +167,55 @@ describe('Live Compact 设置归一化：绝对值组', () => {
       enabled: true,
       absolute: { triggerTokens: 20_000, urgentTokens: 48_000, bigGateTokens: 650_000 },
     }).absolute).toEqual(DEFAULT_ABSOLUTE)
+  })
+})
+
+describe('Live Compact 设置写入：补丁合并保留磁盘现值', () => {
+  test('Given 磁盘主闸已开 When 补丁只改保护开关 Then enabled 保留磁盘 true 而不是页面旧值', () => {
+    // 另一窗口在页面加载后把主闸改成 true，本窗口只改保护开关：省略 enabled 不得把它覆盖回 false。
+    const onDisk = normalizeLiveCompactSettings({ enabled: true })
+    const merged = mergeLiveCompactSettings(onDisk, { protectCurrentTurn: false })
+
+    expect(merged.enabled).toBe(true)
+    expect(merged.protectCurrentTurn).toBe(false)
+  })
+
+  test('Given 磁盘四条线已保存 When 补丁只改四条线 Then 未提及字段（保护、主闸）原样保留', () => {
+    const onDisk = normalizeLiveCompactSettings({
+      enabled: true,
+      protectCurrentTurn: false,
+      lineMode: 'absolute',
+      absolute: {
+        triggerTokens: 20_000,
+        keepRoundTokens: 32_000,
+        urgentTokens: 48_000,
+        bigGateTokens: 650_000,
+      },
+    })
+    const merged = mergeLiveCompactSettings(onDisk, {
+      lineMode: 'ratio',
+      ratios: { trigger: 0.6, keepRound: 0.4, urgent: 0.8, bigGate: 0.95 },
+    })
+
+    expect(merged.enabled).toBe(true)
+    expect(merged.protectCurrentTurn).toBe(false)
+    expect(merged.lineMode).toBe('ratio')
+    expect(merged.ratios).toEqual({ trigger: 0.6, keepRound: 0.4, urgent: 0.8, bigGate: 0.95 })
+    // 未提到的绝对值组不能被补丁抹掉。
+    expect(merged.absolute).toEqual(onDisk.absolute)
+  })
+
+  test('Given 空补丁或无补丁 When 合并 Then 结果等于读取侧归一化现值', () => {
+    const onDisk = normalizeLiveCompactSettings({ enabled: true, lineMode: 'absolute' })
+
+    expect(mergeLiveCompactSettings(onDisk, {})).toEqual(onDisk)
+    expect(mergeLiveCompactSettings(onDisk, undefined)).toEqual(onDisk)
+    expect(mergeLiveCompactSettings(undefined, { protectCurrentTurn: false })).toEqual({
+      enabled: false,
+      protectCurrentTurn: false,
+      lineMode: 'ratio',
+      ratios: DEFAULT_RATIOS,
+      absolute: DEFAULT_ABSOLUTE,
+    })
   })
 })

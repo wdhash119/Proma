@@ -358,6 +358,25 @@ export interface LiveCompactSettings {
   absolute?: LiveCompactLineAbsolute
 }
 
+/**
+ * Live Compact 设置补丁。
+ *
+ * 用于 `updateSettings` 的部分更新：省略的字段保留主进程已落盘的现值，
+ * 因此保存某一块设置时不必回传页面加载时的其它字段（例如全局主闸 `enabled`），
+ * 也就不会用旧值覆盖其它窗口刚改过的开关。
+ */
+export type LiveCompactSettingsPatch = Partial<LiveCompactSettings>
+
+/**
+ * 应用设置补丁。
+ *
+ * 与 `Partial<AppSettings>` 的唯一区别是 `liveCompact` 收窄为补丁类型：
+ * 其余顶层字段本来就是省略即保留现值，而 Live Compact 之前要求整组回传。
+ */
+export type AppSettingsPatch = Omit<Partial<AppSettings>, 'liveCompact'> & {
+  liveCompact?: LiveCompactSettingsPatch
+}
+
 export const DEFAULT_PRODUCTIVITY_TOOLS_SETTINGS: ProductivityToolsSettings = {
   todosEnabled: true,
   calendarEnabled: true,

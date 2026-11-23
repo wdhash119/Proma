@@ -258,8 +258,9 @@ export function LiveCompactSettings(): React.ReactElement {
     patchSettings({ protectCurrentTurn })
     setProtectSaving(true)
     try {
+      // 只发这一个字段：主进程把补丁合到磁盘现值上，页面加载时的旧主闸值不会回写。
       const result = await window.electronAPI.updateSettings({
-        liveCompact: { enabled: settings.enabled, protectCurrentTurn },
+        liveCompact: { protectCurrentTurn },
       })
       // 主进程归一化后的值才是真值（例如未来收紧语义时），以返回值为准。
       patchSettings({ protectCurrentTurn: result.liveCompact?.protectCurrentTurn ?? protectCurrentTurn })
@@ -307,9 +308,10 @@ export function LiveCompactSettings(): React.ReactElement {
       : { lineMode: 'absolute' as const, absolute: validation.absolute }
     setLineSaving(true)
     try {
-      // `enabled` 是类型的必填字段，且与本次改动无关；带上当前值即幂等，不会覆盖其它窗口的开关。
+      // 只发四条线：`enabled` 等无关字段省略后由主进程保留磁盘现值，
+      // 因此这里不会用页面加载时的旧主闸值覆盖其它窗口刚改过的开关。
       const result = await window.electronAPI.updateSettings({
-        liveCompact: { enabled: settings.enabled, ...payload },
+        liveCompact: payload,
       })
       // 以主进程归一化后的结果回刷页面：界面上剩下的就是真正生效的值。
       applySettings(result.liveCompact ?? settings)

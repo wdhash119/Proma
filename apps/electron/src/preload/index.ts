@@ -165,6 +165,7 @@ import type {
 import type {
   UserProfile,
   AppSettings,
+  AppSettingsPatch,
   QuickTaskSubmitInput,
   QuickTaskOpenSessionData,
   VoiceDictationAudioChunkInput,
@@ -478,10 +479,10 @@ export interface ElectronAPI {
   getSettings: () => Promise<AppSettings>
 
   /** 更新应用设置 */
-  updateSettings: (updates: Partial<AppSettings>) => Promise<AppSettings>
+  updateSettings: (updates: AppSettingsPatch) => Promise<AppSettings>
 
   /** 同步更新应用设置（用于 beforeunload 场景） */
-  updateSettingsSync: (updates: Partial<AppSettings>) => boolean
+  updateSettingsSync: (updates: AppSettingsPatch) => boolean
 
   /** 获取系统主题（是否深色模式） */
   getSystemTheme: () => Promise<boolean>
@@ -1709,11 +1710,11 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.GET)
   },
 
-  updateSettings: (updates: Partial<AppSettings>) => {
+  updateSettings: (updates: AppSettingsPatch) => {
     return ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.UPDATE, updates)
   },
 
-  updateSettingsSync: (updates: Partial<AppSettings>) => {
+  updateSettingsSync: (updates: AppSettingsPatch) => {
     return ipcRenderer.sendSync(SETTINGS_IPC_CHANNELS.UPDATE_SYNC, updates)
   },
 

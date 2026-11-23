@@ -32,6 +32,7 @@
 
 import type {
   ContextEditEntryDraft,
+  CustomMessageEntryDraft,
   ExtensionAPI,
   ExtensionContext,
   ExtensionToolContext,
@@ -39,6 +40,7 @@ import type {
   ToolDefinition,
   TurnEndEvent,
 } from '@earendil-works/pi-coding-agent'
+import type { AssistantMessage } from '@earendil-works/pi-ai'
 import { Type } from 'typebox'
 import type {
   CallInfo,
@@ -48,6 +50,7 @@ import type {
   RecallItem,
   SpanEntry,
 } from '@proma/live-compact'
+import { MARK } from '@proma/live-compact'
 import type { LiveCompactAlgorithm } from './live-compact-algorithm-loader'
 import type { LiveCompactThresholds } from './live-compact-thresholds'
 
@@ -57,6 +60,24 @@ const MAX_PASSES = 8
 
 /** 一张卡片最多为哪些被切工具结果留原文存档（上游同：按文本长度取前 3）。 */
 const MAX_RECALL_ITEMS = 3
+
+/**
+ * 普通切割落到工具结果上时，同一条 assistant 消息（头部）的其余并行结果改写成这段 stub。
+ *
+ * 头部不再被替换（避免卡片继承 assistant 角色、被模型当成自己的输出模仿），因此它带的所有
+ * 工具调用都必须在 span 内保留配对结果；并行的兄弟结果不能整条省略，只能换成这段占位文本，
+ * 原文照常进 recall 存档，模型需要时用 spine_recall 取回。
+ */
+const SPINE_SIBLING_STUB = '[Spine 压缩] 同轮工具结果原文已并入本轮 Spine 卡片；需要原文时用 spine_recall 按卡片「原文存档」ref 取回。'
+
+/** 模仿拦截后保留在消息里的正文（丢弃模型伪造的卡片文本，保留 thinking 块）。 */
+const SPINE_INTERCEPTED_STUB = '[系统拦截] 上一条回复模仿了 Spine 压缩卡片格式，不是有效回复，已被替换。任务完成状态以真实工具结果为准。'
+
+/** 拦截命中后注入的纠正消息（turn_end 里以 custom_message 追加，在 LLM 上下文里转为 user 消息）。 */
+const SPINE_IMITATION_CORRECTION = '【系统纠正】你上一条回复以「Spine extract.」开头，模仿了系统上下文压缩卡片的格式。那是系统生成的压缩产物，不是有效的助手回复，已被拦截移除。请不要在回复中使用该格式。现在请：1) 如果任务尚未完成（例如有仍在运行的委派、未重跑的测试、未核实的结果），继续执行必要步骤；2) 用正常语言给出当前真实状态的总结，只陈述你实际执行过的操作和真实结果，不要虚构工具调用、测试结果或委派结果。'
+
+/** 模仿拦截的强制继续上限：超过后只保留拦截后的正文，不再要求模型继续。 */
+const MAX_IMITATION_RETRIES = 2
 
 /** 一次切段的记录，供主进程日志/未来的 UI 提示消费（v1 只做结构化日志）。 */
 export interface LiveCompactCutSpanRecord {
@@ -76,6 +97,10 @@ export interface LiveCompactCutSpanRecord {
   pointerOnly: boolean
   /** 该段第一条条目所属轮次（会话内 user 消息计数，未知时为 null）。 */
   turn: number | null
+  /** 普通切割时保留不动的 assistant 头部条目 id（指针卡与头部本身是结果时没有）。 */
+  anchorEntryId?: string
+  /** 被替换成 stub 的并行兄弟工具结果 id（配对保留，原文仍可从 sidecar 取回）。 */
+  stubbedEntryIds?: string[]
 }
 
 /** 一次 turn_end 的完整切段记录。 */
@@ -294,6 +319,9 @@ export function createLiveCompactExtension(
   const algorithm = options.algorithm
   const thresholds = options.thresholds
   const now = options.now ?? (() => Date.now())
+  // 本地绑定：选段/模拟都不在工厂主体里，闭包级引用能避免每处都写 algorithm.。
+  const cardMark = MARK
+  const estimate = (text: string): number => algorithm.estimateTokens(text)
 
   return (pi: ExtensionAPI) => {
     // 每会话的增量状态：云端 drain 的增长基线，以及官方压缩的身份 tracker。
@@ -301,6 +329,8 @@ export function createLiveCompactExtension(
     let turnBase: number | null = null
     let maxTurnGrowth = 0
     const compactionTracker = algorithm.createOfficialCompactionTracker()
+    // 模仿拦截的强制继续计数：agent_start（新的一轮用户回合）重置。
+    let imitationRetries = 0
 
     // 被切工具原文存档：sidecar 落在会话文件同目录（`<sessionFile>.spine.jsonl`）。
     const store = new algorithm.RecallStore()
@@ -314,6 +344,10 @@ export function createLiveCompactExtension(
 
     pi.on('session_start', (_event, ctx) => {
       bindStore(ctx)
+    })
+
+    pi.on('agent_start', () => {
+      imitationRetries = 0
     })
 
     // ---- spine_recall：把被卡片切掉的工具原文按卡片上的 ref 取回 ----
@@ -347,6 +381,14 @@ export function createLiveCompactExtension(
     pi.on('turn_end', (event: TurnEndEvent, ctx: ExtensionContext) => {
       if (!options.isEnabled()) return undefined
       bindStore(ctx)
+
+      // 卡片模仿拦截：模型把卡片格式当成自己的回复输出时（真实故障里还会顺带虚构
+      // 测试/委派结果），换掉正文并强制继续一轮。本趟不做切割，压力留到下一次 turn_end。
+      const interception = interceptCardImitation(event, options.sessionId, imitationRetries, cardMark)
+      if (interception) {
+        if (interception.forced) imitationRetries += 1
+        return interception.result
+      }
 
       const usage = ctx.getContextUsage()
       const projected = event.context.contextEntries
@@ -432,48 +474,63 @@ export function createLiveCompactExtension(
         // 卡片不比原段小就没有意义：放弃这一刀，交给官方压缩。
         if (cardTokens >= chunk.tokens) break
 
+        // 卡片落点：普通切割不再替换 assistant 头部（卡片继承 assistant 角色后，模型会把
+        // 它当成自己的输出模仿），改落到 span 内第一个属于头部调用的工具结果上；头部原样
+        // 保留，其并行兄弟结果换成 stub 以保住配对。指针卡（span 就是一个工具结果）与
+        // 头部本身是工具结果的形态维持上游行为：卡片就地替换这条结果。
+        const placement = planCardPlacement(span, head, cardTokens, estimate)
+        if (!placement) break
+        // 头部不再被切：assistant 头 + 卡片 + stub 的保留量不小于原段时这一刀没有收益。
+        if (placement.keptTokens >= chunk.tokens) break
+
         for (const item of recallItems) store.put(item)
-        const cardEntryId = head.id
+        const cardEntryId = placement.cardTarget.id
         const omittedEntryIds: string[] = []
-        for (let index = 0; index < span.length; index += 1) {
-          const target = span[index]
-          if (!target) continue
-          if (index === 0) {
-            drafts.push({
-              type: 'context_edit',
-              targetId: target.id,
-              replacement: { content: [{ type: 'text', text: cardText }] },
-            })
-            continue
+        if (placement.anchor) {
+          // 头部、卡片目标与 stub 条目原位保留（不产生省略草案），其余条目省略。
+          for (const target of span) {
+            if (target.id === placement.anchor.id) continue
+            if (target.id === cardEntryId) continue
+            if (placement.stubbedEntryIds.includes(target.id)) continue
+            omittedEntryIds.push(target.id)
+            drafts.push({ type: 'context_edit', targetId: target.id, replacement: null })
           }
-          omittedEntryIds.push(target.id)
-          drafts.push({ type: 'context_edit', targetId: target.id, replacement: null })
+        } else {
+          // 指针卡形态：span 首条换成卡片，其余条目照旧省略。
+          for (let index = 0; index < span.length; index += 1) {
+            const target = span[index]
+            if (!target) continue
+            if (index === 0) continue
+            omittedEntryIds.push(target.id)
+            drafts.push({ type: 'context_edit', targetId: target.id, replacement: null })
+          }
+        }
+        drafts.push({
+          type: 'context_edit',
+          targetId: cardEntryId,
+          replacement: { content: [{ type: 'text', text: cardText }] },
+        })
+        for (const stubId of placement.stubbedEntryIds) {
+          drafts.push({
+            type: 'context_edit',
+            targetId: stubId,
+            replacement: { content: [{ type: 'text', text: SPINE_SIBLING_STUB }] },
+          })
         }
 
-        const cardEntry: SpanEntry = {
-          id: cardEntryId,
-          role: 'assistant',
-          text: cardText,
-          tokens: cardTokens,
-          toolCalls: [],
-          toolResultFor: null,
-          isError: false,
-          turn: head.turn ?? null,
-          call: null,
-          backgroundStart: false,
-          seq: head.seq,
-        }
-        work = [...work.slice(0, chunk.start), cardEntry, ...work.slice(chunk.end + 1)]
-        simulatedTotal -= chunk.tokens - cardTokens
+        work = applySimulatedWork(work, chunk, placement, cardText, cardTokens, estimate)
+        simulatedTotal -= chunk.tokens - placement.keptTokens
         spans.push({
           cardEntryId,
           omittedEntryIds,
           spanTokens: chunk.tokens,
           cardTokens,
-          savedTokens: chunk.tokens - cardTokens,
+          savedTokens: chunk.tokens - placement.keptTokens,
           recallRefs: recallItems.map((item) => item.id),
           pointerOnly: chunk.pointerOnly === true,
           turn: head.turn ?? null,
+          ...(placement.anchor ? { anchorEntryId: placement.anchor.id } : {}),
+          ...(placement.stubbedEntryIds.length > 0 ? { stubbedEntryIds: placement.stubbedEntryIds } : {}),
         })
         cuts += 1
         if (!drain) break
@@ -498,6 +555,189 @@ export function createLiveCompactExtension(
       }
       return { entries: drafts }
     })
+  }
+}
+
+/**
+ * 最终回复是否在模仿 Spine 卡片：assistant 消息、文本以卡片标记开头、且不带工具调用。
+ *
+ * 带工具调用的中间消息一律放过——替换它会破坏调用与结果的配对；outcome 不是
+ * completed（error / aborted）时也不拦截，那一轮本来就不是模型的正常收尾。
+ * 标记只从算法层取（`@proma/live-compact` 已按值再导出 MARK），不另写一份。
+ */
+function isCardImitation(message: unknown, mark: string): boolean {
+  const record = asRecord(message)
+  if (record?.role !== 'assistant') return false
+  if (readToolCalls(message).length > 0) return false
+  const text = messageText(message).trimStart()
+  return text === mark || text.startsWith(mark + '\n') || text.startsWith(mark + '\r\n')
+}
+
+interface CardImitationInterception {
+  result: { entries: (ContextEditEntryDraft | CustomMessageEntryDraft)[]; continue?: boolean }
+  /** 本次是否算一次“强制继续”（达到上限后只替换正文，不再 continue）。 */
+  forced: boolean
+}
+
+/**
+ * 拦截模仿卡片的最终回复。
+ *
+ * 替换内容保留原消息的 thinking 块（thinking 模式的 provider 要求历史里保留它），
+ * 卡片正文整段换成拦截说明；未到上限时追加一条纠正 custom_message 并 `continue:true`
+ * 要求模型再答一轮，达到上限后只替换正文、不再强制继续（确定性终止）。
+ */
+function interceptCardImitation(
+  event: TurnEndEvent,
+  sessionId: string,
+  retries: number,
+  mark: string,
+): CardImitationInterception | undefined {
+  if (event.outcome !== 'completed') return undefined
+  if (!isCardImitation(event.message, mark)) return undefined
+  const content: AssistantMessage['content'] = withInterceptionStub(event.message)
+  const edit: ContextEditEntryDraft = {
+    type: 'context_edit',
+    targetId: event.messageEntryId,
+    replacement: { content },
+  }
+  if (retries >= MAX_IMITATION_RETRIES) {
+    console.log('[live-compact] ' + JSON.stringify({ event: 'card_imitation_cap_reached', sessionId }))
+    return { result: { entries: [edit] }, forced: false }
+  }
+  const attempt = retries + 1
+  console.log('[live-compact] ' + JSON.stringify({ event: 'card_imitation_intercepted', sessionId, attempt }))
+  const correction: CustomMessageEntryDraft = {
+    type: 'custom_message',
+    customType: 'live-compact-imitation-guard',
+    content: SPINE_IMITATION_CORRECTION,
+    display: false,
+  }
+  return { result: { entries: [edit, correction], continue: true }, forced: true }
+}
+
+/** 把消息内容里的 text 块换成拦截说明，thinking 等其余块按原顺序保留。 */
+function withInterceptionStub(message: unknown): AssistantMessage['content'] {
+  const kept: AssistantMessage['content'] = []
+  for (const block of contentBlocks(message)) {
+    const record = asRecord(block)
+    if (!record) continue
+    // 只丢弃模型伪造的正文（text 块）；thinking 块保留，thinking 模式的 provider 要求历史里带着它。
+    if (record.type === 'text') continue
+    kept.push(block as AssistantMessage['content'][number])
+  }
+  kept.push({ type: 'text', text: SPINE_INTERCEPTED_STUB })
+  return kept
+}
+
+/**
+ * 一刀的卡片落点计划。
+ *
+ * - `anchor` 为 null：指针卡形态（头部本身就是工具结果），卡片就地替换头部；
+ * - `anchor` 非 null：普通形态，assistant/其他消息头部原样保留，卡片落到 `cardTarget`
+ *   （span 内第一个属于头部调用的工具结果），头部的其余结果改写成 stub。
+ */
+interface CardPlacement {
+  anchor: SpanEntry | null
+  cardTarget: SpanEntry
+  /** 被替换成 stub 的并行兄弟结果 id（保持配对）。 */
+  stubbedEntryIds: string[]
+  /** 切后仍留在上下文里的估算 token：头部 + 卡片 + 全部 stub。 */
+  keptTokens: number
+}
+
+/**
+ * 计算卡片落点；返回 null 表示这一刀必须放弃（畸形 span）。
+ *
+ * 普通形态要求：span 内第一个带调用的 assistant 就是头部，且它至少有一个结果落在
+ * span 内。否则（头部是孤儿调用、或头部没有工具结果可承载卡片）就放弃——宁可少切
+ * 一刀，也不把卡片挂到不属于头部的条目上。
+ */
+function planCardPlacement(
+  span: SpanEntry[],
+  head: SpanEntry,
+  cardTokens: number,
+  estimateTokens: (text: string) => number,
+): CardPlacement | null {
+  if (head.role === 'toolResult') {
+    return { anchor: null, cardTarget: head, stubbedEntryIds: [], keptTokens: cardTokens }
+  }
+  const anchor = span.find((entry) => entry.role === 'assistant' && entry.toolCalls.length > 0)
+  if (!anchor) return null
+  const anchorResults = span.filter(
+    (entry) => entry.role === 'toolResult' && entry.toolResultFor !== null && anchor.toolCalls.includes(entry.toolResultFor),
+  )
+  const cardTarget = anchorResults[0]
+  if (!cardTarget) return null
+  const stubbedEntryIds = anchorResults.slice(1).map((entry) => entry.id)
+  const stubTokens = stubbedEntryIds.length * estimateTokens(SPINE_SIBLING_STUB)
+  return {
+    anchor,
+    cardTarget,
+    stubbedEntryIds,
+    keptTokens: anchor.tokens + cardTokens + stubTokens,
+  }
+}
+
+/**
+ * 把模拟条目表换成切割后的形态，供 drain 的下一趟在同一张表上继续选段。
+ *
+ * 普通形态：头部原位、卡片目标位置换成 toolResult 角色的卡片条目（这样下一趟的
+ * isCardEntry 仍能把它认成地板）、stub 位置换成 stub 条目、被省略的条目移除；
+ * 指针形态：与上游一致，整段换成一条卡片条目。
+ */
+function applySimulatedWork(
+  work: SpanEntry[],
+  chunk: { start: number; end: number },
+  placement: CardPlacement,
+  cardText: string,
+  cardTokens: number,
+  estimateTokens: (text: string) => number,
+): SpanEntry[] {
+  const span = work.slice(chunk.start, chunk.end + 1)
+  const head = span[0]
+  if (!head) return work
+  if (!placement.anchor) {
+    const cardEntry = cardEntryFor(head, head.id, cardText, cardTokens, 'assistant')
+    return [...work.slice(0, chunk.start), cardEntry, ...work.slice(chunk.end + 1)]
+  }
+  const kept: SpanEntry[] = []
+  for (const entry of span) {
+    if (entry.id === placement.anchor.id) {
+      kept.push(entry)
+      continue
+    }
+    if (entry.id === placement.cardTarget.id) {
+      kept.push(cardEntryFor(entry, entry.id, cardText, cardTokens, 'toolResult'))
+      continue
+    }
+    if (placement.stubbedEntryIds.includes(entry.id)) {
+      const stubTokens = estimateTokens(SPINE_SIBLING_STUB)
+      kept.push(cardEntryFor(entry, entry.id, SPINE_SIBLING_STUB, stubTokens, 'toolResult'))
+    }
+  }
+  return [...work.slice(0, chunk.start), ...kept, ...work.slice(chunk.end + 1)]
+}
+
+/** 构造切后条目：保留条目原有的配对/调用/轮次信息，只换文本与角色。 */
+function cardEntryFor(
+  source: SpanEntry,
+  id: string,
+  text: string,
+  tokens: number,
+  role: string,
+): SpanEntry {
+  return {
+    id,
+    role,
+    text,
+    tokens,
+    toolCalls: [],
+    toolResultFor: role === 'toolResult' ? source.toolResultFor : null,
+    isError: false,
+    turn: source.turn ?? null,
+    call: role === 'toolResult' ? source.call : null,
+    backgroundStart: false,
+    seq: source.seq,
   }
 }
 

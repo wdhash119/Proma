@@ -46,6 +46,7 @@
 
 import {
   buildCard,
+  CARD_HEADER_LINE_2,
   chooseKeptSpan,
   cutLongReadRound,
   finishedToolRounds,
@@ -113,16 +114,21 @@ export interface Chunk {
   pointerOnly?: boolean;
 }
 
-// 1.1.6: the legacy marker is only meaningful on a message entry and only
-// at the beginning of its text. A tool result or an ordinary sentence
-// that merely mentions the marker must not create a permanent cut
-// boundary. (Upstream restricts this to user/message events; a Pi card
-// keeps the role of the entry it replaced, so any non-toolResult message
-// role counts here — PORTING.md #33.)
+// 1.1.6: the legacy marker is only meaningful at the beginning of an
+// entry's text. A tool result or an ordinary sentence that merely
+// mentions the marker must not create a permanent cut boundary.
+// (Upstream restricts this to user/message events; a Pi card keeps the
+// role of the entry it replaced, so any non-toolResult role counts here
+// — PORTING.md #33.)
+// Proma 差异：普通切割现在把卡片落在 span 内第一个 toolResult 上（不再是
+// assistant 头部），所以 toolResult 必须继续算卡片 = checkpoint（地板），
+// 否则后续切割会跨越它、把它再切一遍。只认完整的普通卡头：裸标记或标记后接
+// 其他文本（例如指针卡「MARK + 工具行」）仍按普通工具结果处理，保留 #33 对
+// 「工具输出提到标记造成假边界」的防护。
 export function isCardEntry(entry: SpanEntry): boolean {
-  if (entry.role === "toolResult") return false;
-  const text = entry.text.trimStart();
-  return text === MARK || text.startsWith(`${MARK}\n`) || text.startsWith(`${MARK}\r\n`);
+  const text = entry.text.replace(/\r\n/g, "\n").trimStart();
+  if (entry.role === "toolResult") return text.startsWith(`${MARK}\n${CARD_HEADER_LINE_2}`);
+  return text === MARK || text.startsWith(`${MARK}\n`);
 }
 
 // Checkpoints stop span expansion and tail walks: our own cards, plus

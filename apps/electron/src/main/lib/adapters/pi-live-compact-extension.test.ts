@@ -9,6 +9,7 @@ import type {
   ExtensionContext,
   ExtensionToolContext,
   ProjectedSessionEntry,
+  SessionBoundaryDraft,
   SessionMessageEntry,
   ToolDefinition,
   TurnEndEvent,
@@ -131,6 +132,25 @@ function toolResultEntry(id: string, callId: string, name: string, text: string)
   return messageEntry(id, message)
 }
 
+/** 一条 assistant 消息里带多个并行调用（同一轮的两个结果）。 */
+function parallelCallEntry(id: string, callIds: string[], text: string): ProjectedSessionEntry {
+  const content: AssistantMessage['content'] = [{ type: 'text', text }]
+  for (const callId of callIds) {
+    content.push({ type: 'toolCall', id: callId, name: 'bash', arguments: { command: 'npm test' } })
+  }
+  const message: AssistantMessage = {
+    role: 'assistant',
+    content,
+    api: 'anthropic-messages',
+    provider: 'anthropic',
+    model: 'test-model',
+    usage: emptyUsage(),
+    stopReason: 'toolUse',
+    timestamp: 0,
+  }
+  return messageEntry(id, message)
+}
+
 function compactionEntry(id: string, summary: string): ProjectedSessionEntry {
   const sourceEntry: CompactionEntry = {
     type: 'compaction',
@@ -143,6 +163,17 @@ function compactionEntry(id: string, summary: string): ProjectedSessionEntry {
   }
   const message: UserMessage = { role: 'user', content: summary, timestamp: 0 }
   return { sourceEntry, messages: [message] }
+}
+
+/** 同上，但结果 token 很小（只用于刷轮次、不占保留预算）。 */
+function smallToolRounds(count: number, from: number, resultTokens = 200): ProjectedSessionEntry[] {
+  const entries: ProjectedSessionEntry[] = []
+  for (let index = 0; index < count; index += 1) {
+    const n = from + index
+    entries.push(toolCallEntry(`a${n}`, `c${n}`, 'bash', 'calling'))
+    entries.push(toolResultEntry(`t${n}`, `c${n}`, 'bash', resultTokens >= 20 ? bigToolText(resultTokens) : 'ok'))
+  }
+  return entries
 }
 
 /** 一段“足够大但不含硬事实”的工具输出：纯 ASCII，1 token ≈ 4 字符。 */
@@ -387,17 +418,20 @@ describe('Live Compact 胶层：开关与压力', () => {
 })
 
 describe('Live Compact 胶层：切段草案', () => {
-  test('Given 本地端点且达到触发线 When turn_end Then 首条替换成卡片、其余省略', () => {
+  test('Given 本地端点且达到触发线 When turn_end Then 卡片落到工具结果、其余省略（头部保留）', () => {
+    // 角色污染修复后的形态：卡片不再替换 assistant 头部 a1（否则模型会把卡片当成
+    // 自己的输出模仿），改落在 span 内第一个工具结果 t1；a1 不产生草案、a2/t2 省略。
     const harness = install()
     const result = runTurnEnd(harness, cuttableProjection())
     expect(result).toBeDefined()
     const drafts = result?.entries ?? []
-    // 四个已结束工具轮保留最新两轮，切段覆盖第 1、2 轮（各一条调用 + 一条结果）。
-    expect(drafts).toHaveLength(4)
-    const first = drafts[0]
-    expect(first?.type).toBe('context_edit')
-    expect(first?.targetId).toBe('a1')
-    const replacement = first?.replacement
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['a2', 't2', 't1'])
+    for (const draft of drafts.slice(0, 2)) {
+      expect(draft.replacement).toBeNull()
+    }
+    const card = drafts[2]
+    expect(card?.type).toBe('context_edit')
+    const replacement = card?.replacement
     expect(replacement).not.toBeNull()
     const content = replacement?.content
     const text = Array.isArray(content) && content[0] && content[0].type === 'text'
@@ -405,10 +439,6 @@ describe('Live Compact 胶层：切段草案', () => {
       : ''
     expect(text.startsWith('Spine extract.')).toBe(true)
     expect(text).toContain('原文存档')
-    for (const draft of drafts.slice(1)) {
-      expect(draft.replacement).toBeNull()
-    }
-    expect(drafts.map((draft) => draft.targetId)).toEqual(['a1', 't1', 'a2', 't2'])
   })
 
   test('Given 切段成功 When onCut Then 记录段 token、节省、卡片 id 与 recall ref', () => {
@@ -425,10 +455,13 @@ describe('Live Compact 胶层：切段草案', () => {
     expect(record?.savedTokens).toBeGreaterThan(0)
     expect(record?.spans).toHaveLength(1)
     const span = record?.spans[0]
-    expect(span?.cardEntryId).toBe('a1')
-    expect(span?.omittedEntryIds).toEqual(['t1', 'a2', 't2'])
+    expect(span?.cardEntryId).toBe('t1')
+    expect(span?.anchorEntryId).toBe('a1')
+    expect(span?.omittedEntryIds).toEqual(['a2', 't2'])
     expect(span?.spanTokens).toBeGreaterThan(span?.cardTokens ?? 0)
-    expect(span?.savedTokens).toBe((span?.spanTokens ?? 0) - (span?.cardTokens ?? 0))
+    // 节省 = 原段 - 保留量；头部不再被切，所以保留量里始终有头部自己的 token。
+    expect(span?.savedTokens).toBeLessThan((span?.spanTokens ?? 0) - (span?.cardTokens ?? 0))
+    expect(span?.savedTokens).toBeGreaterThan(0)
     expect(span?.recallRefs).toEqual(['t1', 't2'])
     expect(span?.pointerOnly).toBe(false)
     expect(span?.turn).toBe(1)
@@ -462,9 +495,11 @@ describe('Live Compact 胶层：当前轮与投影尾部保护', () => {
         messageEntryId: 'a-current',
         toolResultEntryIds: ['t-current'],
       })
-      // 关闭护栏 = 回到上游行为：算法把当前长读轮选成指针候选。
+      // 关闭护栏 = 回到上游行为：算法把当前长读轮选成指针候选。指针候选只覆盖
+      // 那条调用与结果，它的头部是助理消息：卡片照新规则落在工具结果 t-current 上，
+      // 调用消息 a-current 原样保留（不再被换成 assistant 角色的卡片）。
       expect(result).toBeDefined()
-      expect(result?.entries.map((draft) => draft.targetId)).toEqual(['a-current', 't-current'])
+      expect(result?.entries.map((draft) => draft.targetId)).toEqual(['t-current'])
       expect(harness.records).toHaveLength(1)
       expect(harness.records[0]?.spans[0]?.pointerOnly).toBe(true)
       const logged = logSpy.mock.calls.map((call) => call.map((value: unknown) => String(value)).join(' '))
@@ -507,8 +542,8 @@ describe('Live Compact 胶层：当前轮与投影尾部保护', () => {
     })
     expect(result).toBeDefined()
     const drafts = result?.entries ?? []
-    // 没有永久禁用 long-read 压缩：历史长读轮照样能切成指针卡（调用条目换卡片、结果条目省略）。
-    expect(drafts.map((draft) => draft.targetId)).toEqual(['a-current', 't-current'])
+    // 没有永久禁用 long-read 压缩：历史长读轮照样能切成指针卡，卡片落在结果上。
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['t-current'])
     expect(harness.records).toHaveLength(1)
     expect(harness.records[0]?.spans[0]?.pointerOnly).toBe(true)
   })
@@ -633,7 +668,8 @@ describe('Live Compact 胶层：spine_recall 工具', () => {
   test('Given 无会话文件 When 切段 Then 存档退化为内存态且不影响草案', () => {
     const harness = install()
     const result = runTurnEnd(harness, cuttableProjection())
-    expect(result?.entries.length).toBe(4)
+    // 两轮各一条省略（a2、t2）+ 一条落卡（t1）；头部 a1 保留不动。
+    expect(result?.entries.map((draft) => draft.targetId)).toEqual(['a2', 't2', 't1'])
   })
 })
 
@@ -685,6 +721,299 @@ describe('Live Compact 胶层：engine 判定', () => {
 })
 
 describe('Live Compact 胶层：图片与自定义消息', () => {
+describe('Live Compact 胶层：卡片落在工具结果上（角色污染修复）', () => {
+  test('Given assistant 头部带调用、其结果是 span 内唯一结果 When turn_end Then 卡片落在结果条目、头部不动', () => {
+    const harness = install()
+    // 头部本身的正文很小、结果很大：切点落在头部的调用轮上，span 只覆盖
+    //「头部 + 它的唯一结果」，便于钉住卡片落点。
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a1', 'c1', 'bash', 'calling'),
+      toolResultEntry('t1', 'c1', 'bash', bigToolText(20000)),
+      ...smallToolRounds(3, 2),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const result = runTurnEnd(harness, projected)
+    const drafts = result?.entries ?? []
+    // 头部 assistant（a1）保留原样：不再被替换成卡片，也不被省略。
+    expect(drafts.some((draft) => draft.targetId === 'a1')).toBe(false)
+    // 卡片落在 span 内第一个 toolResult（t1）且是最后一条草案（先省略、后置卡）。
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['t1'])
+    expect(drafts[0]?.replacement).not.toBeNull()
+    const span = harness.records[0]?.spans[0]
+    expect(span?.cardEntryId).toBe('t1')
+    expect(span?.anchorEntryId).toBe('a1')
+    expect(span?.omittedEntryIds).toEqual([])
+    expect(span?.stubbedEntryIds).toBeUndefined()
+    // 卡片确实写进结果条目的内容里。
+    const card = drafts[0]?.replacement?.content
+    const text = Array.isArray(card) && card[0] && card[0].type === 'text' ? card[0].text : ''
+    expect(text.startsWith('Spine extract.')).toBe(true)
+  })
+
+  test('Given assistant 头部带两个并行调用 When turn_end Then 首个结果得卡片、第二个结果得 stub 且配对保留', () => {
+    // 第一个并行结果很小：切点落在它身上（尾部的短 assistant/小结果会被走掉），
+    // 于是 span 只覆盖「头部 + 两个并行结果」，第二个结果必须变成 stub。
+    const parallel: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      parallelCallEntry('a1', ['c1a', 'c1b'], 'calling both'),
+      toolResultEntry('t1a', 'c1a', 'bash', 'ok'),
+      toolResultEntry('t1b', 'c1b', 'bash', bigToolText(15000)),
+      ...smallToolRounds(3, 2),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const harness = install()
+    const result = runTurnEnd(harness, parallel)
+    const drafts = result?.entries ?? []
+    expect(drafts.some((draft) => draft.targetId === 'a1')).toBe(false)
+    const cardDraft = drafts.find((draft) => draft.targetId === 't1a')
+    expect(cardDraft?.replacement).not.toBeNull()
+    const stubDraft = drafts.find((draft) => draft.targetId === 't1b')
+    expect(stubDraft?.replacement).not.toBeNull()
+    const stubContent = stubDraft?.replacement?.content
+    const stubText = Array.isArray(stubContent) && stubContent[0] && stubContent[0].type === 'text'
+      ? stubContent[0].text
+      : ''
+    expect(stubText).toContain('Spine')
+    expect(stubText.startsWith('Spine extract.')).toBe(false)
+    expect(harness.records[0]?.spans[0]?.stubbedEntryIds).toEqual(['t1b'])
+    // 被 stub 的兄弟结果原文仍进 recall 存档。
+    expect(harness.records[0]?.spans[0]?.recallRefs).toContain('t1b')
+  })
+
+  test('Given 指针卡候选（span 就是一个工具结果） When turn_end Then 卡片仍替换该结果、不会被置空', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const harness = install({ protectCurrentTurn: false })
+      const result = runTurnEnd(harness, currentLongReadProjection(), {
+        messageEntryId: 'a-current',
+        toolResultEntryIds: ['t-current'],
+      })
+      const drafts = result?.entries ?? []
+      // 指针刀：指针候选只覆盖调用与结果，卡片落在结果 t-current 上、调用消息原样保留。
+      expect(drafts.map((draft) => draft.targetId)).toEqual(['t-current'])
+      const span = harness.records[0]?.spans[0]
+      expect(span?.pointerOnly).toBe(true)
+      expect(span?.cardEntryId).toBe('t-current')
+      expect(span?.anchorEntryId).toBe('a-current')
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  test('Given 头部本身的 token 就吃光整段收益 When turn_end Then 放弃这一刀', () => {
+    // 头部不再被切：assistant 头 + 卡片 + stub 的保留量不小于原段时，切割没有意义。
+    const harness = install()
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a1', 'c1', 'bash', bigToolText(15000)),
+      toolResultEntry('t1', 'c1', 'bash', bigToolText(15000)),
+      toolCallEntry('a2', 'c2', 'bash', 'calling'),
+      toolResultEntry('t2', 'c2', 'bash', bigToolText(15000)),
+      toolCallEntry('a3', 'c3', 'bash', 'calling'),
+      toolResultEntry('t3', 'c3', 'bash', bigToolText(15000)),
+      toolCallEntry('a4', 'c4', 'bash', 'calling'),
+      toolResultEntry('t4', 'c4', 'bash', bigToolText(15000)),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    expect(runTurnEnd(harness, projected)).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given span 头部是找不到配对的畸形条目 When turn_end Then 防御性放弃且不留部分草案', () => {
+    const harness = install()
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      // 头部的调用结果落在 span 之外（孤儿形态）：无法确定卡片目标，整刀放弃。
+      toolCallEntry('a1', 'c-outside', 'bash', 'calling'),
+      toolResultEntry('t1', 'c1', 'bash', bigToolText(15000)),
+      toolCallEntry('a2', 'c2', 'bash', 'calling'),
+      toolResultEntry('t2', 'c2', 'bash', bigToolText(15000)),
+      toolCallEntry('a3', 'c3', 'bash', 'calling'),
+      toolResultEntry('t3', 'c3', 'bash', bigToolText(15000)),
+      toolCallEntry('a4', 'c4', 'bash', 'calling'),
+      toolResultEntry('t4', 'c4', 'bash', bigToolText(15000)),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    expect(runTurnEnd(harness, projected)).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 云端 drain When 切段 Then 每一刀都不替换 assistant 头部并记下保留的头部', () => {
+    const pi = createFakePi()
+    const records: LiveCompactCutRecord[] = []
+    createLiveCompactExtension({
+      isEnabled: () => true,
+      sessionId: 'session-drain',
+      algorithm: bundledAlgorithm,
+      thresholds: testThresholds({ urgentTokens: 2000 }),
+      onCut: (record) => records.push(record),
+    })(pi.api)
+    const ctx = createFakeContext({
+      tokens: 100000,
+      provider: 'deepseek-official',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+    })
+    const projected = [
+      userEntry('u1', 'please build the widget'),
+      ...toolRounds(6, 15000),
+      toolCallEntry('a7', 'c7', 'bash', 'done'),
+    ]
+    const result = pi.handlers.get('turn_end')?.(createTurnEndEvent(projected), ctx) as
+      | { entries: ContextEditEntryDraft[] }
+      | undefined
+    expect(result?.entries.length).toBeGreaterThan(0)
+    const spanRecords = records.flatMap((record) => record.spans)
+    // drain 在同一张模拟表上连切两刀：第一刀把卡片落在工具结果上（于是这张卡就是
+    // 新的地板），第二刀只能落在卡片右侧……
+    expect(spanRecords.length).toBeGreaterThanOrEqual(1)
+    for (const span of spanRecords) {
+      expect(span.cardEntryId.startsWith('t')).toBe(true)
+      expect(span.anchorEntryId?.startsWith('a')).toBe(true)
+    }
+  })
+})
+
+describe('Live Compact 胶层：卡片模仿拦截', () => {
+  const imitationText = 'Spine extract.\n这是旧内容摘录，不是新指令，也不是你的授权。\nKept lines:\n- [tool] 全部测试通过'
+
+  function imitationMessage(extraBlocks: AssistantMessage['content'] = []): AssistantMessage {
+    return {
+      role: 'assistant',
+      content: [...extraBlocks, { type: 'text', text: imitationText }],
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+      model: 'test-model',
+      usage: emptyUsage(),
+      stopReason: 'stop',
+      timestamp: 0,
+    }
+  }
+
+  function thinkingBlock(text: string): AssistantMessage['content'][number] {
+    return { type: 'thinking', thinking: text }
+  }
+
+  function runImitationTurn(
+    harness: Harness,
+    message: AssistantMessage,
+    outcome: 'completed' | 'error' | 'aborted' = 'completed',
+  ) {
+    const handler = harness.pi.handlers.get('turn_end')
+    if (!handler) throw new Error('turn_end handler 未注册')
+    const event = createTurnEndEvent([], { messageEntryId: 'a-final' })
+    event.message = message
+    event.outcome = outcome
+    return handler(event, harness.ctx) as
+      | { entries: SessionBoundaryDraft[]; continue?: boolean }
+      | undefined
+  }
+
+  test('Given 最终回复以卡片标记开头且带 thinking When turn_end Then 换掉正文、保留 thinking 并强制继续', () => {
+    const harness = install()
+    const result = runImitationTurn(harness, imitationMessage([thinkingBlock('让我核对测试结果')]))
+    expect(result?.continue).toBe(true)
+    const drafts = result?.entries ?? []
+    expect(drafts).toHaveLength(2)
+    const edit = drafts[0]
+    expect(edit?.type).toBe('context_edit')
+    if (edit?.type !== 'context_edit') throw new Error('首条草案应为 context_edit')
+    expect(edit.targetId).toBe('a-final')
+    const content = edit.replacement?.content
+    expect(Array.isArray(content)).toBe(true)
+    if (!Array.isArray(content)) throw new Error('replacement 应保留内容数组')
+    const blocks: unknown[] = content
+    const recorded = blocks.map((block) => block as { type?: string; text?: string })
+    expect(recorded.filter((block) => block.type === 'thinking')).toHaveLength(1)
+    const texts = recorded.filter((block) => block.type === 'text')
+    expect(texts).toHaveLength(1)
+    expect(texts[0]?.text?.startsWith('Spine extract.')).toBe(false)
+    expect(texts[0]?.text).toContain('拦截')
+    const correction = drafts[1]
+    expect(correction?.type).toBe('custom_message')
+    if (correction?.type !== 'custom_message') throw new Error('第二条草案应为 custom_message')
+    expect(correction.content).toContain('Spine extract.')
+    expect(correction.content).toContain('不要虚构')
+    expect(correction.display).toBe(false)
+  })
+
+  test('Given 连续两次模仿 When 第三次又模仿 Then 前两次继续、第三次只换正文不再继续', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const harness = install()
+      const first = runImitationTurn(harness, imitationMessage())
+      const second = runImitationTurn(harness, imitationMessage())
+      const third = runImitationTurn(harness, imitationMessage())
+      expect(first?.continue).toBe(true)
+      expect(second?.continue).toBe(true)
+      expect(third?.continue).toBeUndefined()
+      expect(third?.entries.map((draft) => draft.type)).toEqual(['context_edit'])
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  test('Given 模仿计数已用尽 When agent_start 再来一轮 Then 计数重置、仍会强制继续', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const harness = install()
+      runImitationTurn(harness, imitationMessage())
+      runImitationTurn(harness, imitationMessage())
+      const capped = runImitationTurn(harness, imitationMessage())
+      expect(capped?.continue).toBeUndefined()
+      const startHandler = harness.pi.handlers.get('agent_start')
+      expect(startHandler).toBeDefined()
+      startHandler?.(createTurnEndEvent([]), harness.ctx)
+      const fresh = runImitationTurn(harness, imitationMessage())
+      expect(fresh?.continue).toBe(true)
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  test('Given 消息带工具调用且正文里也有卡片标记 When turn_end Then 不拦截', () => {
+    const harness = install()
+    const message: AssistantMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: imitationText },
+        { type: 'toolCall', id: 'c9', name: 'bash', arguments: { command: 'ls' } },
+      ],
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+      model: 'test-model',
+      usage: emptyUsage(),
+      stopReason: 'toolUse',
+      timestamp: 0,
+    }
+    // 拦截不发生：本趟落到正常切割逻辑上（空投影 → 无草案）。
+    expect(runImitationTurn(harness, message)).toBeUndefined()
+  })
+
+  test('Given 正常最终文本或非 completed 结局 When turn_end Then 不拦截', () => {
+    const harness = install()
+    const normal = imitationMessage()
+    normal.content = [{ type: 'text', text: '任务完成：测试 97 通过。' }]
+    expect(runImitationTurn(harness, normal)).toBeUndefined()
+    expect(runImitationTurn(harness, imitationMessage(), 'error')).toBeUndefined()
+    expect(runImitationTurn(harness, imitationMessage(), 'aborted')).toBeUndefined()
+  })
+
+  test('Given 会话开关关闭 When 最终回复模仿卡片 Then 不拦截', () => {
+    const harness = install({ isEnabled: () => false })
+    expect(runImitationTurn(harness, imitationMessage())).toBeUndefined()
+  })
+
+  test('Given 命中模仿 When turn_end Then 本趟不切段（压力留到下一次）', () => {
+    const harness = install()
+    const handler = harness.pi.handlers.get('turn_end')
+    if (!handler) throw new Error('turn_end handler 未注册')
+    const event = createTurnEndEvent(cuttableProjection(), { messageEntryId: 'a-final' })
+    event.message = imitationMessage()
+    handler(event, harness.ctx)
+    expect(harness.records).toHaveLength(0)
+  })
+})
   test('Given 含图片块的消息 When turn_end Then 只按文本块估算', () => {
     const image: ImageContent = { type: 'image', data: 'AAAA', mimeType: 'image/png' }
     const withImage: UserMessage = {

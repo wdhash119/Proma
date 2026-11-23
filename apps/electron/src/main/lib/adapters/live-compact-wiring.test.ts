@@ -196,7 +196,7 @@ describe('Live Compact 接线契约（源码级）', () => {
     expect(source).toContain('protectCurrentTurn: raw.protectCurrentTurn !== false')
     expect(source).toContain('ratios: normalizeLiveCompactLineRatios(raw.ratios)')
     expect(source).toContain('absolute: normalizeLiveCompactLineAbsolute(raw.absolute)')
-    expect(source).toContain("lineMode: raw.lineMode === 'absolute' ? 'absolute' : 'ratio'")
+    expect(source).toContain("lineMode: raw.lineMode === 'absolute' || raw.lineMode === 'origin' ? raw.lineMode : 'ratio'")
   })
 
   test('Given 组装层 When 换算四条线 Then 绝对值模式直传 token、比例模式乘窗口，lineMode 随阈值一起求值', () => {

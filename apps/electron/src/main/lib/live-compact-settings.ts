@@ -111,14 +111,30 @@ export function resolveLiveCompactContextWindow(input: {
  *
  * - 比例模式：用 `窗口 × 比例` 作为覆盖值，取整与夹取留给 computeLiveCompactThresholds
  *   的同一个 toThresholdValue（不在这里重复一份取整逻辑，避免两条路径出现差异）；
- * - 绝对值模式：直接给 token 数，不乘窗口。
+ * - 绝对值模式：直接给 token 数，不乘窗口；
+ * - `origin` 模式：不走 ratio/absolute 的求值分支，直接把上游 Origin 四值当绝对值下发，
+ *   忽略设置里的 ratios/absolute（那一档的定义就是“完全复现上游”，没有用户可调项）。
  * 设置组缺失时用缺省值（与设置归一化边界同一份常量）。
  */
 export function resolveLiveCompactLineOverrides(
   settings: LiveCompactSettings | undefined,
   contextWindow: number,
 ): { lineMode: LiveCompactLineMode; overrides: LiveCompactThresholdOverrides } {
-  const lineMode: LiveCompactLineMode = settings?.lineMode === 'absolute' ? 'absolute' : 'ratio'
+  const configuredMode = settings?.lineMode
+  // origin 档对外仍是“绝对值语义”：computeLiveCompactThresholds 只认 ratio/absolute，
+  // 这里显式降成 'absolute'，同时放开“保留预算 ≤ 触发线”（上游 Origin 就是 32000 > 20000）。
+  if (configuredMode === 'origin') {
+    return {
+      lineMode: 'absolute',
+      overrides: {
+        minPressureTokens: DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE.triggerTokens,
+        keepRoundTokens: DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE.keepRoundTokens,
+        urgentTokens: DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE.urgentTokens,
+        bigGateTokens: DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE.bigGateTokens,
+      },
+    }
+  }
+  const lineMode: LiveCompactLineMode = configuredMode === 'absolute' ? 'absolute' : 'ratio'
   if (lineMode === 'absolute') {
     const absolute = settings?.absolute ?? DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE
     return {

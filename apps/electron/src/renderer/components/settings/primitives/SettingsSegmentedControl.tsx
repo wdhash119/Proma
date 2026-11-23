@@ -16,8 +16,8 @@ interface SegmentOption {
 }
 
 interface SettingsSegmentedControlProps {
-  /** 标签文本 */
-  label: string
+  /** 标签文本；需要挂问号提示时可传 ReactNode */
+  label: React.ReactNode
   /** 描述文本（可选） */
   description?: string
   /** 当前值 */

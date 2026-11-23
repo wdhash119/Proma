@@ -297,9 +297,11 @@ export interface ProductivityToolsSettings {
  * Live Compact 四条线的取值模式。
  *
  * - `ratio`（缺省）：四条线按模型上下文窗口的比例换算，跟随窗口大小；
- * - `absolute`：四条线直接使用 token 数，与上游 dsh-live-compact 的默认值语义一致（不随窗口变化）。
+ * - `absolute`：四条线直接使用 token 数，与上游 dsh-live-compact 的默认值语义一致（不随窗口变化）；
+ * - `origin`：上游 Origin 绝对值只读档，四条线固定为上游原值（20000 / 32000 / 48000 / 650000），
+ *   设置页不提供编辑入口，只用于“完全复现上游行为”。
  */
-export type LiveCompactLineMode = 'ratio' | 'absolute'
+export type LiveCompactLineMode = 'ratio' | 'absolute' | 'origin'
 
 /**
  * 比例模式下四条线的窗口占比（0..1）。
@@ -350,7 +352,11 @@ export interface LiveCompactSettings {
    * 只有显式 false 才恢复上游“当前轮也可被切”的行为。
    */
   protectCurrentTurn?: boolean
-  /** 四条线的取值模式；缺省 'ratio'（按窗口比例）。 */
+  /**
+   * 四条线的取值模式；缺省 'ratio'（按窗口比例）。
+   *
+   * `origin` 时设置里的 ratios/absolute 仍原样保留（切回自定义时不丢），但阈值一律取上游 Origin。
+   */
   lineMode?: LiveCompactLineMode
   /** 比例模式的四条线占比；缺失或组内顺序非法时整组回落 0.5 / 0.35 / 0.75 / 0.9。 */
   ratios?: LiveCompactLineRatios

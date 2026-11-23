@@ -3,6 +3,7 @@ import {
   buildLiveCompactQueryInput,
   resolveLiveCompactContextWindow,
   resolveLiveCompactEnabled,
+  resolveLiveCompactLineOverrides,
 } from './live-compact-settings'
 
 const enabledSettings = { liveCompact: { enabled: true } }
@@ -242,6 +243,92 @@ describe('Live Compact 四条线：比例与绝对值换算', () => {
       configDir: '/tmp/proma',
     })
     expect(input).toBeUndefined()
+  })
+})
+
+describe('Live Compact 四条线：origin 上游只读档', () => {
+  /** 上游 dsh-live-compact 的四值：20000 / 32000 / 48000 / 650000。 */
+  const ORIGIN_LINES = [20_000, 32_000, 48_000, 650_000]
+
+  function thresholdsFor(lineMode: 'origin', contextWindow: number): number[] {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true, lineMode } },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow },
+      configDir: '/tmp/proma',
+    })
+    if (!input) throw new Error('origin 档应当已启用')
+    return [
+      input.thresholds.minPressureTokens,
+      input.thresholds.keepRoundTokens,
+      input.thresholds.urgentTokens,
+      input.thresholds.bigGateTokens,
+    ]
+  }
+
+  test('Given lineMode=origin When 小到 1M 的任何窗口 Then 四条线固定为上游 Origin 值', () => {
+    for (const contextWindow of [50_000, 200_000, 1_000_000]) {
+      expect(thresholdsFor('origin', contextWindow), `窗口 ${contextWindow}`).toEqual(ORIGIN_LINES)
+    }
+  })
+
+  test('Given origin 且磁盘上还留着自定义组 When 组装 Then 自定义值不参与换算', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: {
+        liveCompact: {
+          enabled: true,
+          lineMode: 'origin',
+          ratios: { trigger: 0.6, keepRound: 0.45, urgent: 0.8, bigGate: 0.95 },
+          absolute: {
+            triggerTokens: 30_000,
+            keepRoundTokens: 40_000,
+            urgentTokens: 60_000,
+            bigGateTokens: 90_000,
+          },
+        },
+      },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow: 200_000 },
+      configDir: '/tmp/proma',
+    })
+
+    expect(input?.thresholds.minPressureTokens).toBe(20_000)
+    expect(input?.thresholds.keepRoundTokens).toBe(32_000)
+    expect(input?.thresholds.urgentTokens).toBe(48_000)
+    expect(input?.thresholds.bigGateTokens).toBe(650_000)
+  })
+
+  test('Given origin When 解析 overrides Then 明确降为 absolute 语义（保留线高于触发线合法）', () => {
+    const resolved = resolveLiveCompactLineOverrides({ enabled: true, lineMode: 'origin' }, 200_000)
+
+    expect(resolved.lineMode).toBe('absolute')
+    expect(resolved.overrides).toEqual({
+      minPressureTokens: 20_000,
+      keepRoundTokens: 32_000,
+      urgentTokens: 48_000,
+      bigGateTokens: 650_000,
+    })
+  })
+
+  test('Given origin When 组装 Then 主闸与结束轮保护照原样透传', () => {
+    const protecting = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true, lineMode: 'origin', protectCurrentTurn: true } },
+      modelId: 'some-unknown-model',
+      configDir: '/tmp/proma',
+    })
+    const unprotected = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true, lineMode: 'origin', protectCurrentTurn: false } },
+      modelId: 'some-unknown-model',
+      configDir: '/tmp/proma',
+    })
+
+    expect(protecting?.enabled).toBe(true)
+    expect(protecting?.protectCurrentTurn).toBe(true)
+    expect(unprotected?.protectCurrentTurn).toBe(false)
   })
 })
 

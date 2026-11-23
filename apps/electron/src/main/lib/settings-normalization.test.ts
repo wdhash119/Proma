@@ -62,8 +62,16 @@ describe('Live Compact 设置归一化：lineMode', () => {
     expect(normalizeLiveCompactSettings({ enabled: true, lineMode: 'absolute' }).lineMode).toBe('absolute')
   })
 
+  test('Given lineMode=origin When 归一化 Then 保留上游 Origin 只读档', () => {
+    const settings = normalizeLiveCompactSettings({ enabled: true, lineMode: 'origin' })
+    expect(settings.lineMode).toBe('origin')
+    // origin 不吞掉自定义组：切回自定义时还要沿用用户上次保存的四条线。
+    expect(settings.ratios).toEqual(DEFAULT_RATIOS)
+    expect(settings.absolute).toEqual(DEFAULT_ABSOLUTE)
+  })
+
   test('Given 非法 lineMode When 归一化 Then 回落 ratio', () => {
-    for (const lineMode of ['ABSOLUTE', 'ratio ', 'tokens', 1, null]) {
+    for (const lineMode of ['ABSOLUTE', 'ORIGIN', 'origin ', 'tokens', 1, null]) {
       expect(normalizeLiveCompactSettings({ enabled: true, lineMode }).lineMode).toBe('ratio')
     }
   })
@@ -203,6 +211,18 @@ describe('Live Compact 设置写入：补丁合并保留磁盘现值', () => {
     expect(merged.ratios).toEqual({ trigger: 0.6, keepRound: 0.4, urgent: 0.8, bigGate: 0.95 })
     // 未提到的绝对值组不能被补丁抹掉。
     expect(merged.absolute).toEqual(onDisk.absolute)
+  })
+
+  test('Given 磁盘是自定义档 When 补丁只切到 origin Then 四条线原样保留', () => {
+    const onDisk = normalizeLiveCompactSettings({
+      enabled: true,
+      lineMode: 'ratio',
+      ratios: { trigger: 0.6, keepRound: 0.4, urgent: 0.8, bigGate: 0.95 },
+    })
+    const merged = mergeLiveCompactSettings(onDisk, { lineMode: 'origin' })
+
+    expect(merged.lineMode).toBe('origin')
+    expect(merged.ratios).toEqual({ trigger: 0.6, keepRound: 0.4, urgent: 0.8, bigGate: 0.95 })
   })
 
   test('Given 空补丁或无补丁 When 合并 Then 结果等于读取侧归一化现值', () => {

@@ -17,12 +17,15 @@
  * 所有数值字段必须先转成 `number` 再落盘：`normalizeLiveCompactSettings` 只认数字类型，
  * 传字符串会被判定为缺失从而整组回落默认——这正是本模块把“输入框字符串 → 数值”单独
  * 拎成 `parseLineNumber` 的原因。
+ *
+ * 比例在**输入框里是百分数**（`50` 表示 50% 窗口），存储域仍是 fraction（`0.5`）。
+ * `ratiosToDraft` 与 `validateLineDraft` 在边界上完成 100 倍换算，调用方不需要自己乘除：
+ * 界面上不再出现 `0.075` 这类分数，也不会把 `50` 当成 50 倍窗口写进设置。
  */
 
 import { calculatePiAutoCompactionThresholdTokens } from '@proma/shared'
 import type {
   LiveCompactLineAbsolute,
-  LiveCompactLineMode,
   LiveCompactLineRatios,
 } from '@/types/settings'
 
@@ -252,6 +255,87 @@ export function calculateLinePreview(
   }
 }
 
+/** 四条线在绝对值组里的字段名，换算预览按它取值（顺序与 LIVE_COMPACT_LINE_KEYS 一致）。 */
+const ABSOLUTE_FIELD_BY_KEY: Readonly<Record<LiveCompactLineKey, keyof LiveCompactLineAbsolute>> = {
+  trigger: 'triggerTokens',
+  keepRound: 'keepRoundTokens',
+  urgent: 'urgentTokens',
+  bigGate: 'bigGateTokens',
+}
+
+/** 当前生效的自定义组（渲染层口径，origin 不参与换算预览）。 */
+export type LiveCompactEffectiveGroup =
+  | { mode: 'ratio'; ratios: LiveCompactLineRatios }
+  | { mode: 'absolute'; absolute: LiveCompactLineAbsolute }
+
+/** 换算预览的一行。 */
+export interface LiveCompactConvertedLine {
+  key: LiveCompactLineKey
+  label: string
+  /** 比例列是百分数（50 = 50%），绝对值列是 token 数。 */
+  value: number
+  /** 灰框里直接展示的文案，不参与保存。 */
+  text: string
+}
+
+/** 非生效列的换算预览。 */
+export interface LiveCompactConversionPreview {
+  /** 被预览的那一列（即非生效列）。 */
+  column: 'ratio' | 'absolute'
+  windowTokens: number
+  rows: LiveCompactConvertedLine[]
+}
+
+/**
+ * 按“参考上下文长度”把生效组换算成另一列的预览值。
+ *
+ * - 比例生效 → 预览绝对值列：`Math.max(1, Math.round(窗口 × 比例))`，与主进程取整完全一致；
+ * - 绝对值生效 → 预览比例列：`token / 窗口` 转百分比文案（最多一位小数）。
+ *
+ * 纯展示：不落盘、不影响生效值。`windowTokens` 非正或非有限时直接抛错，
+ * 避免把 NaN 或 Infinity 渲染进灰框（与 `calculateLinePreview` 同语义）。
+ */
+export function calculateConversionPreview(
+  group: LiveCompactEffectiveGroup,
+  windowTokens: number,
+): LiveCompactConversionPreview {
+  if (!Number.isFinite(windowTokens) || windowTokens <= 0) {
+    throw new TypeError(`换算预览需要正的有限窗口大小，收到 ${String(windowTokens)}`)
+  }
+  if (group.mode === 'ratio') {
+    return {
+      column: 'absolute',
+      windowTokens,
+      rows: LIVE_COMPACT_LINE_KEYS.map((key) => {
+        const tokens = toThresholdValue(windowTokens, group.ratios[key])
+        return {
+          key,
+          label: LIVE_COMPACT_LINE_LABELS[key],
+          value: tokens,
+          text: formatTokenCount(tokens),
+        }
+      }),
+    }
+  }
+  return {
+    column: 'ratio',
+    windowTokens,
+    rows: LIVE_COMPACT_LINE_KEYS.map((key) => {
+      const tokens = group.absolute[ABSOLUTE_FIELD_BY_KEY[key]]
+      const ratio = tokens / windowTokens
+      return {
+        key,
+        label: LIVE_COMPACT_LINE_LABELS[key],
+        value: Math.round(ratio * 1000) / 10,
+        text: formatRatioPercent(ratio),
+      }
+    }),
+  }
+}
+
+/** 可编辑的取值模式：`origin` 是只读档，不参与草稿校验与换算预览。 */
+export type LiveCompactEditableLineMode = 'ratio' | 'absolute'
+
 /** 四条线输入框的字符串草稿（保存前才转成数值）。 */
 export interface LiveCompactLineDraft {
   trigger: string
@@ -281,18 +365,28 @@ export type LiveCompactLineValidation =
     }
   | {
       ok: false
-      mode: LiveCompactLineMode
+      mode: LiveCompactEditableLineMode
       errors: Partial<Record<LiveCompactLineKey, string>>
     }
 
-/** 比例组 → 草稿。 */
+/**
+ * 比例组 → 百分数草稿（输入框里的 `50` = 50% 窗口）。
+ *
+ * 乘 10000 再四舍五入再除 100：`0.35 → 35`、`0.075 → 7.5`，
+ * 避开 `0.35 * 100 = 35.000000000000004` 这类浮点噪声被写进输入框。
+ */
 export function ratiosToDraft(ratios: LiveCompactLineRatios): LiveCompactLineDraft {
   return {
-    trigger: String(ratios.trigger),
-    keepRound: String(ratios.keepRound),
-    urgent: String(ratios.urgent),
-    bigGate: String(ratios.bigGate),
+    trigger: String(ratioToPercentValue(ratios.trigger)),
+    keepRound: String(ratioToPercentValue(ratios.keepRound)),
+    urgent: String(ratioToPercentValue(ratios.urgent)),
+    bigGate: String(ratioToPercentValue(ratios.bigGate)),
   }
+}
+
+/** fraction（0.5）→ 百分数（50），保留最多两位小数。 */
+export function ratioToPercentValue(ratio: number): number {
+  return Math.round(ratio * 10_000) / 100
 }
 
 /** 绝对值组 → 草稿。 */
@@ -320,11 +414,14 @@ export function parseLineNumber(raw: string): number | null {
 
 /** 逐字段的“能否解析 + 区间是否合法”检查，返回数值与就地错误。 */
 function parseLines(
-  mode: LiveCompactLineMode,
+  mode: LiveCompactEditableLineMode,
   draft: LiveCompactLineDraft,
 ): { values: Partial<Record<LiveCompactLineKey, number>>; errors: Partial<Record<LiveCompactLineKey, string>> } {
   const values: Partial<Record<LiveCompactLineKey, number>> = {}
   const errors: Partial<Record<LiveCompactLineKey, string>> = {}
+  // 比例在输入框里是百分数，但存储域是 fraction：区间校验用百分数口径，写回前除以 100。
+  const percentMin = ratioToPercentValue(LINE_RATIO_MIN)
+  const percentMax = ratioToPercentValue(LINE_RATIO_MAX)
   for (const key of LIVE_COMPACT_LINE_KEYS) {
     const label = LIVE_COMPACT_LINE_LABELS[key]
     const parsed = parseLineNumber(draft[key])
@@ -333,11 +430,11 @@ function parseLines(
       continue
     }
     if (mode === 'ratio') {
-      if (parsed < LINE_RATIO_MIN || parsed > LINE_RATIO_MAX) {
-        errors[key] = `${label}占比需在 ${LINE_RATIO_MIN} 与 ${LINE_RATIO_MAX} 之间`
+      if (parsed < percentMin || parsed > percentMax) {
+        errors[key] = `${label}占比需在 ${percentMin}% 与 ${percentMax}% 之间`
         continue
       }
-      values[key] = parsed
+      values[key] = parsed / 100
       continue
     }
     if (!Number.isInteger(parsed)) {
@@ -356,14 +453,15 @@ function parseLines(
 /**
  * 校验四条线草稿。
  *
- * - 比例模式：`keepRound ≤ trigger < urgent < bigGate`（与主进程组内顺序校验一致）；
+ * - 比例模式：草稿是百分数（`50` = 50%），校验后换算回 fraction（`0.5`）再输出，
+ *   组内需满足 `keepRound ≤ trigger < urgent < bigGate`（与主进程组内顺序校验一致）；
  * - 绝对值模式：只校验 `trigger < urgent < bigGate`，不限制保留线与起切线的先后
  *   （上游 Origin 就是保留线 32000 > 起切线 20000）。
  *
  * 顺序错误同时挂到相邻两个输入框上，用户改任意一侧都能看到提示。
  */
 export function validateLineDraft(
-  mode: LiveCompactLineMode,
+  mode: LiveCompactEditableLineMode,
   draft: LiveCompactLineDraft,
 ): LiveCompactLineValidation {
   const { values, errors } = parseLines(mode, draft)

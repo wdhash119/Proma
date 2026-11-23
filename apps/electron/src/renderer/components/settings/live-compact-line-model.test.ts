@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   absoluteToDraft,
+  calculateConversionPreview,
   calculateLinePreview,
   formatRatioPercent,
   formatTokenCount,
@@ -32,6 +33,7 @@ import {
   PREVIEW_WINDOW_DEFAULT,
   RENDERER_DEFAULT_LINE_ABSOLUTE,
   RENDERER_DEFAULT_LINE_RATIOS,
+  ratioToPercentValue,
   ratiosToDraft,
   toThresholdValue,
   validateLineDraft,
@@ -57,12 +59,13 @@ const thresholdSource = readAppFile('src/main/lib/adapters/live-compact-threshol
 const settingsServiceSource = readAppFile('src/main/lib/settings-service.ts')
 const modelSource = readAppFile('src/renderer/components/settings/live-compact-line-model.ts')
 
+/** 比例草稿是百分数串（'50' = 50% 窗口）。 */
 function draftOf(parts: Partial<LiveCompactLineDraft>): LiveCompactLineDraft {
   return {
-    trigger: '0.5',
-    keepRound: '0.35',
-    urgent: '0.75',
-    bigGate: '0.9',
+    trigger: '50',
+    keepRound: '35',
+    urgent: '75',
+    bigGate: '90',
     ...parts,
   }
 }
@@ -218,7 +221,7 @@ describe('Live Compact 四条线：比例模式校验', () => {
   })
 
   test('Given 保留线高于起切线 When 校验 Then 两个输入框都就地报错且不可保存', () => {
-    const result = validateLineDraft('ratio', draftOf({ keepRound: '0.6' }))
+    const result = validateLineDraft('ratio', draftOf({ keepRound: '60' }))
 
     expect(result.ok).toBe(false)
     expect(result.errors.keepRound).toContain('保留线不能高于起切线')
@@ -226,7 +229,7 @@ describe('Live Compact 四条线：比例模式校验', () => {
   })
 
   test('Given 起切线等于紧急线 When 校验 Then 报错并指出严格小于', () => {
-    const result = validateLineDraft('ratio', draftOf({ trigger: '0.75' }))
+    const result = validateLineDraft('ratio', draftOf({ trigger: '75' }))
 
     expect(result.ok).toBe(false)
     expect(result.errors.trigger).toBe('起切线必须严格低于紧急线')
@@ -234,23 +237,23 @@ describe('Live Compact 四条线：比例模式校验', () => {
   })
 
   test('Given 紧急线高于停手线 When 校验 Then 报错并指明哪条线更低', () => {
-    const result = validateLineDraft('ratio', draftOf({ urgent: '0.95', bigGate: '0.9' }))
+    const result = validateLineDraft('ratio', draftOf({ urgent: '95', bigGate: '90' }))
 
     expect(result.ok).toBe(false)
     expect(result.errors.urgent).toBe('紧急线必须严格低于停手线')
     expect(result.errors.bigGate).toBe('停手线必须严格高于紧急线')
   })
 
-  test('Given 占比越出 0.01..0.99 When 校验 Then 就地报错（不静默夹取）', () => {
-    for (const value of ['0', '0.001', '1', '1.2', '-0.3']) {
+  test('Given 占比越出 1%..99% When 校验 Then 就地报错（不静默夹取）', () => {
+    for (const value of ['0', '0.5', '99.5', '100', '120', '-30']) {
       const result = validateLineDraft('ratio', draftOf({ urgent: value }))
       expect(result.ok).toBe(false)
-      expect(result.errors.urgent).toContain('占比需在')
+      expect(result.errors.urgent).toContain('占比需在 1% 与 99% 之间')
     }
   })
 
   test('Given 空串或非数字 When 校验 Then 报“需要填数字”而不是被 Number("") 当成 0', () => {
-    for (const value of ['', '   ', 'abc', '0.5x']) {
+    for (const value of ['', '   ', 'abc', '50x']) {
       const result = validateLineDraft('ratio', draftOf({ trigger: value }))
       expect(result.ok).toBe(false)
       expect(result.errors.trigger).toBe('起切线需要填数字')
@@ -323,5 +326,115 @@ describe('Live Compact 展示格式', () => {
     expect(formatRatioPercent(0.5)).toBe('50%')
     expect(formatRatioPercent(0.35)).toBe('35%')
     expect(formatRatioPercent(0.075)).toBe('7.5%')
+  })
+})
+
+describe('Live Compact 四条线：百分数草稿与校验口径', () => {
+  test('Given 缺省比例组 When 转草稿 Then 输出 50 / 35 / 75 / 90 而不是 fraction', () => {
+    expect(ratiosToDraft(RENDERER_DEFAULT_LINE_RATIOS)).toEqual({
+      trigger: '50',
+      keepRound: '35',
+      urgent: '75',
+      bigGate: '90',
+    })
+  })
+
+  test('Given 带浮点噪声的比例 When 转百分数 Then 最多保留两位小数', () => {
+    expect(ratioToPercentValue(0.35)).toBe(35)
+    // 0.29 * 100 = 28.999999999999996，直接 String 会把噪声写进输入框。
+    expect(ratioToPercentValue(0.29)).toBe(29)
+    expect(ratioToPercentValue(0.075)).toBe(7.5)
+    expect(ratiosToDraft({ trigger: 0.29, keepRound: 0.075, urgent: 0.755, bigGate: 0.9 })).toEqual({
+      trigger: '29',
+      keepRound: '7.5',
+      urgent: '75.5',
+      bigGate: '90',
+    })
+  })
+
+  test('Given 比例区间常量 When 转百分数 Then 与输入框的 1%..99% 完全对齐', () => {
+    expect(ratioToPercentValue(LINE_RATIO_MIN)).toBe(1)
+    expect(ratioToPercentValue(LINE_RATIO_MAX)).toBe(99)
+  })
+
+  test('Given 百分数草稿 When 校验通过 Then 输出仍是存储域的 fraction', () => {
+    const result = validateLineDraft('ratio', draftOf({
+      trigger: '60',
+      keepRound: '45',
+      urgent: '80',
+      bigGate: '95',
+    }))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.mode !== 'ratio') throw new Error('应通过比例校验')
+    expect(result.ratios).toEqual({ trigger: 0.6, keepRound: 0.45, urgent: 0.8, bigGate: 0.95 })
+  })
+
+  test('Given 百分数带小数 When 校验 Then 先换算成 fraction 再比顺序', () => {
+    const result = validateLineDraft('ratio', draftOf({
+      trigger: '7.5',
+      keepRound: '5',
+      urgent: '10',
+      bigGate: '20',
+    }))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.mode !== 'ratio') throw new Error('应通过比例校验')
+    expect(result.ratios).toEqual({ trigger: 0.075, keepRound: 0.05, urgent: 0.1, bigGate: 0.2 })
+  })
+})
+
+describe('Live Compact 四条线：非生效列换算预览', () => {
+  test('Given 比例生效 When 200K 窗口 Then 预览绝对值列按窗口 × 比例取整', () => {
+    const preview = calculateConversionPreview(
+      { mode: 'ratio', ratios: RENDERER_DEFAULT_LINE_RATIOS },
+      PREVIEW_WINDOW_DEFAULT,
+    )
+
+    expect(preview.column).toBe('absolute')
+    expect(preview.windowTokens).toBe(200_000)
+    expect(preview.rows.map((row) => row.key)).toEqual([...LIVE_COMPACT_LINE_KEYS])
+    expect(preview.rows.map((row) => row.value)).toEqual([100_000, 70_000, 150_000, 180_000])
+    expect(preview.rows.map((row) => row.text)).toEqual(['100,000', '70,000', '150,000', '180,000'])
+  })
+
+  test('Given 比例生效 When 会有小数尾巴的窗口 Then 与 toThresholdValue 同一套取整', () => {
+    const preview = calculateConversionPreview(
+      { mode: 'ratio', ratios: { trigger: 0.5, keepRound: 0.35, urgent: 0.75, bigGate: 0.9 } },
+      33_333,
+    )
+
+    expect(preview.rows.map((row) => row.value)).toEqual([16_667, 11_667, 25_000, 30_000])
+  })
+
+  test('Given 绝对值生效 When 200K 窗口 Then 预览比例列是百分比文案', () => {
+    const preview = calculateConversionPreview(
+      { mode: 'absolute', absolute: RENDERER_DEFAULT_LINE_ABSOLUTE },
+      PREVIEW_WINDOW_DEFAULT,
+    )
+
+    expect(preview.column).toBe('ratio')
+    // 上游 Origin 的保留线 32000 高于起切线 20000，换算后同样是 16% > 10%。
+    expect(preview.rows.map((row) => row.value)).toEqual([10, 16, 24, 325])
+    expect(preview.rows.map((row) => row.text)).toEqual(['10%', '16%', '24%', '325%'])
+  })
+
+  test('Given 绝对值生效 When 1M 窗口 Then 上游 Origin 被摊薄成个位数占比', () => {
+    const preview = calculateConversionPreview(
+      { mode: 'absolute', absolute: RENDERER_DEFAULT_LINE_ABSOLUTE },
+      PREVIEW_WINDOW_COMPARISON,
+    )
+
+    expect(preview.rows.map((row) => row.value)).toEqual([2, 3.2, 4.8, 65])
+    expect(preview.rows.map((row) => row.text)).toEqual(['2%', '3.2%', '4.8%', '65%'])
+  })
+
+  test('Given 非法窗口 When 换算预览 Then 直接抛 TypeError 而不是渲染 NaN', () => {
+    for (const windowTokens of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => calculateConversionPreview(
+        { mode: 'ratio', ratios: RENDERER_DEFAULT_LINE_RATIOS },
+        windowTokens,
+      )).toThrow(TypeError)
+    }
   })
 })

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
@@ -22,7 +23,6 @@ import type {
   UserMessage,
 } from '@earendil-works/pi-ai'
 import type { CompactionEntry } from '@earendil-works/pi-coding-agent'
-import * as bundledAlgorithm from '@proma/live-compact'
 import {
   createLiveCompactExtension,
   type LiveCompactCutRecord,
@@ -32,6 +32,32 @@ import {
   computeLiveCompactThresholds,
   type LiveCompactThresholdOverrides,
 } from './live-compact-thresholds'
+
+/**
+ * 让算法层按上游默认旋钮加载。
+ *
+ * `packages/live-compact/src/select.ts` 在**模块加载时**就把 SPINE_CHUNK_MIN / SPINE_CHUNK_MAX /
+ * SPINE_POINTER_TOKENS / SPINE_KEEP_ROUNDS / SPINE_KEEP_ROUND_TOKENS 求值成模块级常量。
+ * 仓库代码不会把这些变量写进 App 自身的 process.env（向 utility 进程 fork 时传的是独立 env 副本），
+ * 但 App / Agent 会继承启动它的终端环境；调试时 export 过 SPINE_* 的终端拉起 App 后，
+ * 由它派生的 `bun test` 就带着同一份覆盖。宿主一旦带覆盖进来（例如
+ * SPINE_KEEP_ROUND_TOKENS=350000），保留轮预算就装得下最新三个完整工具轮，选段不再是
+ * “32000 只留两轮”，本文件按默认值写就的切段期望会整体错位——这正是「首条替换成卡片」
+ * 「onCut 记录」和「内存态存档退化」三个用例失败的成因，与 turn_end 的当前轮/投影尾部守卫无关。
+ *
+ * 仓库根的 `bunfig.toml` 已用 `[test].preload` 在标准入口（根 `bun test`）统一清理 SPINE_*；
+ * 这段前导仍然保留，因为 bun 只读取**当前工作目录**的 bunfig.toml，从子目录 cwd 跑 bun test
+ * 不会继承根配置。这里额外丢掉可能已被其他测试文件按污染环境加载过的算法模块实例，
+ * 再重取一份干净实例，所以无论单跑、从子目录跑还是整包一起跑都稳定在默认旋钮上。
+ */
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith('SPINE_')) delete process.env[key]
+}
+const testRequire = createRequire(import.meta.url)
+for (const key of Object.keys(testRequire.cache)) {
+  if (/[\\/]packages[\\/]live-compact[\\/]/.test(key)) delete testRequire.cache[key]
+}
+const bundledAlgorithm = await import('@proma/live-compact')
 
 const TIMESTAMP = '2026-11-22T10:00:00.000Z'
 const temporaryRoots: string[] = []
@@ -320,6 +346,17 @@ function runTurnEnd(
     | { entries: ContextEditEntryDraft[] }
     | undefined
 }
+
+describe('Live Compact 胶层：算法旋钮基线', () => {
+  test('Given 宿主进程带着 SPINE_* 阈值覆盖 When 本文件加载算法层 Then 选段仍按上游默认旋钮求值', () => {
+    // 这两个常量决定“保留几轮、切段落在哪一轮”：预算被环境放大到装得下三个完整工具轮时，
+    // 下面所有切段用例的期望都会错位。先钉住基线，让环境泄漏当场报错而不是伪装成行为回归。
+    expect(bundledAlgorithm.KEEP_ROUNDS).toBe(3)
+    expect(bundledAlgorithm.KEEP_ROUND_TOKENS).toBe(32000)
+    expect(bundledAlgorithm.CHUNK_MIN).toBe(1000)
+    expect(bundledAlgorithm.CHUNK_MAX).toBe(32000)
+  })
+})
 
 describe('Live Compact 胶层：开关与压力', () => {
   test('Given 会话开关关闭 When turn_end Then 零 entries 且不记录 cut', () => {

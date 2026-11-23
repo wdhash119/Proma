@@ -1,0 +1,11 @@
+# Bun 配置：只声明测试期行为，不改 dev / build。
+#
+# [test].preload 里的脚本在 bun test 启动时、任何测试文件加载前执行，
+# 用来清掉宿主进程带进来的 SPINE_* 覆盖。算法层在模块加载时就把这些变量
+# 求值成模块级常量，测试必须按上游默认旋钮求值（详见 scripts/test-preload.ts）。
+#
+# 标准测试入口是仓库根 `bun test`：bun 只读取**当前工作目录**的 bunfig.toml，
+# 所以从子包目录（例如 packages/live-compact）直接跑 bun test 不会继承本文件，
+# 那类环境由测试文件自己的前导兜底。
+[test]
+preload = ["./scripts/test-preload.ts"]

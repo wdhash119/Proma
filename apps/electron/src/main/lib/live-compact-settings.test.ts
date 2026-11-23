@@ -156,3 +156,113 @@ describe('Live Compact 查询输入组装', () => {
     expect(cloned).toEqual(input)
   })
 })
+
+describe('Live Compact 四条线：比例与绝对值换算', () => {
+  test('Given 比例模式缺省（0.5/0.35/0.75/0.9）When 200K 窗口 Then 100000/70000/150000/180000', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true } },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow: 200_000 },
+      configDir: '/tmp/proma',
+    })
+    expect(input?.thresholds.minPressureTokens).toBe(100_000)
+    expect(input?.thresholds.keepRoundTokens).toBe(70_000)
+    expect(input?.thresholds.urgentTokens).toBe(150_000)
+    expect(input?.thresholds.bigGateTokens).toBe(180_000)
+  })
+
+  test('Given 比例模式自定义占比 When 128K 窗口 Then 按窗口乘比例如实换算', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: {
+        liveCompact: {
+          enabled: true,
+          lineMode: 'ratio',
+          ratios: { trigger: 0.6, keepRound: 0.45, urgent: 0.8, bigGate: 0.95 },
+        },
+      },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow: 128_000 },
+      configDir: '/tmp/proma',
+    })
+    expect(input?.thresholds.minPressureTokens).toBe(76_800)
+    expect(input?.thresholds.keepRoundTokens).toBe(57_600)
+    expect(input?.thresholds.urgentTokens).toBe(102_400)
+    expect(input?.thresholds.bigGateTokens).toBe(121_600)
+  })
+
+  test('Given 绝对值模式 When 任意窗口 Then 四条线直传 token 数、不乘窗口', () => {
+    const absolute = {
+      triggerTokens: 30_000,
+      keepRoundTokens: 40_000,
+      urgentTokens: 60_000,
+      bigGateTokens: 90_000,
+    }
+    for (const contextWindow of [50_000, 200_000, 1_000_000]) {
+      const input = buildLiveCompactQueryInput({
+        meta: { liveCompact: true },
+        settings: { liveCompact: { enabled: true, lineMode: 'absolute', absolute } },
+        modelId: 'some-unknown-model',
+        modelCapabilities: { contextWindow },
+        configDir: '/tmp/proma',
+      })
+      expect(input?.thresholds.minPressureTokens).toBe(30_000)
+      expect(input?.thresholds.keepRoundTokens).toBe(40_000)
+      expect(input?.thresholds.urgentTokens).toBe(60_000)
+      expect(input?.thresholds.bigGateTokens).toBe(90_000)
+    }
+  })
+
+  test('Given 绝对值模式缺省组 When 组装 Then 用上游 Origin 20000/32000/48000/650000', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true, lineMode: 'absolute' } },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow: 200_000 },
+      configDir: '/tmp/proma',
+    })
+    expect(input?.thresholds.minPressureTokens).toBe(20_000)
+    expect(input?.thresholds.keepRoundTokens).toBe(32_000)
+    expect(input?.thresholds.urgentTokens).toBe(48_000)
+    expect(input?.thresholds.bigGateTokens).toBe(650_000)
+  })
+
+  test('Given 比例顺序非法（绕过归一化直接构造）When 组装 Then 沿用“本条不启用 + warn”兜底', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: {
+        liveCompact: {
+          enabled: true,
+          ratios: { trigger: 0.5, keepRound: 0.6, urgent: 0.75, bigGate: 0.9 },
+        },
+      },
+      modelId: 'some-unknown-model',
+      modelCapabilities: { contextWindow: 200_000 },
+      configDir: '/tmp/proma',
+    })
+    expect(input).toBeUndefined()
+  })
+})
+
+describe('Live Compact 当前轮保护透传', () => {
+  test('Given 设置缺省 When 组装 Then protectCurrentTurn 为 true', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true } },
+      modelId: 'some-unknown-model',
+      configDir: '/tmp/proma',
+    })
+    expect(input?.protectCurrentTurn).toBe(true)
+  })
+
+  test('Given 显式 false When 组装 Then protectCurrentTurn 为 false', () => {
+    const input = buildLiveCompactQueryInput({
+      meta: { liveCompact: true },
+      settings: { liveCompact: { enabled: true, protectCurrentTurn: false } },
+      modelId: 'some-unknown-model',
+      configDir: '/tmp/proma',
+    })
+    expect(input?.protectCurrentTurn).toBe(false)
+  })
+})

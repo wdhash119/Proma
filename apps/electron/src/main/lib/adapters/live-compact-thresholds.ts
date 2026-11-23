@@ -14,10 +14,17 @@
  * 0.8W：spine 先行、官方压缩兜底）、停手线 0.9W。算法层的四个选段旋钮（单段最小/最大、
  * 指针化阈值、保留轮数）沿用上游默认值。
  *
+ * 用户可在设置里把四条线改成**绝对值模式**（不随窗口变化，值即上游 Origin token 数）。
+ * 两种模式共用本表求值：比例模式按窗口乘占比，绝对值模式直取 `absoluteOrigin`。
+ * 唯一随模式变化的校验是“保留预算 ≤ 触发线”：上游 Origin 里 32000 > 20000 是既定顺序
+ * （云端 drain 每轮最多一刀），所以绝对值模式放开这一条，其余顺序不变式照常。
+ *
  * 本文件同时产出两种形态，且**只在这张表里求值一次**：
  * - typed 对象：胶层（pi-live-compact-extension.ts）直接消费；
  * - env 字符串记录：P2b 注入 utility 进程 fork env，供算法层模块加载时读取。
  */
+
+import type { LiveCompactLineAbsolute, LiveCompactLineMode, LiveCompactLineRatios } from '../../../types'
 
 /** 窗口占比：触发线（上游 MIN_PRESSURE=20000 的 Proma 化）。 */
 export const LIVE_COMPACT_TRIGGER_RATIO = 0.5
@@ -52,8 +59,39 @@ const UPSTREAM_KEEP_ROUNDS = 3
  */
 const UPSTREAM_COOLDOWN_MS = 0
 
+/**
+ * 上游 Origin：四条线的绝对值。
+ *
+ * 来源：dsh-live-compact 的 `settings.js` 默认值与 `index.js` 硬编码（触发线与保留线可由
+ * SPINE_MIN_TOKENS / SPINE_KEEP_ROUND_TOKENS 覆盖，紧急线与停手线固定）。
+ * 这些是**绝对 token 数、不随模型窗口变化**，设置页的 Origin 只读卡直接展示它们。
+ *
+ * 注意保留线 32000 高于触发线 20000 是上游既定顺序（等价于云端 drain 每轮最多一刀），
+ * 所以绝对值模式必须放开“保留预算 ≤ 触发线”这条校验。
+ */
+export const UPSTREAM_MIN_TOKENS = 20_000
+export const UPSTREAM_KEEP_ROUND_TOKENS = 32_000
+export const UPSTREAM_URGENT_TOKENS = 48_000
+export const UPSTREAM_BIG_GATE = 650_000
+
 /** 阈值对象里不带 env 记录的纯数值字段名。 */
 export type LiveCompactThresholdField = keyof LiveCompactThresholdValues
+
+/** 设置页与归一化共用的缺省比例组（与上面的比例常量同源，不另写数字）。 */
+export const DEFAULT_LIVE_COMPACT_LINE_RATIOS: LiveCompactLineRatios = {
+  trigger: LIVE_COMPACT_TRIGGER_RATIO,
+  keepRound: LIVE_COMPACT_KEEP_ROUND_RATIO,
+  urgent: LIVE_COMPACT_URGENT_RATIO,
+  bigGate: LIVE_COMPACT_BIG_GATE_RATIO,
+}
+
+/** 设置页与归一化共用的缺省绝对值组（即上游 Origin 的四个值）。 */
+export const DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE: LiveCompactLineAbsolute = {
+  triggerTokens: UPSTREAM_MIN_TOKENS,
+  keepRoundTokens: UPSTREAM_KEEP_ROUND_TOKENS,
+  urgentTokens: UPSTREAM_URGENT_TOKENS,
+  bigGateTokens: UPSTREAM_BIG_GATE,
+}
 
 /** 阈值数值本体（不含 env 记录）。 */
 export interface LiveCompactThresholdValues {
@@ -105,6 +143,11 @@ export interface LiveCompactThresholdSpec {
   envKey?: string
   /** 中文语义（设置页与文档复用这份措辞，避免各处重写）。 */
   semantics: string
+  /**
+   * 绝对值模式下的缺省 token 数（仅四条线有）。
+   * 存在时，`lineMode: 'absolute'` 且没给对应 override 就用它，而不是按窗口比例求值。
+   */
+  absoluteOrigin?: number
   /** 求值：可使用窗口大小与表中已求出的前序字段。 */
   resolve: (input: {
     contextWindow: number
@@ -127,22 +170,26 @@ export const LIVE_COMPACT_THRESHOLD_SPECS: readonly LiveCompactThresholdSpec[] =
     field: 'minPressureTokens',
     envKey: 'SPINE_MIN_TOKENS',
     semantics: '触发线：上下文占用低于它时整个 turn 直接返回，不选段也不切',
+    absoluteOrigin: UPSTREAM_MIN_TOKENS,
     resolve: ({ contextWindow }) => contextWindow * LIVE_COMPACT_TRIGGER_RATIO,
   },
   {
     field: 'keepRoundTokens',
     envKey: 'SPINE_KEEP_ROUND_TOKENS',
     semantics: '保留轮预算：最新若干工具轮的总 token 预算，同时是云端 drain 的压后目标线',
+    absoluteOrigin: UPSTREAM_KEEP_ROUND_TOKENS,
     resolve: ({ contextWindow }) => contextWindow * LIVE_COMPACT_KEEP_ROUND_RATIO,
   },
   {
     field: 'urgentTokens',
     semantics: '紧急线：云端占用达到它即强制 drain（上游硬编码 48000，Proma 改为窗口比例）',
+    absoluteOrigin: UPSTREAM_URGENT_TOKENS,
     resolve: ({ contextWindow }) => contextWindow * LIVE_COMPACT_URGENT_RATIO,
   },
   {
     field: 'bigGateTokens',
     semantics: '停手线：总量达到即完全让位给官方压缩，不再切',
+    absoluteOrigin: UPSTREAM_BIG_GATE,
     resolve: ({ contextWindow }) => contextWindow * LIVE_COMPACT_BIG_GATE_RATIO,
   },
   {
@@ -192,30 +239,42 @@ function toThresholdValue(field: LiveCompactThresholdField, raw: number): number
   return Math.max(1, Math.round(raw))
 }
 
+/** `computeLiveCompactThresholds` 的模式选项。 */
+export interface LiveCompactThresholdOptions {
+  /** 四条线的取值模式；缺省 'ratio'（按窗口比例）。 */
+  lineMode?: LiveCompactLineMode
+}
+
 /**
  * 由模型窗口换算出全套阈值。
  *
- * overrides 只用于（a）测试构造确定的取值、（b）P2b 之后的设置项；缺省一律按
- * 窗口比例与上游默认值求值。返回对象里的 env 记录由**同一批已求值结果**生成，
- * 因此胶层参数与子进程 env 不可能出现两份来源。
+ * overrides 只用于（a）测试构造确定的取值、（b）设置项；缺省一律按窗口比例与上游默认值求值。
+ * `options.lineMode === 'absolute'` 时，四条线没给 override 就取上游 Origin 绝对值；
+ * 该模式同时放开“保留预算 ≤ 触发线”（上游 Origin 就是 32000 > 20000）。
+ * 返回对象里的 env 记录由**同一批已求值结果**生成，因此胶层参数与子进程 env 不可能出现两份来源。
  */
 export function computeLiveCompactThresholds(
   contextWindow: number,
   overrides: LiveCompactThresholdOverrides = {},
+  options: LiveCompactThresholdOptions = {},
 ): LiveCompactThresholds {
   if (!Number.isFinite(contextWindow) || contextWindow <= 0) {
     throw new TypeError(`Live Compact 需要正的有限窗口大小，收到 ${String(contextWindow)}`)
   }
 
+  const lineMode: LiveCompactLineMode = options.lineMode ?? 'ratio'
+  const absolute = lineMode === 'absolute'
   const resolved: Partial<Record<LiveCompactThresholdField, number>> = {}
   for (const spec of LIVE_COMPACT_THRESHOLD_SPECS) {
     const override = overrides[spec.field]
-    const raw = override ?? spec.resolve({ contextWindow, resolved })
+    // 绝对值模式：四条线优先取上游 Origin，而不是窗口比例（避免“界面说绝对值、实际按窗口”）。
+    const absoluteOrigin = absolute && spec.absoluteOrigin !== undefined ? spec.absoluteOrigin : undefined
+    const raw = override ?? absoluteOrigin ?? spec.resolve({ contextWindow, resolved })
     resolved[spec.field] = toThresholdValue(spec.field, raw)
   }
 
   const values = resolved as Record<LiveCompactThresholdField, number>
-  assertThresholdInvariants(values)
+  assertThresholdInvariants(values, lineMode)
 
   const env: Record<string, string> = {}
   for (const spec of LIVE_COMPACT_THRESHOLD_SPECS) {
@@ -226,9 +285,17 @@ export function computeLiveCompactThresholds(
   return { ...values, env }
 }
 
-/** 表内不变量：比例换算一旦被覆盖成不合理组合，宁可报错也不要发出错误 env。 */
-function assertThresholdInvariants(values: Record<LiveCompactThresholdField, number>): void {
-  if (values.keepRoundTokens > values.minPressureTokens) {
+/**
+ * 表内不变量：比例换算一旦被覆盖成不合理组合，宁可报错也不要发出错误 env。
+ *
+ * 绝对值模式只放宽“保留预算 ≤ 触发线”一条：上游 Origin 的保留线 32000 高于触发线 20000，
+ * 语义上是“每轮 drain 最多一刀”。其余顺序（触发 < 紧急 < 停手、单段最小 ≤ 最大）不变。
+ */
+function assertThresholdInvariants(
+  values: Record<LiveCompactThresholdField, number>,
+  lineMode: LiveCompactLineMode,
+): void {
+  if (lineMode !== 'absolute' && values.keepRoundTokens > values.minPressureTokens) {
     throw new TypeError(
       `Live Compact 保留轮预算（${values.keepRoundTokens}）不应高于触发线（${values.minPressureTokens}）：` +
       '压后目标线高于触发线会让每次 drain 立即停止',

@@ -21,9 +21,10 @@
  * 7. 多趟：云端 drain 在多轮里连续切，直到压后总量落在保留轮预算内（上游把多趟折进一次
  *    turn_end）。
  *
- * Proma 化的三处（都在参数/开关层，不动算法语义）：
- * - 阈值全部来自 `LiveCompactThresholds`（按模型窗口比例换算），不再读散落的 env 常量；
+ * Proma 化的四处（都在参数/开关层，不动算法语义）：
+ * - 阈值全部来自 `LiveCompactThresholds`（按模型窗口比例或用户设定的绝对值），不再读散落的 env 常量；
  * - 开关由 `isEnabled()` 每轮动态读取（上游 SPINE_STAND_DOWN 的等价物：关闭即不切）；
+ * - 当前轮/投影末尾护栏由 `protectCurrentTurn` 门控（缺省开；关时回到上游纯算法行为）；
  * - `ctx.ui.notify` 在 utility 进程没有真正的 UI 落点（FINDINGS §5.7），改为
  *   `onCut` 结构化回调，由主进程/日志侧消费；同时**不**把总量交给算法的内部紧急线，
  *   避免算法里硬编码的 48000 抢先触发云端切段、压过 Proma 的 0.75W 紧急线（见 turn_end 注释）。
@@ -109,6 +110,14 @@ export interface LiveCompactExtensionOptions {
   algorithm: LiveCompactAlgorithm
   /** 按模型窗口换算好的阈值（见 live-compact-thresholds）。 */
   thresholds: LiveCompactThresholds
+  /**
+   * 当前轮保护开关；缺省 true。
+   *
+   * - true：`turn_end` 携带的末条消息与工具结果（刚结束的当前轮）以及投影尾部都不被切，
+   *   命中时记一条 `skip_protected_span` 日志（ec918f21 的修复）；
+   * - false：完全跳过这两道护栏，恢复上游“当前轮也可被切”的行为，也不再打该日志。
+   */
+  protectCurrentTurn?: boolean
   /** 切段结构化记录回调；不传时切段仍然发生，只是没有记录出口。 */
   onCut?: (record: LiveCompactCutRecord) => void
   /** 时间源，测试注入；默认 Date.now。 */
@@ -372,11 +381,11 @@ export function createLiveCompactExtension(
 
       // 本轮受保护的条目：turn_end 携带的末条消息与工具结果。
       // 集合在整次 turn_end 内不变，但每一趟都要重新检查——drain 可能先切旧段，
-      // 后续 pass 才把当前轮选成候选。
-      const protectedEntryIds = new Set<string>([
-        event.messageEntryId,
-        ...event.toolResultEntryIds,
-      ])
+      // 后续 pass 才把当前轮选成候选。开关关闭时整个护栏不存在（= 上游行为）。
+      const protectCurrentTurn = options.protectCurrentTurn !== false
+      const protectedEntryIds = protectCurrentTurn
+        ? new Set<string>([event.messageEntryId, ...event.toolResultEntryIds])
+        : undefined
 
       for (let pass = 0; pass < MAX_PASSES; pass += 1) {
         if (drain && simulatedTotal <= thresholds.keepRoundTokens) break
@@ -396,16 +405,19 @@ export function createLiveCompactExtension(
         // 选段后守卫：候选一旦触及刚结束的当前轮或投影尾部，就停止本次后续切段。
         // 这里必须 break 而非 continue：work 与 simulatedTotal 都没变，重试只会
         // 得到同一个候选。若此前 pass 已产生安全旧段草案，保留并返回这些草案。
-        const touchesCurrentTurn = span.some((entry) => protectedEntryIds.has(entry.id))
-        const touchesProjectionTail = chunk.end >= work.length - 1
-        if (touchesCurrentTurn || touchesProjectionTail) {
-          console.log('[live-compact] ' + JSON.stringify({
-            event: 'skip_protected_span',
-            sessionId: options.sessionId,
-            reason: touchesCurrentTurn ? 'current_turn' : 'projection_tail',
-            headEntryId: head.id,
-          }))
-          break
+        // 保护开关关闭时整段跳过（包括日志），以回到上游纯算法行为。
+        if (protectedEntryIds) {
+          const touchesCurrentTurn = span.some((entry) => protectedEntryIds.has(entry.id))
+          const touchesProjectionTail = chunk.end >= work.length - 1
+          if (touchesCurrentTurn || touchesProjectionTail) {
+            console.log('[live-compact] ' + JSON.stringify({
+              event: 'skip_protected_span',
+              sessionId: options.sessionId,
+              reason: touchesCurrentTurn ? 'current_turn' : 'projection_tail',
+              headEntryId: head.id,
+            }))
+            break
+          }
         }
 
         const tailBeyondKept = chunk.after - (chunk.keptTokens || 0)

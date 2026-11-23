@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -283,6 +283,7 @@ interface Harness {
 function install(options: {
   isEnabled?: () => boolean
   thresholds?: LiveCompactExtensionOptions['thresholds']
+  protectCurrentTurn?: boolean
   sessionFile?: string
   tokens?: number | null
   now?: () => number
@@ -294,6 +295,7 @@ function install(options: {
     sessionId: 'session-1',
     algorithm: bundledAlgorithm,
     thresholds: options.thresholds ?? testThresholds(),
+    ...(options.protectCurrentTurn === undefined ? {} : { protectCurrentTurn: options.protectCurrentTurn }),
     onCut: (record) => records.push(record),
     ...(options.now ? { now: options.now } : {}),
   })
@@ -407,6 +409,36 @@ describe('Live Compact 胶层：当前轮与投影尾部保护', () => {
   test('Given 当前轮以 40000 token read 收尾 When turn_end Then 零草案且不记录 cut', () => {
     const harness = install()
     // 修复前算法会把当前轮选成指针候选，这里会返回一条指向 t-current 的草案。
+    const result = runTurnEnd(harness, currentLongReadProjection(), {
+      messageEntryId: 'a-current',
+      toolResultEntryIds: ['t-current'],
+    })
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+  })
+
+  test('Given 保护开关关闭 When 当前轮以 40000 token read 收尾 Then 当前轮被切成卡且不打保护日志', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const harness = install({ protectCurrentTurn: false })
+      const result = runTurnEnd(harness, currentLongReadProjection(), {
+        messageEntryId: 'a-current',
+        toolResultEntryIds: ['t-current'],
+      })
+      // 关闭护栏 = 回到上游行为：算法把当前长读轮选成指针候选。
+      expect(result).toBeDefined()
+      expect(result?.entries.map((draft) => draft.targetId)).toEqual(['a-current', 't-current'])
+      expect(harness.records).toHaveLength(1)
+      expect(harness.records[0]?.spans[0]?.pointerOnly).toBe(true)
+      const logged = logSpy.mock.calls.map((call) => call.map((value: unknown) => String(value)).join(' '))
+      expect(logged.some((line) => line.includes('skip_protected_span'))).toBe(false)
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  test('Given 保护开关为缺省 When 同一投影 Then 当前轮仍然被保护（缺省不变）', () => {
+    const harness = install()
     const result = runTurnEnd(harness, currentLongReadProjection(), {
       messageEntryId: 'a-current',
       toolResultEntryIds: ['t-current'],

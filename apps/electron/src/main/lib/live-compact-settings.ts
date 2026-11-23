@@ -18,8 +18,14 @@
 
 import { DEFAULT_CONTEXT_WINDOW, inferContextWindow } from '@proma/shared'
 import type { AgentSessionMeta, ModelCapabilityOverrides } from '@proma/shared'
-import type { LiveCompactSettings } from '../../types'
-import { computeLiveCompactThresholds, type LiveCompactThresholds } from './adapters/live-compact-thresholds'
+import type { LiveCompactLineMode, LiveCompactSettings } from '../../types'
+import {
+  computeLiveCompactThresholds,
+  DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE,
+  DEFAULT_LIVE_COMPACT_LINE_RATIOS,
+  type LiveCompactThresholdOverrides,
+  type LiveCompactThresholds,
+} from './adapters/live-compact-thresholds'
 
 /** 参与开关解析的最小元数据形状（便于 truth table 测试直接构造）。 */
 export interface LiveCompactMetaCarrier {
@@ -65,6 +71,11 @@ export interface LiveCompactQueryInput {
   /** 按模型窗口换算好的阈值（含 fork env 记录，见 live-compact-thresholds）。 */
   thresholds: LiveCompactThresholds
   /**
+   * 当前轮保护开关（设置项 protectCurrentTurn 的生效值）。
+   * true = 刚结束的当前轮与投影尾部不可切；false = 恢复上游行为（当前轮也可被切）。
+   */
+  protectCurrentTurn: boolean
+  /**
    * 覆盖层清单（`<configDir>/live-compact/active.json`）所在配置目录。
    * utility 进程自己去猜配置目录会踩 PROMA_DEV 与打包态的差异，
    * 所以由已知确切路径的主进程显式传入。
@@ -96,6 +107,43 @@ export function resolveLiveCompactContextWindow(input: {
 }
 
 /**
+ * 把设置里的四条线换算成阈值 overrides。
+ *
+ * - 比例模式：用 `窗口 × 比例` 作为覆盖值，取整与夹取留给 computeLiveCompactThresholds
+ *   的同一个 toThresholdValue（不在这里重复一份取整逻辑，避免两条路径出现差异）；
+ * - 绝对值模式：直接给 token 数，不乘窗口。
+ * 设置组缺失时用缺省值（与设置归一化边界同一份常量）。
+ */
+export function resolveLiveCompactLineOverrides(
+  settings: LiveCompactSettings | undefined,
+  contextWindow: number,
+): { lineMode: LiveCompactLineMode; overrides: LiveCompactThresholdOverrides } {
+  const lineMode: LiveCompactLineMode = settings?.lineMode === 'absolute' ? 'absolute' : 'ratio'
+  if (lineMode === 'absolute') {
+    const absolute = settings?.absolute ?? DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE
+    return {
+      lineMode,
+      overrides: {
+        minPressureTokens: absolute.triggerTokens,
+        keepRoundTokens: absolute.keepRoundTokens,
+        urgentTokens: absolute.urgentTokens,
+        bigGateTokens: absolute.bigGateTokens,
+      },
+    }
+  }
+  const ratios = settings?.ratios ?? DEFAULT_LIVE_COMPACT_LINE_RATIOS
+  return {
+    lineMode,
+    overrides: {
+      minPressureTokens: contextWindow * ratios.trigger,
+      keepRoundTokens: contextWindow * ratios.keepRound,
+      urgentTokens: contextWindow * ratios.urgent,
+      bigGateTokens: contextWindow * ratios.bigGate,
+    },
+  }
+}
+
+/**
  * 组装本轮查询用的 Live Compact 参数；关闭或求值失败时返回 undefined。
  *
  * 返回 undefined 是"零行为变化"的唯一保证：查询输入不带字段、fork env 不注入、
@@ -115,10 +163,18 @@ export function buildLiveCompactQueryInput(input: {
     modelCapabilities: input.modelCapabilities,
   })
   try {
-    const thresholds = computeLiveCompactThresholds(contextWindow)
-    return { enabled: true, thresholds, configDir: input.configDir }
+    const { lineMode, overrides } = resolveLiveCompactLineOverrides(input.settings?.liveCompact, contextWindow)
+    const thresholds = computeLiveCompactThresholds(contextWindow, overrides, { lineMode })
+    return {
+      enabled: true,
+      thresholds,
+      // 缺省保护：只有设置里显式 false 才关。
+      protectCurrentTurn: input.settings?.liveCompact?.protectCurrentTurn !== false,
+      configDir: input.configDir,
+    }
   } catch (error) {
-    // 阈值不变量失败（例如窗口估算异常）时宁可本轮不启用，也不要把错误 env 下发到子进程。
+    // 阈值不变式失败（例如窗口估算异常、手写比例顺序非法）时宁可本轮不启用，
+    // 也不要把错误 env 下发到子进程。
     console.warn('[Live Compact] 阈值求值失败，本轮不启用:', error)
     return undefined
   }

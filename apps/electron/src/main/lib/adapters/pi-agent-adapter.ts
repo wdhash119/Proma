@@ -1442,6 +1442,8 @@ async function createLiveCompactExtensionFactories(
         sessionId,
         algorithm: resolved.algorithm,
         thresholds: liveCompact.thresholds,
+        // 设置页的保护开关（缺省 true）随查询输入白名单透传，胶层据此门控当前轮护栏。
+        protectCurrentTurn: liveCompact.protectCurrentTurn,
         // utility 进程没有 UI 落点（FINDINGS §5.7）：cut 事件 v1 只落结构化日志，
         // 前缀固定为 [live-compact]，便于从开发终端/主进程日志里 grep 复盘。
         onCut: (record) => console.log('[live-compact] ' + JSON.stringify(record)),

@@ -92,6 +92,7 @@ function createQueryInput(liveCompact?: LiveCompactQueryInput): PiAgentQueryOpti
 const liveCompactInput: LiveCompactQueryInput = {
   enabled: true,
   thresholds: computeLiveCompactThresholds(200_000),
+  protectCurrentTurn: true,
   configDir: 'D:\\proma-test',
 }
 
@@ -160,6 +161,8 @@ describe('Live Compact 接线契约（源码级）', () => {
     expect(source).toContain('? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active)')
     expect(source).toContain('createLiveCompactExtension({')
     expect(source).toContain('isEnabled: () => enabledRef.enabled')
+    // 保护开关随查询输入白名单显式透传（Live Compact 字段逐项传入，不整体展开）。
+    expect(source).toContain('protectCurrentTurn: liveCompact.protectCurrentTurn')
     expect(source).toContain('resolveLiveCompactAlgorithm(liveCompact.configDir')
     // cut 事件 v1 的结构化日志出口。
     expect(source).toContain("console.log('[live-compact] ' + JSON.stringify(record))")
@@ -185,9 +188,27 @@ describe('Live Compact 接线契约（源码级）', () => {
     expect(settingsTypes).toContain('export interface LiveCompactSettings')
   })
 
-  test('Given 设置服务 When 读取旧配置 Then Live Compact 缺省关闭', () => {
+  test('Given 设置服务 When 读取旧配置 Then Live Compact 缺省关闭且新字段被保留', () => {
     const source = readFileSync(join(import.meta.dir, '../settings-service.ts'), 'utf8')
     expect(source).toContain('liveCompact: { enabled: false }')
     expect(source).toContain('liveCompact: normalizeLiveCompactSettings(data.liveCompact)')
+    // 归一化是读取侧唯一入口：新字段没被返回就会在“读取 → 保存”里蒸发。
+    expect(source).toContain('protectCurrentTurn: raw.protectCurrentTurn !== false')
+    expect(source).toContain('ratios: normalizeLiveCompactLineRatios(raw.ratios)')
+    expect(source).toContain('absolute: normalizeLiveCompactLineAbsolute(raw.absolute)')
+    expect(source).toContain("lineMode: raw.lineMode === 'absolute' ? 'absolute' : 'ratio'")
+  })
+
+  test('Given 组装层 When 换算四条线 Then 绝对值模式直传 token、比例模式乘窗口，lineMode 随阈值一起求值', () => {
+    const source = readFileSync(join(import.meta.dir, '../live-compact-settings.ts'), 'utf8')
+    expect(source).toContain('resolveLiveCompactLineOverrides(')
+    expect(source).toContain('computeLiveCompactThresholds(contextWindow, overrides, { lineMode })')
+    expect(source).toContain('protectCurrentTurn: input.settings?.liveCompact?.protectCurrentTurn !== false')
+  })
+
+  test('Given 胶层 When 门控当前轮护栏 Then 开关关闭时整段跳过（含 skip_protected_span 日志）', () => {
+    const source = read('pi-live-compact-extension.ts')
+    expect(source).toContain("const protectCurrentTurn = options.protectCurrentTurn !== false")
+    expect(source).toContain('if (protectedEntryIds) {')
   })
 })

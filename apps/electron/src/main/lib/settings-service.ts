@@ -9,17 +9,104 @@ import { readFileSync, existsSync } from 'node:fs'
 import { getSettingsPath } from './config-paths'
 import { writeJsonFileAtomic } from './safe-file'
 import { DEFAULT_THEME_MODE, normalizeDisabledUserSkillSlugs, normalizeProductivityToolsSettings } from '../../types'
-import type { AppSettings, LiveCompactSettings } from '../../types'
+import type {
+  AppSettings,
+  LiveCompactLineAbsolute,
+  LiveCompactLineRatios,
+  LiveCompactSettings,
+} from '../../types'
 import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 import { normalizeVisionRelaySettings } from './vision-relay-policy'
+import {
+  DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE,
+  DEFAULT_LIVE_COMPACT_LINE_RATIOS,
+} from './adapters/live-compact-thresholds'
+
+/** 比例组的合法区间：0 = 永不触发，1 = 任何占用都触发，两边都不可用。 */
+const LINE_RATIO_MIN = 0.01
+const LINE_RATIO_MAX = 0.99
+/** 绝对值组的合法区间：1 token 到一千万 token（足够覆盖已出现的 1M 级窗口）。 */
+const LINE_TOKENS_MIN = 1
+const LINE_TOKENS_MAX = 10_000_000
+
+/** 取有限数值并夹到区间内；类型不对或非有限值返回 undefined（由调用方整组回落）。 */
+function clampLineNumber(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return Math.min(max, Math.max(min, value))
+}
+
+/** 整数 token：先来区间夹取，再四舍五入（token 数不接受小数）。 */
+function clampLineTokens(value: unknown): number | undefined {
+  const clamped = clampLineNumber(value, LINE_TOKENS_MIN, LINE_TOKENS_MAX)
+  return clamped === undefined ? undefined : Math.round(clamped)
+}
+
+/**
+ * 归一化比例组。
+ *
+ * 逐字段 clamp 到 0.01..0.99；任一项缺失/类型不对，或组内不是
+ * `keepRound ≤ trigger < urgent < bigGate`，整组回落缺省 0.5 / 0.35 / 0.75 / 0.9。
+ */
+function normalizeLiveCompactLineRatios(input: unknown): LiveCompactLineRatios {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const trigger = clampLineNumber(raw.trigger, LINE_RATIO_MIN, LINE_RATIO_MAX)
+  const keepRound = clampLineNumber(raw.keepRound, LINE_RATIO_MIN, LINE_RATIO_MAX)
+  const urgent = clampLineNumber(raw.urgent, LINE_RATIO_MIN, LINE_RATIO_MAX)
+  const bigGate = clampLineNumber(raw.bigGate, LINE_RATIO_MIN, LINE_RATIO_MAX)
+  if (trigger === undefined || keepRound === undefined || urgent === undefined || bigGate === undefined) {
+    return { ...DEFAULT_LIVE_COMPACT_LINE_RATIOS }
+  }
+  const ordered = keepRound <= trigger && trigger < urgent && urgent < bigGate
+  return ordered
+    ? { trigger, keepRound, urgent, bigGate }
+    : { ...DEFAULT_LIVE_COMPACT_LINE_RATIOS }
+}
+
+/**
+ * 归一化绝对值组。
+ *
+ * 逐字段 clamp 到 1..10_000_000；任一项缺失/类型不对，或不是
+ * `trigger < urgent < bigGate`，整组回落上游 Origin 默认 20000 / 32000 / 48000 / 650000。
+ * 注意这里**不**校验 `keepRound ≤ trigger`：上游 Origin 就是 32000 > 20000。
+ */
+function normalizeLiveCompactLineAbsolute(input: unknown): LiveCompactLineAbsolute {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const triggerTokens = clampLineTokens(raw.triggerTokens)
+  const keepRoundTokens = clampLineTokens(raw.keepRoundTokens)
+  const urgentTokens = clampLineTokens(raw.urgentTokens)
+  const bigGateTokens = clampLineTokens(raw.bigGateTokens)
+  if (
+    triggerTokens === undefined
+    || keepRoundTokens === undefined
+    || urgentTokens === undefined
+    || bigGateTokens === undefined
+  ) {
+    return { ...DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE }
+  }
+  const ordered = triggerTokens < urgentTokens && urgentTokens < bigGateTokens
+  return ordered
+    ? { triggerTokens, keepRoundTokens, urgentTokens, bigGateTokens }
+    : { ...DEFAULT_LIVE_COMPACT_LINE_ABSOLUTE }
+}
 
 /**
  * 容错读取 Live Compact 设置：只有显式 true 才启用，未知/损坏值一律视为关闭。
  * 手写 settings.json 可能写成 `{}` 或非布尔值，不能让它们变成“意外开启”。
+ *
+ * 新增的四条线/保护开关字段必须在这里显式保留：本函数是读取侧的归一化边界，
+ * 没被返回的字段会在“读取 → 保存”一来一回里被默默丢掉。整个函数不抛异常：
+ * 任一子组不合法只回落到该组默认值。
  */
-function normalizeLiveCompactSettings(input: unknown): LiveCompactSettings {
-  const raw = input && typeof input === 'object' ? input as Partial<LiveCompactSettings> : {}
-  return { enabled: raw.enabled === true }
+export function normalizeLiveCompactSettings(input: unknown): LiveCompactSettings {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  return {
+    enabled: raw.enabled === true,
+    // 缺省保护（ec918f21 的当前轮护栏）：只有显式 false 才关。
+    protectCurrentTurn: raw.protectCurrentTurn !== false,
+    lineMode: raw.lineMode === 'absolute' ? 'absolute' : 'ratio',
+    ratios: normalizeLiveCompactLineRatios(raw.ratios),
+    absolute: normalizeLiveCompactLineAbsolute(raw.absolute),
+  }
 }
 
 function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {

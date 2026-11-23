@@ -7,6 +7,10 @@ import {
   LIVE_COMPACT_THRESHOLD_SPECS,
   LIVE_COMPACT_TRIGGER_RATIO,
   LIVE_COMPACT_URGENT_RATIO,
+  UPSTREAM_BIG_GATE,
+  UPSTREAM_KEEP_ROUND_TOKENS,
+  UPSTREAM_MIN_TOKENS,
+  UPSTREAM_URGENT_TOKENS,
   type LiveCompactThresholdField,
 } from './live-compact-thresholds'
 
@@ -155,6 +159,67 @@ describe('Live Compact 阈值：env 记录', () => {
     expect(LIVE_COMPACT_KEEP_ROUND_RATIO).toBe(0.35)
     expect(LIVE_COMPACT_URGENT_RATIO).toBe(0.75)
     expect(LIVE_COMPACT_BIG_GATE_RATIO).toBe(0.9)
+  })
+})
+
+describe('Live Compact 阈值：绝对值模式', () => {
+  test('Given 上游默认值（保留线 32000 高于起切线 20000）When 绝对值模式 Then 允许该顺序', () => {
+    // 上游 Origin 就是这个顺序：云端 drain 每轮最多一刀，所以这条不变式只在比例模式成立。
+    const thresholds = computeLiveCompactThresholds(
+      200_000,
+      {
+        minPressureTokens: UPSTREAM_MIN_TOKENS,
+        keepRoundTokens: UPSTREAM_KEEP_ROUND_TOKENS,
+        urgentTokens: UPSTREAM_URGENT_TOKENS,
+        bigGateTokens: UPSTREAM_BIG_GATE,
+      },
+      { lineMode: 'absolute' },
+    )
+    expect(thresholds.keepRoundTokens).toBe(32_000)
+    expect(thresholds.minPressureTokens).toBe(20_000)
+    expect(thresholds.keepRoundTokens).toBeGreaterThan(thresholds.minPressureTokens)
+    expect(thresholds.urgentTokens).toBe(48_000)
+    expect(thresholds.bigGateTokens).toBe(650_000)
+    // env 记录仍然是同一批已求值结果。
+    expect(thresholds.env.SPINE_MIN_TOKENS).toBe('20000')
+    expect(thresholds.env.SPINE_KEEP_ROUND_TOKENS).toBe('32000')
+  })
+
+  test('Given 同样的 overrides When 比例模式 Then 仍然拒绝保留线高于起切线', () => {
+    // 证明绝对值模式的放宽没有渗透到比例侧。
+    expect(() => computeLiveCompactThresholds(200_000, {
+      minPressureTokens: UPSTREAM_MIN_TOKENS,
+      keepRoundTokens: UPSTREAM_KEEP_ROUND_TOKENS,
+      urgentTokens: UPSTREAM_URGENT_TOKENS,
+      bigGateTokens: UPSTREAM_BIG_GATE,
+    })).toThrow(TypeError)
+    expect(() => computeLiveCompactThresholds(200_000, {
+      keepRoundTokens: 150_000,
+    }, { lineMode: 'ratio' })).toThrow(TypeError)
+  })
+
+  test('Given 绝对值模式且未给 override When 换算 Then 四条线直取上游 Origin，不随窗口缩放', () => {
+    for (const window of [50_000, 200_000, 1_000_000]) {
+      const thresholds = computeLiveCompactThresholds(window, {}, { lineMode: 'absolute' })
+      expect(thresholds.minPressureTokens).toBe(20_000)
+      expect(thresholds.keepRoundTokens).toBe(32_000)
+      expect(thresholds.urgentTokens).toBe(48_000)
+      expect(thresholds.bigGateTokens).toBe(650_000)
+    }
+  })
+
+  test('Given 绝对值模式 When 其余顺序非法 Then 仍然抛错', () => {
+    // 放宽只针对“保留线 ≤ 起切线”；触发 / 紧急 / 停手 的顺序照旧校验。
+    expect(() => computeLiveCompactThresholds(200_000, {
+      minPressureTokens: 50_000,
+      urgentTokens: 48_000,
+    }, { lineMode: 'absolute' })).toThrow(TypeError)
+    expect(() => computeLiveCompactThresholds(200_000, {
+      urgentTokens: 700_000,
+    }, { lineMode: 'absolute' })).toThrow(TypeError)
+    expect(() => computeLiveCompactThresholds(200_000, {
+      chunkMinTokens: 50_000,
+    }, { lineMode: 'absolute' })).toThrow(TypeError)
   })
 })
 

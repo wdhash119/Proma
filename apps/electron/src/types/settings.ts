@@ -294,6 +294,46 @@ export interface ProductivityToolsSettings {
 }
 
 /**
+ * Live Compact 四条线的取值模式。
+ *
+ * - `ratio`（缺省）：四条线按模型上下文窗口的比例换算，跟随窗口大小；
+ * - `absolute`：四条线直接使用 token 数，与上游 dsh-live-compact 的默认值语义一致（不随窗口变化）。
+ */
+export type LiveCompactLineMode = 'ratio' | 'absolute'
+
+/**
+ * 比例模式下四条线的窗口占比（0..1）。
+ *
+ * - `trigger`：起切线（上游 MIN_TOKENS 的 Proma 化），上下文低于它整个 turn 直接返回，缺省 0.5；
+ * - `keepRound`：保留线（上游 KEEP_ROUND_TOKENS 的 Proma 化），既是尾部不可动的 token 预算，
+ *   也是云端 drain 的收尾停止水位（压到这个量就停），缺省 0.35；
+ * - `urgent`：紧急线（上游硬编码 URGENT_TOKENS 的 Proma 化），转入主动收尾（强制 drain）的门槛，缺省 0.75；
+ * - `bigGate`：停手线（上游 BIG_GATE 的 Proma 化），总量到这里即完全让位给官方压缩，缺省 0.9。
+ *
+ * 组内必须满足 `keepRound ≤ trigger < urgent < bigGate`，否则整组回落缺省。
+ */
+export interface LiveCompactLineRatios {
+  trigger: number
+  keepRound: number
+  urgent: number
+  bigGate: number
+}
+
+/**
+ * 绝对值模式下四条线的 token 数。
+ *
+ * 语义与比例模式逐项对应，只是不再乘窗口。缺省等于上游 Origin 值
+ * （20000 / 32000 / 48000 / 650000），其中保留线 32000 高于起切线 20000
+ * 是上游既定顺序（每轮 drain 最多一刀），绝对值模式不把这种情况当非法。
+ */
+export interface LiveCompactLineAbsolute {
+  triggerTokens: number
+  keepRoundTokens: number
+  urgentTokens: number
+  bigGateTokens: number
+}
+
+/**
  * Live Compact 全局设置。
  *
  * 缺省关闭：只有显式打开后 Agent 会话才把长工具输出就地压成卡片（可经 spine_recall 取回原文）。
@@ -303,6 +343,19 @@ export interface ProductivityToolsSettings {
 export interface LiveCompactSettings {
   /** 全局主闸；缺省 false。false 时无论会话设置如何都不生效，运行链路零变化。 */
   enabled: boolean
+  /**
+   * 当前轮保护开关；缺省 true。
+   *
+   * true 时刚结束的这一轮（末条消息与工具结果）与投影尾部永不被切；
+   * 只有显式 false 才恢复上游“当前轮也可被切”的行为。
+   */
+  protectCurrentTurn?: boolean
+  /** 四条线的取值模式；缺省 'ratio'（按窗口比例）。 */
+  lineMode?: LiveCompactLineMode
+  /** 比例模式的四条线占比；缺失或组内顺序非法时整组回落 0.5 / 0.35 / 0.75 / 0.9。 */
+  ratios?: LiveCompactLineRatios
+  /** 绝对值模式的四条线 token 数；缺失或三段顺序非法时整组回落 20000 / 32000 / 48000 / 650000。 */
+  absolute?: LiveCompactLineAbsolute
 }
 
 export const DEFAULT_PRODUCTIVITY_TOOLS_SETTINGS: ProductivityToolsSettings = {

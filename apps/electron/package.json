@@ -1,6 +1,6 @@
 {
   "name": "@proma/electron",
-  "version": "0.19.137",
+  "version": "0.19.138",
   "description": "Proma，为专业用户设计的 Agent",
   "main": "dist/main.cjs",
   "author": {
@@ -24,7 +24,7 @@
     "watch:terminal-runtime": "esbuild src/utility/terminal-runtime.ts --bundle --platform=node --format=cjs --outfile=dist/terminal-runtime.cjs --external:electron --external:node-pty --watch=forever",
     "watch:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron --watch=forever",
     "build:renderer": "vite build",
-    "build:resources": "cp -r resources dist/ 2>/dev/null || true",
+    "build:resources": "mkdir -p dist && cp -R resources dist/",
     "build:eventkit-native": "bun run scripts/build-eventkit-native.ts",
     "build:native-helpers": "bun run build:eventkit-native",
     "build:cli": "bun run scripts/build-cli.ts",

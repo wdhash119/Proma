@@ -341,8 +341,11 @@ function createStartupSplashWindow(): void {
     if (startupSplashWindow === splash) startupSplashWindow = null
   })
   splash.loadFile(getStartupSplashPath()).catch((error) => {
-    console.warn('[启动] 原生启动页加载失败，将继续启动主窗口:', error)
-    dismissStartupSplash()
+    // 这里不能销毁唯一窗口：非 macOS 下销毁最后一个窗口会立即触发 window-all-closed
+    // → app.quit()，而此刻主窗口还没创建，electronmon 会误判为主进程退出并陷入重启循环。
+    // 因此只隐藏启动页并保留实例，交由主窗口/降级窗口就绪路径统一清理。
+    console.warn('[启动] 原生启动页加载失败，隐藏启动页并继续启动主窗口:', error)
+    if (!splash.isDestroyed()) splash.hide()
   })
 }
 
@@ -501,9 +504,11 @@ function createWindow(): void {
   let hasShownRendererFailure = false
   let rendererRecoveryAttempts: number[] = []
   const showRendererFailure = (reason: string): void => {
+    // 主窗口已销毁时也要清理启动页：隐藏的启动页会挡住 window-all-closed，
+    // 让应用变成既无可见界面也无法退出的僵尸进程。
+    dismissStartupSplash()
     if (!mainWindow || mainWindow.isDestroyed()) return
 
-    dismissStartupSplash()
     if (hasShownRendererFailure) {
       mainWindow.show()
       return
@@ -896,6 +901,9 @@ function handleBootstrapFailure(err: unknown): void {
     createWindow()
   } catch (fallbackErr) {
     console.error('[启动] 降级窗口创建也失败:', fallbackErr)
+    // 主窗口与降级窗口都没建成时，保留隐藏的启动页会变成一个不可见也关不掉的窗口；
+    // 这里主动销毁启动页，让应用按 window-all-closed 正常退出，而不是悬在那里。
+    dismissStartupSplash()
   }
 }
 

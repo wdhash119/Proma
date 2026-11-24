@@ -1464,6 +1464,9 @@ async function createLiveCompactExtensionFactories(
         // utility 进程没有 UI 落点（FINDINGS §5.7）：cut 事件 v1 只落结构化日志，
         // 前缀固定为 [live-compact]，便于从开发终端/主进程日志里 grep 复盘。
         onCut: (record) => console.log('[live-compact] ' + JSON.stringify(record)),
+        // 决策事件日志：与算法覆盖层清单同目录（`<configDir>/live-compact/events.jsonl`），
+        // 用户在一个地方就能看全、清理时一并删掉；写盘失败由日志模块自己吞掉。
+        eventsPath: join(liveCompact.configDir, 'live-compact', 'events.jsonl'),
       }),
     ]
   } catch (error) {

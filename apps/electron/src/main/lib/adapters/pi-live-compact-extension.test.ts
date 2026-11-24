@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,9 +23,11 @@ import type {
   Usage,
   UserMessage,
 } from '@earendil-works/pi-ai'
+import type { Card } from '@proma/live-compact'
 import type { CompactionEntry } from '@earendil-works/pi-coding-agent'
 import {
   createLiveCompactExtension,
+  SPINE_IMAGES_MERGED_NOTE,
   type LiveCompactCutRecord,
   type LiveCompactExtensionOptions,
 } from './pi-live-compact-extension'
@@ -130,6 +132,87 @@ function toolResultEntry(id: string, callId: string, name: string, text: string)
     timestamp: 0,
   }
   return messageEntry(id, message)
+}
+
+/** 带 image 块的工具结果：文本照常（token 估算只算文本），图片块排在文本之后。 */
+function toolResultEntryWithImage(
+  id: string,
+  callId: string,
+  name: string,
+  text: string,
+  imageCount = 1,
+  data = 'aGVsbG8=',
+): ProjectedSessionEntry {
+  const content: ToolResultMessage['content'] = [{ type: 'text', text }]
+  for (let index = 0; index < imageCount; index += 1) {
+    content.push({ type: 'image', data, mimeType: 'image/png' })
+  }
+  const message: ToolResultMessage = {
+    role: 'toolResult',
+    toolCallId: callId,
+    toolName: name,
+    content,
+    isError: false,
+    timestamp: 0,
+  }
+  return messageEntry(id, message)
+}
+
+/** 把 turn_end 草案应用到投影：null 置空、替换换内容，其余条目原样存活。 */
+function applyDraftsToProjection(
+  projected: ProjectedSessionEntry[],
+  drafts: ContextEditEntryDraft[],
+): ProjectedSessionEntry[] {
+  const byId = new Map(drafts.map((draft) => [draft.targetId, draft]))
+  const alive: ProjectedSessionEntry[] = []
+  for (const item of projected) {
+    const draft = byId.get(item.sourceEntry.id)
+    if (!draft) {
+      alive.push(item)
+      continue
+    }
+    if (draft.replacement === null) continue
+    const content = draft.replacement.content
+    alive.push({
+      sourceEntry: item.sourceEntry,
+      messages: item.messages.map((message, index) => (index === 0
+        ? ({ ...(message as unknown as Record<string, unknown>), content } as unknown as Message)
+        : message)),
+    })
+  }
+  return alive
+}
+
+/**
+ * 配对回归断言：提交后的投影里，每条存活的 toolResult 的 toolCallId 都必须能在
+ * 某个存活 assistant 的 toolCall 块里找到。
+ *
+ * pi-ai 的 transformMessages 只为「孤儿调用」合成结果，不清理「孤儿结果」：
+ * 结果留着、调用方被置空时，孤儿 tool_result 会原样发给 provider，协议层直接 400。
+ */
+function expectBalancedToolPairs(
+  projected: ProjectedSessionEntry[],
+  drafts: ContextEditEntryDraft[],
+): void {
+  const alive = applyDraftsToProjection(projected, drafts)
+  const callIds = new Set<string>()
+  for (const item of alive) {
+    for (const message of item.messages) {
+      const content = (message as unknown as { content?: unknown }).content
+      if (!Array.isArray(content)) continue
+      for (const block of content) {
+        const record = block as { type?: string; id?: string }
+        if (record.type === 'toolCall' && typeof record.id === 'string') callIds.add(record.id)
+      }
+    }
+  }
+  for (const item of alive) {
+    for (const message of item.messages) {
+      const record = message as unknown as { role?: string; toolCallId?: string }
+      if (record.role !== 'toolResult' || typeof record.toolCallId !== 'string') continue
+      expect(callIds.has(record.toolCallId)).toBe(true)
+    }
+  }
 }
 
 /** 一条 assistant 消息里带多个并行调用（同一轮的两个结果）。 */
@@ -265,20 +348,37 @@ function createFakeContext(options: FakeContextOptions = {}): ExtensionContext {
 interface TurnEndIds {
   messageEntryId?: string
   toolResultEntryIds?: string[]
+  /** 传入时末条消息改成 assistant（携带 stopReason），用于 length 停轮用例。 */
+  assistantStopReason?: AssistantMessage['stopReason']
+  /** assistant 末条消息的正文；缺省 'done'。 */
+  assistantText?: string
+  /** 本轮结局；缺省 completed。 */
+  outcome?: 'completed' | 'aborted' | 'error'
 }
 
 function createTurnEndEvent(
   contextEntries: ProjectedSessionEntry[],
   ids: TurnEndIds = {},
 ): TurnEndEvent {
-  const message: ToolResultMessage = {
-    role: 'toolResult',
-    toolCallId: 'test-call',
-    toolName: 'test',
-    content: [],
-    isError: false,
-    timestamp: 0,
-  }
+  const message: ToolResultMessage | AssistantMessage = ids.assistantStopReason === undefined
+    ? {
+        role: 'toolResult',
+        toolCallId: 'test-call',
+        toolName: 'test',
+        content: [],
+        isError: false,
+        timestamp: 0,
+      }
+    : {
+        role: 'assistant',
+        content: [{ type: 'text', text: ids.assistantText ?? 'done' }],
+        api: 'anthropic-messages',
+        provider: 'anthropic',
+        model: 'test-model',
+        usage: emptyUsage(),
+        stopReason: ids.assistantStopReason,
+        timestamp: 0,
+      }
   return {
     type: 'turn_end',
     turnIndex: 1,
@@ -288,7 +388,7 @@ function createTurnEndEvent(
     toolResultEntryIds: ids.toolResultEntryIds ?? [],
     entries: [],
     continue: false,
-    outcome: 'completed',
+    outcome: ids.outcome ?? 'completed',
     context: {
       contextEntries,
       contextMessages: [],
@@ -337,6 +437,29 @@ interface Harness {
   records: LiveCompactCutRecord[]
 }
 
+/** 选段结果桩：只给那些需要固定落点形态的用例，字段与算法层 `Chunk` 同形。 */
+function stubCard(text: string): Card {
+  return {
+    ok: true,
+    failureDiagnosticsComplete: true,
+    verdict: '',
+    scope: '',
+    hardLines: [],
+    hardFacts: [],
+    missingFacts: [],
+    hardCount: 0,
+    omittedHard: 0,
+    deferred: 0,
+    missing: [],
+    omittedOrdinaryToolLines: 0,
+    uncovered: 'none',
+    keptChars: text.length,
+    needsBackup: false,
+    rawPaths: [],
+    text,
+  }
+}
+
 function install(options: {
   isEnabled?: () => boolean
   thresholds?: LiveCompactExtensionOptions['thresholds']
@@ -344,22 +467,26 @@ function install(options: {
   sessionFile?: string
   tokens?: number | null
   now?: () => number
+  eventsPath?: string
+  algorithm?: LiveCompactExtensionOptions['algorithm']
 } = {}): Harness {
   const pi = createFakePi()
   const records: LiveCompactCutRecord[] = []
   const extension = createLiveCompactExtension({
     isEnabled: options.isEnabled ?? (() => true),
     sessionId: 'session-1',
-    algorithm: bundledAlgorithm,
+    algorithm: options.algorithm ?? bundledAlgorithm,
     thresholds: options.thresholds ?? testThresholds(),
     ...(options.protectCurrentTurn === undefined ? {} : { protectCurrentTurn: options.protectCurrentTurn }),
     onCut: (record) => records.push(record),
     ...(options.now ? { now: options.now } : {}),
+    ...(options.eventsPath ? { eventsPath: options.eventsPath } : {}),
   })
   extension(pi.api)
   const ctx = createFakeContext({
     sessionFile: options.sessionFile,
-    tokens: options.tokens ?? 60400,
+    // 用 `??` 会把显式 null（宿主未报用量）吞成默认值，必须保留 null 才能验证 fail-closed。
+    tokens: options.tokens === undefined ? 60400 : options.tokens,
     provider: 'ollama',
     baseUrl: 'http://127.0.0.1:11434',
   })
@@ -404,16 +531,61 @@ describe('Live Compact 胶层：开关与压力', () => {
     expect(harness.records).toHaveLength(0)
   })
 
-  test('Given 拿不到 usage When turn_end Then 退回逐条估算的总量判定', () => {
-    const harness = install({ tokens: null })
+  test('Given 宿主未报告用量 When turn_end Then 不切段也不写存档', () => {
+    // 借鉴 MerkyorLynn/pi-live-compact 0.1.4：用量未知时 fail-closed。
+    // 旧语义（退回逐条文本估算的总量）已废除——文本估算与实际 tokenizer 偏差不可控，
+    // 宁可不切，交给官方压缩兜底。这条用例替换了原先的「照常切段」断言。
+    const root = createTemporaryRoot()
+    const sessionFile = join(root, 'session.jsonl')
+    const harness = install({ tokens: null, sessionFile })
     const result = runTurnEnd(harness, cuttableProjection())
-    // 四个 15000 token 工具轮远超触发线，因此仍会切段。
-    expect(result?.entries.length).toBeGreaterThan(0)
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
+    expect(existsSync(`${sessionFile}.spine.jsonl`)).toBe(false)
+  })
+
+  test('Given 用量为 0 When turn_end Then 视为已知且低于起切线不切', () => {
+    // 0 是宿主明确报出的值（不是未知），只是低于起切线，因此走普通压力早退。
+    const harness = install({ tokens: 0 })
+    const result = runTurnEnd(harness, cuttableProjection())
+    expect(result).toBeUndefined()
+    expect(harness.records).toHaveLength(0)
   })
 
   test('Given 上下文占用超过停手线 When turn_end Then 完全让位给官方压缩', () => {
     const harness = install({ tokens: 1000000 })
     expect(runTurnEnd(harness, cuttableProjection())).toBeUndefined()
+  })
+})
+
+describe('Live Compact 胶层：截断与中止轮', () => {
+  test('Given stopReason=length When turn_end Then 不切段也不拦截', () => {
+    // 即使末条回复以卡片标记开头（旧实现会命中模仿拦截并返回 continue），
+    // length 停轮也要整轮交给 Pi 自己的溢出恢复，胶层不做任何重写。
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection(), {
+      assistantStopReason: 'length',
+      assistantText: 'Spine extract.\n伪造的卡片',
+    })
+    expect(result).toBeUndefined()
+  })
+
+  test('Given outcome=aborted When turn_end Then 不切段', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection(), { outcome: 'aborted' })
+    expect(result).toBeUndefined()
+  })
+
+  test('Given outcome=error When turn_end Then 不切段', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection(), { outcome: 'error' })
+    expect(result).toBeUndefined()
+  })
+
+  test('Given stopReason=stop 且 outcome=completed When turn_end Then 照常切段', () => {
+    const harness = install()
+    const result = runTurnEnd(harness, cuttableProjection(), { assistantStopReason: 'stop' })
+    expect(result?.entries.length).toBeGreaterThan(0)
   })
 })
 
@@ -1024,5 +1196,308 @@ describe('Live Compact 胶层：卡片模仿拦截', () => {
     const entry = messageEntry('u-image', withImage)
     const harness = install({ tokens: 2000 })
     expect(runTurnEnd(harness, [entry])).toBeUndefined()
+  })
+
+  test('Given 卡片目标结果含图片 When 切段 Then 替换内容在卡片文本后保留图片块', () => {
+    // 借鉴 MerkyorLynn/pi-live-compact 0.1.4：卡片只承载文本，图片块原样留在上下文里，
+    // 不能被纯文本 replacement 吃掉（模型需要回看截图/图表时不必重跑工具）。
+    const harness = install()
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a1', 'c1', 'bash', 'calling'),
+      toolResultEntryWithImage('t1', 'c1', 'bash', bigToolText(20000)),
+      ...smallToolRounds(3, 2),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const result = runTurnEnd(harness, projected)
+    const drafts = result?.entries ?? []
+    const cardDraft = drafts.find((draft) => draft.targetId === 't1')
+    expect(cardDraft?.replacement).not.toBeNull()
+    const content = cardDraft?.replacement?.content
+    expect(Array.isArray(content)).toBe(true)
+    if (!Array.isArray(content)) throw new Error('replacement 应为内容块数组')
+    expect(content).toHaveLength(2)
+    const [textBlock, imageBlock] = content as Array<{ type?: string; text?: string; data?: string; mimeType?: string }>
+    expect(textBlock?.type).toBe('text')
+    expect(textBlock?.text?.startsWith('Spine extract.')).toBe(true)
+    expect(imageBlock?.type).toBe('image')
+    expect(imageBlock?.data).toBe('aGVsbG8=')
+    expect(imageBlock?.mimeType).toBe('image/png')
+    expectBalancedToolPairs(projected, drafts)
+  })
+
+  test('Given 本要置空的旧轮结果含图片 When 切段 Then 图片并入卡片、条目照旧置空', () => {
+    // P1 修正：后续轮次的调用方 assistant（a2）已被置空，若保留 t2 条目本体就是孤儿
+    // tool_result（pi-ai 不清理孤儿结果，provider 会 400）。改为图片并入卡片、条目照旧置空。
+    const harness = install()
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a1', 'c1', 'bash', 'calling'),
+      toolResultEntry('t1', 'c1', 'bash', bigToolText(15000)),
+      toolCallEntry('a2', 'c2', 'bash', 'calling'),
+      toolResultEntryWithImage('t2', 'c2', 'bash', bigToolText(15000)),
+      toolCallEntry('a3', 'c3', 'bash', 'calling'),
+      toolResultEntry('t3', 'c3', 'bash', bigToolText(15000)),
+      toolCallEntry('a4', 'c4', 'bash', 'calling'),
+      toolResultEntry('t4', 'c4', 'bash', bigToolText(15000)),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const result = runTurnEnd(harness, projected)
+    const drafts = result?.entries ?? []
+
+    const cardDraft = drafts.find((draft) => draft.targetId === 't1')
+    const content = cardDraft?.replacement?.content
+    if (!Array.isArray(content)) throw new Error('replacement 应为内容块数组')
+    expect(content).toHaveLength(2)
+    const [textBlock, imageBlock] = content as Array<{ type?: string; text?: string; data?: string }>
+    expect(textBlock?.type).toBe('text')
+    expect(textBlock?.text?.startsWith('Spine extract.')).toBe(true)
+    expect(textBlock?.text).toContain(SPINE_IMAGES_MERGED_NOTE)
+    expect(imageBlock?.type).toBe('image')
+    expect(imageBlock?.data).toBe('aGVsbG8=')
+
+    // 条目本体照旧置空，且仍计在 omittedEntryIds 里。
+    const omitted = drafts.find((draft) => draft.targetId === 't2')
+    expect(omitted?.replacement).toBeNull()
+    const span = harness.records[0]?.spans[0]
+    expect(span?.omittedEntryIds).toContain('t2')
+    expectBalancedToolPairs(projected, drafts)
+  })
+
+  test('Given 卡片目标与被省略结果都含图片 When 切段 Then 图片按段内顺序并到卡片', () => {
+    const harness = install()
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a1', 'c1', 'bash', 'calling'),
+      toolResultEntryWithImage('t1', 'c1', 'bash', bigToolText(15000), 1, 'OWN'),
+      toolCallEntry('a2', 'c2', 'bash', 'calling'),
+      toolResultEntryWithImage('t2', 'c2', 'bash', bigToolText(15000), 1, 'SECOND'),
+      toolCallEntry('a3', 'c3', 'bash', 'calling'),
+      toolResultEntryWithImage('t3', 'c3', 'bash', bigToolText(15000), 1, 'THIRD'),
+      toolCallEntry('a4', 'c4', 'bash', 'calling'),
+      toolResultEntry('t4', 'c4', 'bash', bigToolText(15000)),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const drafts = runTurnEnd(harness, projected)?.entries ?? []
+    const span = harness.records[0]?.spans[0]
+    const omitted = span?.omittedEntryIds ?? []
+    const cardDraft = drafts.find((draft) => draft.targetId === 't1')
+    const content = cardDraft?.replacement?.content
+    if (!Array.isArray(content)) throw new Error('replacement 应为内容块数组')
+    const images = (content as Array<{ type?: string; data?: string }>).filter((block) => block.type === 'image')
+    // 卡片目标自身图片在前，其余按段内顺序（span 内被省略且含图的条目，按出现顺序）。
+    const mergedOrder = ['t2', 't3'].filter((id) => omitted.includes(id))
+    const expected = ['OWN', ...mergedOrder.map((id) => (id === 't2' ? 'SECOND' : 'THIRD'))]
+    expect(mergedOrder.length).toBeGreaterThan(0)
+    expect(images.map((block) => block.data)).toEqual(expected)
+    const cardText = (content as Array<{ type?: string; text?: string }>)[0]?.text ?? ''
+    expect(cardText).toContain(SPINE_IMAGES_MERGED_NOTE)
+    // 含图被省略的条目照旧置空。
+    for (const id of mergedOrder) {
+      expect(drafts.find((draft) => draft.targetId === id)?.replacement).toBeNull()
+    }
+    expectBalancedToolPairs(projected, drafts)
+  })
+
+  test('Given 落点头部是工具结果且后续轮含图片 When turn_end Then 图片并入卡片、后续条目与调用方一起置空', () => {
+    // 防御形态：真实选段起点总是调用条目，这里用固定选段器把 span 钉在 t-head 上，
+    // 验证胶层兜底分支同样不留孤儿结果（a2/t2/t3 一起置空，t2 图片并入卡片）。
+    const projected: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      toolCallEntry('a0', 'c0', 'bash', 'calling'),
+      toolResultEntry('t-head', 'c0', 'bash', bigToolText(5000)),
+      toolCallEntry('a2', 'c2', 'bash', 'calling'),
+      toolResultEntryWithImage('t2', 'c2', 'bash', bigToolText(8000)),
+      toolCallEntry('a3', 'c3', 'bash', 'calling'),
+      toolResultEntry('t3', 'c3', 'bash', bigToolText(8000)),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const harness = install({
+      algorithm: {
+        ...bundledAlgorithm,
+        selectNewestChunk: () => ({
+          start: 2,
+          end: 4,
+          tokens: 21000,
+          after: 100,
+          keptTokens: 0,
+          card: stubCard('Spine extract.\n\n固定落点卡片'),
+          pointerOnly: true,
+        }),
+      },
+    })
+    const drafts = runTurnEnd(harness, projected, {
+      messageEntryId: 'a5',
+      toolResultEntryIds: ['a5'],
+    })?.entries ?? []
+
+    // span 是 t-head + a2 + t2 三条：a2/t2 与它们的调用方一起置空。
+    expect(drafts.map((draft) => draft.targetId)).toEqual(['a2', 't2', 't-head'])
+    for (const id of ['a2', 't2']) {
+      expect(drafts.find((draft) => draft.targetId === id)?.replacement).toBeNull()
+    }
+    const cardContent = drafts.find((draft) => draft.targetId === 't-head')?.replacement?.content
+    if (!Array.isArray(cardContent)) throw new Error('replacement 应为内容块数组')
+    expect(cardContent).toHaveLength(2)
+    const [textBlock, imageBlock] = cardContent as Array<{ type?: string; text?: string; data?: string }>
+    expect(textBlock?.text).toContain(SPINE_IMAGES_MERGED_NOTE)
+    expect(imageBlock?.type).toBe('image')
+    expect(imageBlock?.data).toBe('aGVsbG8=')
+    const span = harness.records[0]?.spans[0]
+    expect(span?.omittedEntryIds).toEqual(['a2', 't2'])
+    expect(span?.mergedImageCount).toBe(1)
+    expectBalancedToolPairs(projected, drafts)
+  })
+
+  test('Given 被 stub 的并行兄弟结果含图片 When 切段 Then stub 文本后保留图片块', () => {
+    const parallel: ProjectedSessionEntry[] = [
+      userEntry('u1', 'please build the widget'),
+      parallelCallEntry('a1', ['c1a', 'c1b'], 'calling both'),
+      toolResultEntry('t1a', 'c1a', 'bash', 'ok'),
+      toolResultEntryWithImage('t1b', 'c1b', 'bash', bigToolText(15000)),
+      ...smallToolRounds(3, 2),
+      toolCallEntry('a5', 'c5', 'bash', 'done'),
+    ]
+    const harness = install()
+    const result = runTurnEnd(harness, parallel)
+    const drafts = result?.entries ?? []
+    const stubDraft = drafts.find((draft) => draft.targetId === 't1b')
+    expect(stubDraft?.replacement).not.toBeNull()
+    const content = stubDraft?.replacement?.content
+    if (!Array.isArray(content)) throw new Error('replacement 应为内容块数组')
+    expect(content).toHaveLength(2)
+    const [textBlock, imageBlock] = content as Array<{ type?: string; text?: string; data?: string }>
+    expect(textBlock?.type).toBe('text')
+    expect(textBlock?.text?.startsWith('Spine extract.')).toBe(false)
+    expect(textBlock?.text).toContain('Spine')
+    expect(imageBlock?.type).toBe('image')
+    expect(imageBlock?.data).toBe('aGVsbG8=')
+    expectBalancedToolPairs(parallel, drafts)
+  })
+
+  test('Given 指针切割的目标含图片 When turn_end Then 指针卡文本后保留图片块', () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const harness = install({ protectCurrentTurn: false })
+      const projected: ProjectedSessionEntry[] = [
+        userEntry('u1', 'inspect the large files'),
+        ...toolRounds(6, 5000),
+        toolCallEntry('a-current', 'call-current', 'read', 'reading current file'),
+        toolResultEntryWithImage('t-current', 'call-current', 'read', bigToolText(40000)),
+      ]
+      const result = runTurnEnd(harness, projected, {
+        messageEntryId: 'a-current',
+        toolResultEntryIds: ['t-current'],
+      })
+      const drafts = result?.entries ?? []
+      const cardDraft = drafts.find((draft) => draft.targetId === 't-current')
+      expect(cardDraft?.replacement).not.toBeNull()
+      const content = cardDraft?.replacement?.content
+      if (!Array.isArray(content)) throw new Error('replacement 应为内容块数组')
+      expect(content).toHaveLength(2)
+      const [textBlock, imageBlock] = content as Array<{ type?: string; text?: string; data?: string }>
+      expect(textBlock?.type).toBe('text')
+      expect(textBlock?.text?.startsWith('Spine extract.')).toBe(true)
+      expect(imageBlock?.type).toBe('image')
+      expect(imageBlock?.data).toBe('aGVsbG8=')
+      expect(harness.records[0]?.spans[0]?.pointerOnly).toBe(true)
+      expectBalancedToolPairs(projected, drafts)
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  test('Given 纯文本投影 When 应用切割草案 Then 存活工具结果与调用保持配对', () => {
+    // 通用回归：置空后续轮 assistant 时必须同时置空它的结果，否则就是孤儿 tool_result。
+    const harness = install()
+    const projected = cuttableProjection()
+    const drafts = runTurnEnd(harness, projected)?.entries ?? []
+    expect(drafts.length).toBeGreaterThan(0)
+    expectBalancedToolPairs(projected, drafts)
+  })
+})
+
+describe('Live Compact 胶层：决策事件日志', () => {
+  test('Given 传了 eventsPath 且发生切段 When turn_end Then 事件文件里有一条带水位字段的 cut', () => {
+    const eventsPath = join(createTemporaryRoot(), 'live-compact', 'events.jsonl')
+    const harness = install({ eventsPath })
+    runTurnEnd(harness, cuttableProjection())
+
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter((line) => line.length > 0)
+    expect(lines).toHaveLength(1)
+    const record = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>
+    expect(record.event).toBe('cut')
+    expect(record.sessionId).toBe('session-1')
+    expect(record.hostTokens).toBe(60400)
+    expect(typeof record.savedTokens).toBe('number')
+    expect(record.engine).toBe('local')
+    // 只记判定与数字：不得出现卡片正文或工具原文。
+    expect(JSON.stringify(record)).not.toContain('Spine extract.')
+    expect(JSON.stringify(record)).not.toContain('alphaWidget')
+    expect(typeof record.at).toBe('string')
+  })
+
+  test('Given 传了 eventsPath 且宿主未报用量 When turn_end Then 记 skip/usage_unknown', () => {
+    const eventsPath = join(createTemporaryRoot(), 'events.jsonl')
+    const harness = install({ tokens: null, eventsPath })
+    expect(runTurnEnd(harness, cuttableProjection())).toBeUndefined()
+
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter((line) => line.length > 0)
+    expect(lines).toHaveLength(1)
+    const record = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>
+    expect(record.event).toBe('skip')
+    expect(record.reason).toBe('usage_unknown')
+  })
+
+  test('Given 传了 eventsPath 且截断轮 When turn_end Then 记 skip/length_stop', () => {
+    const eventsPath = join(createTemporaryRoot(), 'events.jsonl')
+    const harness = install({ eventsPath })
+    const assistantTail: AssistantMessage = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'partial answer' }],
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+      model: 'test-model',
+      usage: emptyUsage(),
+      stopReason: 'length',
+      timestamp: 0,
+    }
+    const handler = harness.pi.handlers.get('turn_end')
+    if (!handler) throw new Error('turn_end handler 未注册')
+    const event = createTurnEndEvent(cuttableProjection(), { messageEntryId: 'a5' })
+    handler({ ...event, message: assistantTail }, harness.ctx)
+
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter((line) => line.length > 0)
+    expect(lines).toHaveLength(1)
+    expect((JSON.parse(lines[0] ?? '{}') as Record<string, unknown>).reason).toBe('length_stop')
+  })
+
+  test('Given 未传 eventsPath When 切段 Then 照常出草案且不触发写日志告警', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const harness = install()
+      const result = runTurnEnd(harness, cuttableProjection())
+      expect(result?.entries.length).toBeGreaterThan(0)
+      expect(warnSpy.mock.calls.length).toBe(0)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+})
+
+describe('Live Compact 胶层：配对回归断言自检', () => {
+  test('Given 手工构造的孤儿结果草案 When 校验配对 Then 断言报错', () => {
+    // 断言本身也要被钉住：只留结果、置空调用方（P1 缺陷的形态）必须判失败，
+    // 否则上面所有 expectBalancedToolPairs 调用都是空转。
+    const projected = cuttableProjection()
+    const drafts: ContextEditEntryDraft[] = [
+      { type: 'context_edit', targetId: 'a2', replacement: null },
+      {
+        type: 'context_edit',
+        targetId: 't2',
+        replacement: { content: [{ type: 'text', text: 'kept' }] },
+      },
+    ]
+    expect(() => expectBalancedToolPairs(projected, drafts)).toThrow()
   })
 })

@@ -9,17 +9,20 @@
  * 1. 工厂注册：`spine_recall` 工具在工厂主体注册（上游同位置——注册必须发生在扩展加载期，
  *    否则首轮工具清单里没有它），`session_start` 只负责把 RecallStore 绑到会话 sidecar。
  * 2. `turn_end` 压力判定：`ctx.getContextUsage().tokens` 低于触发线直接返回；
- *    拿不到 usage 时退回逐条估算的 token 总和（上游同）。
+ *    拿不到 usage 时 fail-closed 直接返回（Proma 偏向官方压缩，见 turn_end 注释）。
  * 3. 冷却：`latestOfficialCompaction` → 身份 tracker（同一压缩 id 让过一刀，首见只建基线）
  *    + 可选时间窗（`inCooldownWindow`）。
  * 4. engine 判定：`ctx.model.provider/baseUrl` + `ctx.modelRegistry.getAll()` 兜底查
  *    provider/baseUrl，最后回落 `fallbackProviderURL`，交给算法层 `resolveEngine`
  *    （含 SPINE_ENGINE 覆盖与 Strata/本地地址识别）。
  * 5. 云端 drain：按“观测到的最大单轮增长”预测下一轮是否越过保留轮预算，或直接到紧急线。
- * 6. 选段与草案：`selectNewestChunk` → 第一段替换成卡片、其余置 null 省略；卡片追加
- *    `recallHint` 并把被切工具原文写进 RecallStore；卡片比原段还大时放弃这一刀。
+ * 6. 选段与草案：`selectNewestChunk` → 头部保留、卡片落到工具结果、其余置 null 省略；
+ *    卡片追加 `recallHint` 并把被切工具原文写进 RecallStore；卡片比原段还大时放弃这一刀。
  * 7. 多趟：云端 drain 在多轮里连续切，直到压后总量落在保留轮预算内（上游把多趟折进一次
  *    turn_end）。
+ *
+ * 借鉴 MerkyorLynn/pi-live-compact 0.1.4（独立实现线，非本文件上游 DSH 版本）的四项护栏：
+ * 截断/中止轮不切、usage 未知 fail-closed、图片块保留、决策事件日志（live-compact-events）。
  *
  * Proma 化的四处（都在参数/开关层，不动算法语义）：
  * - 阈值全部来自 `LiveCompactThresholds`（按模型窗口比例或用户设定的绝对值），不再读散落的 env 常量；
@@ -40,7 +43,7 @@ import type {
   ToolDefinition,
   TurnEndEvent,
 } from '@earendil-works/pi-coding-agent'
-import type { AssistantMessage } from '@earendil-works/pi-ai'
+import type { AssistantMessage, ImageContent } from '@earendil-works/pi-ai'
 import { Type } from 'typebox'
 import type {
   CallInfo,
@@ -53,6 +56,7 @@ import type {
 import { MARK } from '@proma/live-compact'
 import type { LiveCompactAlgorithm } from './live-compact-algorithm-loader'
 import type { LiveCompactThresholds } from './live-compact-thresholds'
+import { appendLiveCompactEvent } from '../live-compact-events'
 
 /** 上游胶层的两道本地护栏：切点右侧保留尾巴的上限，以及单次 turn_end 的最大趟数。 */
 const MAX_TAIL_TOKENS = 2200
@@ -73,23 +77,35 @@ const SPINE_SIBLING_STUB = '[Spine 压缩] 同轮工具结果原文已并入本�
 /** 模仿拦截后保留在消息里的正文（丢弃模型伪造的卡片文本，保留 thinking 块）。 */
 const SPINE_INTERCEPTED_STUB = '[系统拦截] 上一条回复模仿了 Spine 压缩卡片格式，不是有效回复，已被替换。任务完成状态以真实工具结果为准。'
 
+/**
+ * 本段其它含图结果的图片并入卡片时的说明行。
+ *
+ * 借鉴 MerkyorLynn/pi-live-compact 0.1.4：上游替换只带文本，截图/图表会跟着结果一起消失，
+ * 模型只能重跑工具。这里把它们的 image 块并到卡片下方，但**条目照旧置空**——
+ * 后续轮次的调用方 assistant 已被置空，保留结果会产生孤儿 tool_result。
+ */
+export const SPINE_IMAGES_MERGED_NOTE = '[Spine 压缩] 本段其它工具结果的图片保留在卡片下方；文本原文用 spine_recall 按卡片「原文存档」ref 取回。'
+
 /** 拦截命中后注入的纠正消息（turn_end 里以 custom_message 追加，在 LLM 上下文里转为 user 消息）。 */
 const SPINE_IMITATION_CORRECTION = '【系统纠正】你上一条回复以「Spine extract.」开头，模仿了系统上下文压缩卡片的格式。那是系统生成的压缩产物，不是有效的助手回复，已被拦截移除。请不要在回复中使用该格式。现在请：1) 如果任务尚未完成（例如有仍在运行的委派、未重跑的测试、未核实的结果），继续执行必要步骤；2) 用正常语言给出当前真实状态的总结，只陈述你实际执行过的操作和真实结果，不要虚构工具调用、测试结果或委派结果。'
 
 /** 模仿拦截的强制继续上限：超过后只保留拦截后的正文，不再要求模型继续。 */
 const MAX_IMITATION_RETRIES = 2
 
+/** 判定事件的字段：只允许水位数字、原因等短字符串，禁止工具正文。 */
+type LiveCompactEventFields = Record<string, string | number | boolean | undefined>
+
 /** 一次切段的记录，供主进程日志/未来的 UI 提示消费（v1 只做结构化日志）。 */
 export interface LiveCompactCutSpanRecord {
   /** 承载卡片的条目 id（该段第一条被替换的条目）。 */
   cardEntryId: string
-  /** 被这一段一并处理（省略）的其余条目 id。 */
+  /** 被这一段一并省略（replacement 置 null）的条目 id（含图条目也在其中：图片已并入卡片）。 */
   omittedEntryIds: string[]
   /** 原段 token 估算。 */
   spanTokens: number
   /** 卡片 token 估算。 */
   cardTokens: number
-  /** 本段节省的 token（spanTokens - cardTokens）。 */
+  /** 本段节省的 token（spanTokens - 保留量；保留量含头部、卡片与全部 stub）。 */
   savedTokens: number
   /** 写进 sidecar 的工具原文 ref（spine_recall 的参数）。 */
   recallRefs: string[]
@@ -101,6 +117,8 @@ export interface LiveCompactCutSpanRecord {
   anchorEntryId?: string
   /** 被替换成 stub 的并行兄弟工具结果 id（配对保留，原文仍可从 sidecar 取回）。 */
   stubbedEntryIds?: string[]
+  /** 从被省略条目并入卡片的 image 块数量（条目本体已置空，不算省略之外的保留）。 */
+  mergedImageCount?: number
 }
 
 /** 一次 turn_end 的完整切段记录。 */
@@ -139,14 +157,21 @@ export interface LiveCompactExtensionOptions {
    * 当前轮保护开关；缺省 true。
    *
    * - true：`turn_end` 携带的末条消息与工具结果（刚结束的当前轮）以及投影尾部都不被切，
-   *   命中时记一条 `skip_protected_span` 日志（ec918f21 的修复）；
-   * - false：完全跳过这两道护栏，恢复上游“当前轮也可被切”的行为，也不再打该日志。
+   *   命中时记一条事件（`skip` + `reason: protected_span`，历史日志里的 `skip_protected_span` 同语义）；
+   * - false：完全跳过这两道护栏，恢复上游“当前轮也可被切”的行为，也不再打该事件。
    */
   protectCurrentTurn?: boolean
   /** 切段结构化记录回调；不传时切段仍然发生，只是没有记录出口。 */
   onCut?: (record: LiveCompactCutRecord) => void
   /** 时间源，测试注入；默认 Date.now。 */
   now?: () => number
+  /**
+   * 决策事件文件（本地 JSONL）的绝对路径；缺省时只打 console 日志。
+   *
+   * 借鉴 MerkyorLynn/pi-live-compact 0.1.4 的 telemetry：utility 进程日志难追溯，
+   * 把 cut/skip 判定额外落成一行 JSONL（只记判定与数字，不记工具正文）。
+   */
+  eventsPath?: string
 }
 
 /** 把会话条目投影翻译成算法层的 SpanEntry（上游 toSpanEntries 的 typed 版本）。 */
@@ -230,6 +255,35 @@ function messageText(message: unknown): string {
     if (record?.type === 'text' && typeof record.text === 'string') parts.push(record.text)
   }
   return parts.join('\n')
+}
+
+/**
+ * 取条目里的 image 块（toolResult 消息的 content 数组，按原顺序）。
+ *
+ * 只有工具结果会带图片；content 是字符串、或消息不是 toolResult 时返回空数组。
+ */
+function imageBlocksOf(item: ProjectedSessionEntry | undefined): ImageContent[] {
+  const images: ImageContent[] = []
+  for (const message of item?.messages ?? []) {
+    const record = asRecord(message)
+    if (record?.role !== 'toolResult') continue
+    for (const block of contentBlocks(message)) {
+      const view = asRecord(block)
+      if (view?.type !== 'image') continue
+      if (typeof view.data !== 'string' || typeof view.mimeType !== 'string') continue
+      images.push({ type: 'image', data: view.data, mimeType: view.mimeType })
+    }
+  }
+  return images
+}
+
+/** 用「说明文本 + 原图片块」拼替换内容；条目没有图片时就是纯文本，与原来完全一致。 */
+function withImageBlocks(
+  text: string,
+  item: ProjectedSessionEntry | undefined,
+  appendImages: ImageContent[] = [],
+): Array<{ type: 'text'; text: string } | ImageContent> {
+  return [{ type: 'text', text }, ...imageBlocksOf(item), ...appendImages]
 }
 
 interface ToolCallView {
@@ -323,6 +377,18 @@ export function createLiveCompactExtension(
   const cardMark = MARK
   const estimate = (text: string): number => algorithm.estimateTokens(text)
 
+  // 判定事件的唯一出口：console 保留现有 `[live-compact] {json}` 前缀（日志 grep 依赖它），
+  // eventsPath 存在时再落一行 JSONL。日志失败绝不外抛（见 live-compact-events）。
+  const emit = (event: string, fields: LiveCompactEventFields = {}): void => {
+    const record = { event, sessionId: options.sessionId, ...fields }
+    console.log('[live-compact] ' + JSON.stringify(record))
+    if (!options.eventsPath) return
+    appendLiveCompactEvent(options.eventsPath, {
+      at: new Date(now()).toISOString(),
+      ...record,
+    })
+  }
+
   return (pi: ExtensionAPI) => {
     // 每会话的增量状态：云端 drain 的增长基线，以及官方压缩的身份 tracker。
     // utility process 每会话一个，进程重启即重建，与上游“多会话互不影响”的前提一致。
@@ -382,9 +448,20 @@ export function createLiveCompactExtension(
       if (!options.isEnabled()) return undefined
       bindStore(ctx)
 
+      // 借鉴 MerkyorLynn/pi-live-compact 0.1.4：截断轮（length）交给 Pi 溢出恢复，
+      // 中止/错误轮不做任何上下文重写；此时切段或强制继续都会干扰宿主恢复路径。
+      if (event.outcome !== 'completed') {
+        emit('skip', { reason: event.outcome === 'aborted' ? 'outcome_aborted' : 'outcome_error' })
+        return undefined
+      }
+      if (event.message.role === 'assistant' && event.message.stopReason === 'length') {
+        emit('skip', { reason: 'length_stop' })
+        return undefined
+      }
+
       // 卡片模仿拦截：模型把卡片格式当成自己的回复输出时（真实故障里还会顺带虚构
       // 测试/委派结果），换掉正文并强制继续一轮。本趟不做切割，压力留到下一次 turn_end。
-      const interception = interceptCardImitation(event, options.sessionId, imitationRetries, cardMark)
+      const interception = interceptCardImitation(event, emit, imitationRetries, cardMark)
       if (interception) {
         if (interception.forced) imitationRetries += 1
         return interception.result
@@ -392,19 +469,36 @@ export function createLiveCompactExtension(
 
       const usage = ctx.getContextUsage()
       const projected = event.context.contextEntries
+      // 按条目 id 反查原始投影：图片保留要拿到 toolResult 消息的真实 image 块。
+      const projectedById = new Map(projected.map((item) => [item.sourceEntry.id, item]))
       let work = toSpanEntries(projected, algorithm)
-      const hostTotal = typeof usage?.tokens === 'number'
-        ? usage.tokens
-        : work.reduce((sum, entry) => sum + entry.tokens, 0)
-      if (hostTotal < thresholds.minPressureTokens || hostTotal >= thresholds.bigGateTokens) {
+      // 借鉴 0.1.4：用量未知时 fail-closed。文本估算与实际 tokenizer 偏差不可控，
+      // 宁可交给官方压缩，也不按猜测的水位切割。
+      if (typeof usage?.tokens !== 'number') {
+        emit('skip', { reason: 'usage_unknown' })
+        return undefined
+      }
+      const hostTotal = usage.tokens
+      if (hostTotal < thresholds.minPressureTokens) {
+        emit('skip', { reason: 'below_pressure', hostTokens: hostTotal, minPressureTokens: thresholds.minPressureTokens })
+        return undefined
+      }
+      if (hostTotal >= thresholds.bigGateTokens) {
+        emit('skip', { reason: 'big_gate', hostTokens: hostTotal, bigGateTokens: thresholds.bigGateTokens })
         return undefined
       }
 
       // 官方压缩冷却：新落地的压缩让过一刀，避免把它的摘要立刻卷进 spine 卡片；
       // 首次观测到（含“本来就有摘要”的恢复会话）只建基线，不让行。
       const official = algorithm.latestOfficialCompaction(projected)
-      if (compactionTracker.observe(official)) return undefined
-      if (algorithm.inCooldownWindow(official, thresholds.cooldownMs, now())) return undefined
+      if (compactionTracker.observe(official)) {
+        emit('skip', { reason: 'cooldown', phase: 'baseline', hostTokens: hostTotal })
+        return undefined
+      }
+      if (algorithm.inCooldownWindow(official, thresholds.cooldownMs, now())) {
+        emit('skip', { reason: 'cooldown', phase: 'window', hostTokens: hostTotal })
+        return undefined
+      }
 
       const resolution = resolveEngineForContext(ctx, algorithm)
       const engine = resolution.engine
@@ -452,12 +546,12 @@ export function createLiveCompactExtension(
           const touchesCurrentTurn = span.some((entry) => protectedEntryIds.has(entry.id))
           const touchesProjectionTail = chunk.end >= work.length - 1
           if (touchesCurrentTurn || touchesProjectionTail) {
-            console.log('[live-compact] ' + JSON.stringify({
-              event: 'skip_protected_span',
-              sessionId: options.sessionId,
-              reason: touchesCurrentTurn ? 'current_turn' : 'projection_tail',
+            // 事件名保持 `skip`，reason 固定 `protected_span`，便于复盘时按原因聚合。
+            emit('skip', {
+              reason: 'protected_span',
+              target: touchesCurrentTurn ? 'current_turn' : 'projection_tail',
               headEntryId: head.id,
-            }))
+            })
             break
           }
         }
@@ -470,67 +564,81 @@ export function createLiveCompactExtension(
         const recallItems = buildRecallItems(span)
         let cardText = chunk.card.text
         if (recallItems.length > 0) cardText += `\n${algorithm.recallHint(recallItems)}`
-        const cardTokens = algorithm.estimateTokens(cardText)
-        // 卡片不比原段小就没有意义：放弃这一刀，交给官方压缩。
-        if (cardTokens >= chunk.tokens) break
+        // 先用不含并入说明的卡片文本算落点：落点决定哪些条目被省略，
+        // 而被省略条目里的图片要并进卡片，卡片文本与 token 会随之变。
+        const provisionalCardTokens = algorithm.estimateTokens(cardText)
+        if (provisionalCardTokens >= chunk.tokens) {
+          emit('skip', { reason: 'card_not_smaller', spanTokens: chunk.tokens, cardTokens: provisionalCardTokens })
+          break
+        }
 
         // 卡片落点：普通切割不再替换 assistant 头部（卡片继承 assistant 角色后，模型会把
         // 它当成自己的输出模仿），改落到 span 内第一个属于头部调用的工具结果上；头部原样
         // 保留，其并行兄弟结果换成 stub 以保住配对。指针卡（span 就是一个工具结果）与
         // 头部本身是工具结果的形态维持上游行为：卡片就地替换这条结果。
-        const placement = planCardPlacement(span, head, cardTokens, estimate)
+        const placement = planCardPlacement(span, head, provisionalCardTokens, estimate)
         if (!placement) break
-        // 头部不再被切：assistant 头 + 卡片 + stub 的保留量不小于原段时这一刀没有收益。
-        if (placement.keptTokens >= chunk.tokens) break
+
+        // 图片保留（借鉴 0.1.4）：被切段里的 image 块不能丢，但也不能靠保留条目本体——
+        // 后续轮次的调用方 assistant 已被置空，保留结果会造出孤儿 tool_result
+        // （pi-ai 只合成孤儿调用的结果、不清理孤儿结果，provider 会 400）。
+        // 做法：卡片目标自身的图片留在卡片下方，其余被省略条目的图片按段内顺序追加；
+        // 条目照旧置空。图片 token 不计入文本模拟，由下一轮宿主 usage 反映。
+        const omittedCandidates: SpanEntry[] = placement.anchor
+          ? span.filter(
+            (target) => target.id !== placement.anchor?.id
+              && target.id !== placement.cardTarget.id
+              && !placement.stubbedEntryIds.includes(target.id),
+          )
+          : span.slice(1)
+        const mergedImages: ImageContent[] = []
+        for (const target of omittedCandidates) {
+          mergedImages.push(...imageBlocksOf(projectedById.get(target.id)))
+        }
+        if (mergedImages.length > 0) cardText += `\n${SPINE_IMAGES_MERGED_NOTE}`
+        const cardTokens = algorithm.estimateTokens(cardText)
+        // 卡片不比原段小就没有意义：放弃这一刀，交给官方压缩。
+        if (cardTokens >= chunk.tokens) {
+          emit('skip', { reason: 'card_not_smaller', spanTokens: chunk.tokens, cardTokens })
+          break
+        }
+        // 头部不再被切：assistant 头 + 卡片 + 全部 stub 的保留量不小于原段时这一刀没有收益。
+        const keptTokens = placement.keptTokens - provisionalCardTokens + cardTokens
+        if (keptTokens >= chunk.tokens) break
 
         for (const item of recallItems) store.put(item)
         const cardEntryId = placement.cardTarget.id
-        const omittedEntryIds: string[] = []
-        if (placement.anchor) {
-          // 头部、卡片目标与 stub 条目原位保留（不产生省略草案），其余条目省略。
-          for (const target of span) {
-            if (target.id === placement.anchor.id) continue
-            if (target.id === cardEntryId) continue
-            if (placement.stubbedEntryIds.includes(target.id)) continue
-            omittedEntryIds.push(target.id)
-            drafts.push({ type: 'context_edit', targetId: target.id, replacement: null })
-          }
-        } else {
-          // 指针卡形态：span 首条换成卡片，其余条目照旧省略。
-          for (let index = 0; index < span.length; index += 1) {
-            const target = span[index]
-            if (!target) continue
-            if (index === 0) continue
-            omittedEntryIds.push(target.id)
-            drafts.push({ type: 'context_edit', targetId: target.id, replacement: null })
-          }
+        const omittedEntryIds = omittedCandidates.map((target) => target.id)
+        for (const targetId of omittedEntryIds) {
+          drafts.push({ type: 'context_edit', targetId, replacement: null })
         }
         drafts.push({
           type: 'context_edit',
           targetId: cardEntryId,
-          replacement: { content: [{ type: 'text', text: cardText }] },
+          replacement: { content: withImageBlocks(cardText, projectedById.get(cardEntryId), mergedImages) },
         })
         for (const stubId of placement.stubbedEntryIds) {
           drafts.push({
             type: 'context_edit',
             targetId: stubId,
-            replacement: { content: [{ type: 'text', text: SPINE_SIBLING_STUB }] },
+            replacement: { content: withImageBlocks(SPINE_SIBLING_STUB, projectedById.get(stubId)) },
           })
         }
 
         work = applySimulatedWork(work, chunk, placement, cardText, cardTokens, estimate)
-        simulatedTotal -= chunk.tokens - placement.keptTokens
+        simulatedTotal -= chunk.tokens - keptTokens
         spans.push({
           cardEntryId,
           omittedEntryIds,
           spanTokens: chunk.tokens,
           cardTokens,
-          savedTokens: chunk.tokens - placement.keptTokens,
+          savedTokens: chunk.tokens - keptTokens,
           recallRefs: recallItems.map((item) => item.id),
           pointerOnly: chunk.pointerOnly === true,
           turn: head.turn ?? null,
           ...(placement.anchor ? { anchorEntryId: placement.anchor.id } : {}),
           ...(placement.stubbedEntryIds.length > 0 ? { stubbedEntryIds: placement.stubbedEntryIds } : {}),
+          ...(mergedImages.length > 0 ? { mergedImageCount: mergedImages.length } : {}),
         })
         cuts += 1
         if (!drain) break
@@ -553,6 +661,16 @@ export function createLiveCompactExtension(
           at: now(),
         })
       }
+      // 事件日志只记判定与水位数字：卡片正文、工具原文一律不进这里。
+      emit('cut', {
+        hostTokens: hostTotal,
+        simulatedTokens: simulatedTotal,
+        savedTokens: hostTotal - simulatedTotal,
+        drain,
+        cuts,
+        engine,
+        engineSource: resolution.source,
+      })
       return { entries: drafts }
     })
   }
@@ -588,7 +706,7 @@ interface CardImitationInterception {
  */
 function interceptCardImitation(
   event: TurnEndEvent,
-  sessionId: string,
+  emit: (event: string, fields?: LiveCompactEventFields) => void,
   retries: number,
   mark: string,
 ): CardImitationInterception | undefined {
@@ -601,11 +719,11 @@ function interceptCardImitation(
     replacement: { content },
   }
   if (retries >= MAX_IMITATION_RETRIES) {
-    console.log('[live-compact] ' + JSON.stringify({ event: 'card_imitation_cap_reached', sessionId }))
+    emit('imitation_cap_reached', { attempt: retries })
     return { result: { entries: [edit] }, forced: false }
   }
   const attempt = retries + 1
-  console.log('[live-compact] ' + JSON.stringify({ event: 'card_imitation_intercepted', sessionId, attempt }))
+  emit('imitation_intercepted', { attempt })
   const correction: CustomMessageEntryDraft = {
     type: 'custom_message',
     customType: 'live-compact-imitation-guard',

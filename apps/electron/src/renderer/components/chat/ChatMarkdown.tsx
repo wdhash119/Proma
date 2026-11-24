@@ -2,8 +2,10 @@
  * ChatMarkdown — 聊天与推理内容的增量 Markdown 渲染器。
  *
  * 与整篇 react-markdown 渲染的区别：先把源码切成顶层块，再让每个块独立渲染，
- * 流式输出时只有尾块会重新解析。块的渲染仍复用调用方传入的插件、组件与
- * urlTransform，因此行为与整篇渲染保持一致。
+ * 流式输出时只有尾块会重新解析。尾块若结构尚未定型（`-`、`#`、`|`、`$$` 刚出现，
+ * 代码块除外）会先降级成纯文本，等它被空行冻结或自身已闭合后才换成真 markdown 元素，
+ * 以免已上屏的行在输入中途换盒子、重新断行。块的渲染仍复用调用方传入的插件、
+ * 组件与 urlTransform，因此行为与整篇渲染保持一致。
  */
 
 import * as React from 'react'
@@ -14,6 +16,7 @@ import {
   reconcileChatMarkdownBlocks,
   type ChatMarkdownBlock,
 } from '@/lib/chat-markdown-blocks'
+import { stabilizeChatMarkdownStreamTail } from '@/lib/chat-markdown-stream-tail'
 
 interface ChatMarkdownProps {
   /** Markdown 源码 */
@@ -26,7 +29,7 @@ interface ChatMarkdownProps {
   urlTransform?: UrlTransform
   /** 自定义渲染组件映射 */
   components?: Components
-  /** 是否仍在流式输出；true 时尾块保持稳定 key */
+  /** 是否仍在流式输出；true 时未定型的尾块降级为纯文本，并保持稳定 key */
   isStreaming?: boolean
 }
 
@@ -40,6 +43,9 @@ interface ChatMarkdownBlockViewProps {
 
 /**
  * 单块渲染。上一层用 React.memo 冻结未变化的块，流式期间不会重复解析历史内容。
+ *
+ * `type === 'text'` 是流式尾块的降级形态：结构尚未定型（`-`、`#`、`|`、围栏、`$$`
+ * 刚出现）的尾块先按纯文本输出，不解析 markdown，避免已上屏的行立刻换盒子重新断行。
  */
 const ChatMarkdownBlockView = React.memo(function ChatMarkdownBlockView({
   block,
@@ -48,6 +54,9 @@ const ChatMarkdownBlockView = React.memo(function ChatMarkdownBlockView({
   urlTransform,
   components,
 }: ChatMarkdownBlockViewProps): React.ReactElement {
+  if (block.type === 'text') {
+    return <p className="whitespace-pre-wrap break-words">{block.source}</p>
+  }
   return (
     <Markdown
       remarkPlugins={remarkPlugins}
@@ -72,7 +81,9 @@ export const ChatMarkdown = React.memo(function ChatMarkdown({
 
   const blocks = React.useMemo(() => {
     const parsed = parseChatMarkdownBlocks(source)
-    const reconciled = reconcileChatMarkdownBlocks(previousBlocksRef.current, parsed, isStreaming)
+    // 流式中先把未定型的尾块降级成纯文本，定型（被空行冻结或自身已闭合）后才换成真元素。
+    const stabilized = isStreaming ? stabilizeChatMarkdownStreamTail(parsed) : parsed
+    const reconciled = reconcileChatMarkdownBlocks(previousBlocksRef.current, stabilized, isStreaming)
     previousBlocksRef.current = reconciled
     return reconciled
   }, [source, isStreaming])

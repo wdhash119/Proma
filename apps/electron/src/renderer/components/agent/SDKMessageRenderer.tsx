@@ -19,7 +19,8 @@ import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbo
 import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
 import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
-import { ProcessBlockGroup, buildAssistantTurnRenderItems } from './ProcessBlockGroup'
+import { ProcessBlockGroup, buildAssistantTurnRenderItems, filterVisibleTopLevelBlocks } from './ProcessBlockGroup'
+import { SpineCutNotice } from './SpineCutNotice'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @proma/session-core 作为唯一真源。
 // 这里 import 供本文件内部使用，并 re-export 以保持既有 `from './SDKMessageRenderer'` 导入方零改动。
@@ -51,7 +52,7 @@ import { formatMessageTime } from '@/lib/format-message-time'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/channel-atoms'
-import { agentSessionPendingFilesAtom, agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
+import { agentSessionPendingFilesAtom, agentSessionsAtom, agentWorkspacesAtom, liveCompactShowEventsAtom } from '@/atoms/agent-atoms'
 import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { automationsAtom, automationFormAtom, automationToDraft } from '@/atoms/automation-atoms'
 import { openWorkspaceComponentAtom } from '@/atoms/agent-atoms'
@@ -347,11 +348,14 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
     (b) => b.type === 'text' && 'text' in b && !!(b as { text: string }).text
   )
 
+  // 「显示压缩事件」关闭时，从顶层块里排除 spine_recall（原文召回）工具行，
+  // 与切割通知一并隐藏；在选段渲染前过滤，保证单独块与过程组聚合一致。
+  const showEvents = useAtomValue(liveCompactShowEventsAtom)
   const renderItems = React.useMemo(() => {
-    return buildAssistantTurnRenderItems(topLevelBlocks, {
+    return buildAssistantTurnRenderItems(filterVisibleTopLevelBlocks(topLevelBlocks, showEvents), {
       isStreaming,
     })
-  }, [topLevelBlocks, isStreaming])
+  }, [topLevelBlocks, showEvents, isStreaming])
 
   // 本轮「文件名 → 绝对路径」映射：与 footer chips 同源，供正文内联文件引用补全裸文件名
   const turnFileMap = React.useMemo(
@@ -1244,6 +1248,8 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
     }
     if (getSDKCompactStatus(group.message)) return <div {...historySelectionAttributes}><CompactStatusNotice message={group.message} /></div>
     if (subtype === 'permission_denied') return <div {...historySelectionAttributes}><PermissionDeniedNotice message={group.message} /></div>
+    // Live Compact 切割事件：常驻通知行，显示受「显示压缩事件」开关控制（组件内读 atom）。
+    if (subtype === 'spine_cut') return <div {...historySelectionAttributes}><SpineCutNotice message={group.message} /></div>
     return null
   }
 

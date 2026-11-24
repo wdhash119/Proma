@@ -245,7 +245,7 @@ export interface SDKResultMessage {
   _channelProvider?: ProviderType
 }
 
-/** SDK system 消息（init / compact_boundary / permission_denied / task_started / task_progress / task_notification） */
+/** SDK system 消息（init / compact_boundary / spine_cut / permission_denied / task_started / task_progress / task_notification） */
 export interface SDKSystemMessage {
   type: 'system'
   subtype?: string
@@ -266,6 +266,12 @@ export interface SDKSystemMessage {
   compactionEstimatedTokensAfter?: number
   /** 本次压缩是否紧随一个无需续跑的成功主 Agent turn。 */
   afterCompletedTurn?: boolean
+  /** Live Compact（spine_cut）：本次 turn_end 切下的段数。 */
+  spineCutCount?: number
+  /** Live Compact（spine_cut）：本次切割节省的 token 估算（切前占用 - 模拟切后占用）。 */
+  spineSavedTokens?: number
+  /** Live Compact（spine_cut）：本次是否走云端强制收尾（drain）。 */
+  spineDrain?: boolean
   summary?: string
   output_file?: string
   last_tool_name?: string

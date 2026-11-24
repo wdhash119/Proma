@@ -143,6 +143,43 @@ describe('Live Compact 设置页：新布局（开关行 → 阈值设置 → �
   })
 })
 
+describe('Live Compact 设置页：显示压缩事件开关', () => {
+  const settings = readAppFile(SETTINGS_PAGE)
+
+  test('Given 开关行 When 检查 Then 显示压缩事件格始终可配，取值只有显式 false 才关', () => {
+    const toggleRow = sliceBetween(settings, '{/* 开关行', '{/* 阈值设置')
+    expect(toggleRow).toContain('label="显示压缩事件"')
+    expect(toggleRow).toContain('helpLabel="显示压缩事件说明"')
+    expect(toggleRow).toContain('checked={showEvents}')
+    expect(toggleRow).toContain('onCheckedChange={(checked) => void updateShowEvents(checked)}')
+    // 取值与主进程归一化一致：只有显式 false 才算关。
+    expect(settings).toContain('const showEvents = settings.showEvents !== false')
+    // 纯渲染层开关，独立于主闸：开关行里只有保护开关包在主闸条件块里（计数 1），
+    // 显示压缩事件不另包一层，主闸关闭时仍可配置。
+    expect(toggleRow.split('{settings.enabled && (').length - 1).toBe(1)
+  })
+
+  test('Given 开关 When 检查 Then 经 settings 通道只发 showEvents 补丁并同步渲染 atom', () => {
+    expect(settings).toContain('liveCompact: { showEvents },')
+    expect(settings).toContain('const saved = result.liveCompact?.showEvents ?? showEvents')
+    expect(settings).toContain('setShowEventsAtom(saved !== false)')
+    // applySettings 同步 atom，保证启动加载与保存后渲染层立即拿到新值。
+    expect(settings).toContain('setShowEventsAtom(next.showEvents !== false)')
+    expect(settings).toContain('useSetAtom(liveCompactShowEventsAtom)')
+    // 补丁体不含主闸，避免覆盖另一窗口刚改的 enabled。
+    const body = settings.slice(settings.indexOf('const updateShowEvents'), settings.indexOf('const updateLineSource'))
+    expect(body).not.toContain('settings.enabled')
+  })
+
+  test('Given 问号 When 检查 Then 说明同时管切割通知与原文召回、关闭隐藏历史、不影响压缩行为', () => {
+    expect(settings).toContain('原文召回')
+    expect(settings).toContain('含历史记录')
+    expect(settings).toContain('不影响压缩行为本身')
+    expect(settings).toContain('切了几段')
+    expect(settings).toContain('缺省开启')
+  })
+})
+
 describe('Live Compact 设置页：阈值设置', () => {
   const settings = readAppFile(SETTINGS_PAGE)
 

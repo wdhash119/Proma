@@ -22,6 +22,7 @@ describe('Live Compact 设置归一化：旧配置回落', () => {
     const settings = normalizeLiveCompactSettings({ enabled: true })
     expect(settings.enabled).toBe(true)
     expect(settings.protectCurrentTurn).toBe(true)
+    expect(settings.showEvents).toBe(true)
     expect(settings.lineMode).toBe('ratio')
     expect(settings.ratios).toEqual(DEFAULT_RATIOS)
     expect(settings.absolute).toEqual(DEFAULT_ABSOLUTE)
@@ -32,6 +33,7 @@ describe('Live Compact 设置归一化：旧配置回落', () => {
       const settings = normalizeLiveCompactSettings(input)
       expect(settings.enabled).toBe(false)
       expect(settings.protectCurrentTurn).toBe(true)
+      expect(settings.showEvents).toBe(true)
       expect(settings.lineMode).toBe('ratio')
       expect(settings.ratios).toEqual(DEFAULT_RATIOS)
       expect(settings.absolute).toEqual(DEFAULT_ABSOLUTE)
@@ -54,6 +56,26 @@ describe('Live Compact 设置归一化：当前轮保护开关', () => {
     // 手写配置里的字符串 'false' 不能意外关掉保护。
     expect(normalizeLiveCompactSettings({ enabled: true, protectCurrentTurn: 'false' }).protectCurrentTurn).toBe(true)
     expect(normalizeLiveCompactSettings({ enabled: true, protectCurrentTurn: 0 }).protectCurrentTurn).toBe(true)
+  })
+})
+
+describe('Live Compact 设置归一化：显示压缩事件开关', () => {
+  test('Given 缺省 When 归一化 Then 显示开启（切割通知与原文召回行都显示）', () => {
+    expect(normalizeLiveCompactSettings({ enabled: true }).showEvents).toBe(true)
+    expect(normalizeLiveCompactSettings({}).showEvents).toBe(true)
+  })
+
+  test('Given 显式 showEvents=false When 归一化 Then 隐藏', () => {
+    expect(normalizeLiveCompactSettings({ enabled: true, showEvents: false }).showEvents).toBe(false)
+    // 与主闸无关：纯渲染层开关，主闸关闭时仍可独立配置。
+    expect(normalizeLiveCompactSettings({ enabled: false, showEvents: false }).showEvents).toBe(false)
+  })
+
+  test('Given 显式 true 或非法值 When 归一化 Then 显示保持开启', () => {
+    expect(normalizeLiveCompactSettings({ enabled: true, showEvents: true }).showEvents).toBe(true)
+    // 手写配置里的字符串 'false' / 0 不能意外关掉显示。
+    expect(normalizeLiveCompactSettings({ enabled: true, showEvents: 'false' }).showEvents).toBe(true)
+    expect(normalizeLiveCompactSettings({ enabled: true, showEvents: 0 }).showEvents).toBe(true)
   })
 })
 
@@ -233,6 +255,7 @@ describe('Live Compact 设置写入：补丁合并保留磁盘现值', () => {
     expect(mergeLiveCompactSettings(undefined, { protectCurrentTurn: false })).toEqual({
       enabled: false,
       protectCurrentTurn: false,
+      showEvents: true,
       lineMode: 'ratio',
       ratios: DEFAULT_RATIOS,
       absolute: DEFAULT_ABSOLUTE,

@@ -353,6 +353,14 @@ export interface LiveCompactSettings {
    */
   protectCurrentTurn?: boolean
   /**
+   * 显示压缩事件开关；缺省 true。
+   *
+   * 纯渲染层开关，不影响切割行为本身：切割事件始终以 system 消息（spine_cut）发射并持久化，
+   * 本开关只决定会话界面是否显示它们——true 时切割通知与原文召回（spine_recall）工具行都显示，
+   * false 时两者都隐藏（含历史记录）。切换即时生效，无需重启会话。
+   */
+  showEvents?: boolean
+  /**
    * 四条线的取值模式；缺省 'ratio'（按窗口比例）。
    *
    * `origin` 时设置里的 ratios/absolute 仍原样保留（切回自定义时不丢），但阈值一律取上游 Origin。

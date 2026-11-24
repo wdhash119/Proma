@@ -9,6 +9,22 @@ import type {
   SDKThinkingBlock,
 } from '@proma/shared'
 
+/**
+ * 按「显示压缩事件」开关过滤顶层内容块（纯函数，便于单测）。
+ *
+ * showEvents 为 false 时隐藏 spine_recall（原文召回）工具块——它是 Live Compact
+ * 在转录里除切割通知外的唯一可见痕迹，开关关闭时与通知一并隐藏。true 时原样返回。
+ * 只作用于顶层块；子代理内部块不受影响（spine_recall 不会出现在子代理里）。
+ * 在 buildAssistantTurnRenderItems 之前调用，保证单独渲染与过程组聚合一致排除。
+ */
+export function filterVisibleTopLevelBlocks(
+  blocks: SDKContentBlock[],
+  showEvents: boolean,
+): SDKContentBlock[] {
+  if (showEvents) return blocks
+  return blocks.filter((block) => !(block.type === 'tool_use' && block.name === 'spine_recall'))
+}
+
 interface ProcessBlockGroupProps {
   blocks: SDKContentBlock[]
   isStreaming?: boolean

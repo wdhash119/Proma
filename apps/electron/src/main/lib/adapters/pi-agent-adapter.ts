@@ -99,6 +99,7 @@ import { createVisionRelayReadToolDefinition } from './pi-vision-relay-read'
 import { inspectImageWithVisionRelay } from '../vision-relay-service'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
 import { createLiveCompactExtension } from './pi-live-compact-extension'
+import type { LiveCompactCutRecord } from './pi-live-compact-extension'
 import { resolveLiveCompactAlgorithm } from './live-compact-algorithm-loader'
 import type { LiveCompactQueryInput } from '../live-compact-settings'
 import {
@@ -1444,6 +1445,7 @@ async function createLiveCompactExtensionFactories(
   liveCompact: LiveCompactQueryInput,
   sessionId: string,
   active: ActivePiSession,
+  emitCutNotice?: (record: LiveCompactCutRecord) => void,
 ): Promise<Array<(pi: ExtensionAPI) => void>> {
   try {
     const resolved = await resolveLiveCompactAlgorithm(liveCompact.configDir, {
@@ -1461,9 +1463,13 @@ async function createLiveCompactExtensionFactories(
         thresholds: liveCompact.thresholds,
         // 设置页的保护开关（缺省 true）随查询输入白名单透传，胶层据此门控当前轮护栏。
         protectCurrentTurn: liveCompact.protectCurrentTurn,
-        // utility 进程没有 UI 落点（FINDINGS §5.7）：cut 事件 v1 只落结构化日志，
-        // 前缀固定为 [live-compact]，便于从开发终端/主进程日志里 grep 复盘。
-        onCut: (record) => console.log('[live-compact] ' + JSON.stringify(record)),
+        // 结构化日志保留：前缀固定为 [live-compact]，便于从开发终端/主进程日志里 grep 复盘。
+        // 另外经 emitCutNotice 把切割事件推成会话流 system 消息（spine_cut），
+        // 是否显示由渲染层的「显示压缩事件」开关决定，发射本身不受开关影响。
+        onCut: (record) => {
+          console.log('[live-compact] ' + JSON.stringify(record))
+          emitCutNotice?.(record)
+        },
         // 决策事件日志：与算法覆盖层清单同目录（`<configDir>/live-compact/events.jsonl`），
         // 用户在一个地方就能看全、清理时一并删掉；写盘失败由日志模块自己吞掉。
         eventsPath: join(liveCompact.configDir, 'live-compact', 'events.jsonl'),
@@ -1636,7 +1642,17 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         // 第五个工厂：Live Compact。默认关闭时 input.liveCompact 为 undefined，
         // 这里不加载算法、不注册 spine_recall、不注入任何提示，行为与从前完全一致。
         ...(input.liveCompact?.enabled
-          ? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active)
+          ? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active, (record) => {
+              // 切割事件始终发射并持久化；渲染层按「显示压缩事件」开关决定是否展示。
+              queue.push({
+                type: 'system',
+                subtype: 'spine_cut',
+                session_id: input.sessionId,
+                spineCutCount: record.spans.length,
+                spineSavedTokens: record.savedTokens,
+                spineDrain: record.drain,
+              } as unknown as SDKMessage)
+            })
           : []),
       ]
       const resourceLoader = new sdk.DefaultResourceLoader({

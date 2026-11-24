@@ -32,6 +32,7 @@ import {
   workspaceGitDiffRefreshVersionAtom,
   agentThinkingAtom,
   liveCompactGlobalEnabledAtom,
+  liveCompactShowEventsAtom,
   agentEffortAtom,
   agentMaxBudgetUsdAtom,
   agentMaxTurnsAtom,
@@ -169,6 +170,7 @@ function AgentSettingsInitializer(): null {
   const bumpGitDiffRefresh = useSetAtom(workspaceGitDiffRefreshVersionAtom)
   const setThinking = useSetAtom(agentThinkingAtom)
   const setLiveCompactGlobalEnabled = useSetAtom(liveCompactGlobalEnabledAtom)
+  const setLiveCompactShowEvents = useSetAtom(liveCompactShowEventsAtom)
   const setEffort = useSetAtom(agentEffortAtom)
   const setMaxBudget = useSetAtom(agentMaxBudgetUsdAtom)
   const setMaxTurns = useSetAtom(agentMaxTurnsAtom)
@@ -225,6 +227,8 @@ function AgentSettingsInitializer(): null {
       }
       // Live Compact 全局主闸：工具栏按钮据此显示启用/禁用态，缺省关闭。
       setLiveCompactGlobalEnabled(settings.liveCompact?.enabled === true)
+      // Live Compact 显示压缩事件：缺省开，只有显式 false 才隐藏切割通知与原文召回行。
+      setLiveCompactShowEvents(settings.liveCompact?.showEvents !== false)
       if (settings.agentEffort) {
         setEffort(settings.agentEffort)
       }
@@ -257,7 +261,7 @@ function AgentSettingsInitializer(): null {
       console.error(err)
       setAgentSettingsReady(true) // 即使出错也标记就绪，避免永远阻塞
     })
-  }, [setAgentChannelId, setAgentModelId, setAgentWorkspaces, setCurrentWorkspaceId, setThinking, setLiveCompactGlobalEnabled, setEffort, setMaxBudget, setMaxTurns, setAutomationGroupOrder, setChannels, setChannelsLoaded, setAgentSettingsReady])
+  }, [setAgentChannelId, setAgentModelId, setAgentWorkspaces, setCurrentWorkspaceId, setThinking, setLiveCompactGlobalEnabled, setLiveCompactShowEvents, setEffort, setMaxBudget, setMaxTurns, setAutomationGroupOrder, setChannels, setChannelsLoaded, setAgentSettingsReady])
 
   // 工作区切换时重置能力缓存，预加载基线
   useEffect(() => {

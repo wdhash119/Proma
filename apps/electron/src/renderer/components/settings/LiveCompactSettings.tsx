@@ -4,8 +4,9 @@
  * 三段式布局（顺序即页面顺序）：
  * 1. 开关行：没有卡片外壳，纯 flex 行——「总开关」`liveCompact.enabled`
  *    （关闭即硬停所有会话；开启后会话默认启用，可在会话工具栏单独关）与
- *    「结束轮保护」`liveCompact.protectCurrentTurn`（缺省开，关闭回到上游行为）。
- *    主开关关闭时保护开关无意义，直接不渲染。
+ *    「结束轮保护」`liveCompact.protectCurrentTurn`（缺省开，关闭回到上游行为）与
+ *    「显示压缩事件」`liveCompact.showEvents`（缺省开，纯渲染层开关，关闭隐藏切割通知与原文召回行）。
+ *    主开关关闭时保护开关无意义，直接不渲染；显示开关不依赖主闸，始终可配。
  * 2. 阈值设置（主开关关闭时整节不渲染）：卡顶是两个无标签分段控件——
  *    「原算法（上游默认）/ 自定义」与「比例 / 绝对值」（原算法生效时后者不渲染）。
  *    自定义生效时单一 `md:grid-cols-2` 网格逐行成对渲染：左 cell 是上游 Origin 只读值，
@@ -69,7 +70,7 @@ import {
   type LiveCompactLineKey,
   type LiveCompactOriginRow,
 } from './live-compact-line-model'
-import { liveCompactGlobalEnabledAtom } from '@/atoms/agent-atoms'
+import { liveCompactGlobalEnabledAtom, liveCompactShowEventsAtom } from '@/atoms/agent-atoms'
 
 /** 主闸缺省关闭：未启用时运行链路零变化。 */
 const DEFAULT_SETTINGS: LiveCompactSettingsValue = { enabled: false }
@@ -97,6 +98,10 @@ const MASTER_HELP =
 /** 结束轮保护问号。 */
 const PROTECT_HELP =
   '缺省开启。刚结束的这一轮（末条消息与工具结果）与投影尾部永不被切；关闭则回到上游行为：当前轮也可能被切成卡片，历史上曾在长输出收尾处静默截断任务。保存后下一条消息生效。'
+
+/** 显示压缩事件问号：纯渲染层开关，同时管切割通知与原文召回行。 */
+const SHOW_EVENTS_HELP =
+  '缺省开启。开启时每次压缩切割在会话流里显示一条通知（切了几段、省多少 token），原文召回（spine_recall）工具行也正常显示；关闭则两者都隐藏（含历史记录）。只影响显示，不影响压缩行为本身，切换即时生效。'
 
 /** 原算法问号：选段旋钮 + 求值时机。 */
 const ORIGIN_COLUMN_HELP =
@@ -216,6 +221,7 @@ export function LiveCompactSettings(): React.ReactElement {
   const [settings, setSettings] = React.useState<LiveCompactSettingsValue>(DEFAULT_SETTINGS)
   const [saving, setSaving] = React.useState(false)
   const [protectSaving, setProtectSaving] = React.useState(false)
+  const [showEventsSaving, setShowEventsSaving] = React.useState(false)
   /** 四条线与取值来源用显式保存按钮：数值型设置不做即时保存，避免半截输入被写盘。 */
   const [lineSaving, setLineSaving] = React.useState(false)
   /** 取值来源：origin = 上游原算法（只读），custom = 用户自定义四条线。 */
@@ -235,6 +241,7 @@ export function LiveCompactSettings(): React.ReactElement {
   // 会话工具栏按钮读的是这个 atom；设置页保存成功后同步写入，
   // 否则已经挂载的 AgentView 会一直拿启动时的旧值。
   const setGlobalEnabledAtom = useSetAtom(liveCompactGlobalEnabledAtom)
+  const setShowEventsAtom = useSetAtom(liveCompactShowEventsAtom)
 
   const [state, setState] = React.useState<LiveCompactState | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -252,13 +259,14 @@ export function LiveCompactSettings(): React.ReactElement {
   const applySettings = React.useCallback((next: LiveCompactSettingsValue): void => {
     setSettings(next)
     setGlobalEnabledAtom(next.enabled === true)
+    setShowEventsAtom(next.showEvents !== false)
     const mode: LiveCompactLineMode = next.lineMode ?? 'ratio'
     setSource(mode === 'origin' ? 'origin' : 'custom')
     // origin 不携带自定义档位：保留用户上次选的 ratio/absolute，切回自定义才有落点。
     if (mode === 'ratio' || mode === 'absolute') setCustomMode(mode)
     setRatioDraft(ratiosToDraft(next.ratios ?? RENDERER_DEFAULT_LINE_RATIOS))
     setAbsoluteDraft(absoluteToDraft(next.absolute ?? RENDERER_DEFAULT_LINE_ABSOLUTE))
-  }, [setGlobalEnabledAtom])
+  }, [setGlobalEnabledAtom, setShowEventsAtom])
 
   React.useEffect(() => {
     let cancelled = false
@@ -342,6 +350,29 @@ export function LiveCompactSettings(): React.ReactElement {
       toast.error('保存结束轮保护开关失败', { description: describeError(error) })
     } finally {
       setProtectSaving(false)
+    }
+  }
+
+  const updateShowEvents = async (showEvents: boolean): Promise<void> => {
+    const previous = settings
+    patchSettings({ showEvents })
+    setShowEventsSaving(true)
+    try {
+      // 只发这一个字段：纯渲染层开关，主进程合到磁盘现值上，不回写其它字段。
+      const result = await window.electronAPI.updateSettings({
+        liveCompact: { showEvents },
+      })
+      const saved = result.liveCompact?.showEvents ?? showEvents
+      patchSettings({ showEvents: saved })
+      // 同步渲染层 atom：会话界面立即按新开关显示/隐藏切割通知与原文召回行。
+      setShowEventsAtom(saved !== false)
+      toast.success(saved !== false ? '已开启压缩事件显示' : '已关闭压缩事件显示')
+    } catch (error) {
+      console.error('[Live Compact 设置] 保存显示压缩事件失败:', error)
+      setSettings(previous)
+      toast.error('保存显示压缩事件开关失败', { description: describeError(error) })
+    } finally {
+      setShowEventsSaving(false)
     }
   }
 
@@ -507,6 +538,7 @@ export function LiveCompactSettings(): React.ReactElement {
   const busy = syncing || state?.syncing === true
   /** 缺省保护：只有显式 false 才算关闭（与主进程归一化一致）。 */
   const protectCurrentTurn = settings.protectCurrentTurn !== false
+  const showEvents = settings.showEvents !== false
   const isCustom = source === 'custom'
   const ratioActive = customMode === 'ratio'
 
@@ -538,6 +570,14 @@ export function LiveCompactSettings(): React.ReactElement {
             onCheckedChange={(checked) => void updateProtectCurrentTurn(checked)}
           />
         )}
+        <ToggleInline
+          label="显示压缩事件"
+          help={SHOW_EVENTS_HELP}
+          helpLabel="显示压缩事件说明"
+          checked={showEvents}
+          disabled={showEventsSaving || loading}
+          onCheckedChange={(checked) => void updateShowEvents(checked)}
+        />
       </div>
 
       {/* 阈值设置：主开关关闭时整节不渲染；草稿状态在父组件里，重新开启后原样恢复 */}

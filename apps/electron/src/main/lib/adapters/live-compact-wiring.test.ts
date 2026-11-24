@@ -158,14 +158,20 @@ describe('Live Compact 接线契约（源码级）', () => {
   test('Given Pi adapter When 组装 extensions Then 条件加入第五个工厂且 isEnabled 读可变 ref', () => {
     const source = read('pi-agent-adapter.ts')
     expect(source).toContain('...(input.liveCompact?.enabled')
-    expect(source).toContain('? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active)')
+    expect(source).toContain('? await createLiveCompactExtensionFactories(input.liveCompact, input.sessionId, active, (record) => {')
     expect(source).toContain('createLiveCompactExtension({')
     expect(source).toContain('isEnabled: () => enabledRef.enabled')
     // 保护开关随查询输入白名单显式透传（Live Compact 字段逐项传入，不整体展开）。
     expect(source).toContain('protectCurrentTurn: liveCompact.protectCurrentTurn')
     expect(source).toContain('resolveLiveCompactAlgorithm(liveCompact.configDir')
-    // cut 事件 v1 的结构化日志出口。
+    // cut 事件的结构化日志出口（保留）。
     expect(source).toContain("console.log('[live-compact] ' + JSON.stringify(record))")
+    // 切割事件另推成会话流 system 消息（spine_cut），发射不受渲染层开关影响。
+    expect(source).toContain("subtype: 'spine_cut'")
+    expect(source).toContain('spineCutCount: record.spans.length')
+    expect(source).toContain('spineSavedTokens: record.savedTokens')
+    expect(source).toContain('spineDrain: record.drain')
+    expect(source).toContain('emitCutNotice?.(record)')
     // 默认关闭时不加载算法，也不创建 factory；开关引用每轮按解析值刷新（保留对象身份）。
     expect(source).toContain("applyLiveCompactEnabled(active, input.liveCompact?.enabled === true)")
   })
@@ -186,6 +192,7 @@ describe('Live Compact 接线契约（源码级）', () => {
     const settingsTypes = readFileSync(join(import.meta.dir, '../../../types/settings.ts'), 'utf8')
     expect(settingsTypes).toContain('liveCompact?: LiveCompactSettings')
     expect(settingsTypes).toContain('export interface LiveCompactSettings')
+    expect(settingsTypes).toContain('showEvents?: boolean')
   })
 
   test('Given 设置服务 When 读取旧配置 Then Live Compact 缺省关闭且新字段被保留', () => {
@@ -194,6 +201,7 @@ describe('Live Compact 接线契约（源码级）', () => {
     expect(source).toContain('liveCompact: normalizeLiveCompactSettings(data.liveCompact)')
     // 归一化是读取侧唯一入口：新字段没被返回就会在“读取 → 保存”里蒸发。
     expect(source).toContain('protectCurrentTurn: raw.protectCurrentTurn !== false')
+    expect(source).toContain('showEvents: raw.showEvents !== false')
     expect(source).toContain('ratios: normalizeLiveCompactLineRatios(raw.ratios)')
     expect(source).toContain('absolute: normalizeLiveCompactLineAbsolute(raw.absolute)')
     expect(source).toContain("lineMode: raw.lineMode === 'absolute' || raw.lineMode === 'origin' ? raw.lineMode : 'ratio'")

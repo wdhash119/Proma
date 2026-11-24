@@ -880,6 +880,15 @@ export const agentThinkingAtom = atom<ThinkingConfig | undefined>({ type: 'adapt
  */
 export const liveCompactGlobalEnabledAtom = atom<boolean>(false)
 
+/**
+ * Live Compact「显示压缩事件」开关（settings.liveCompact.showEvents）。
+ *
+ * 缺省 true：切割通知（spine_cut）与原文召回（spine_recall）工具行都在会话流显示。
+ * 纯渲染层开关：关闭只隐藏显示（含历史记录），不影响切割行为与事件发射。
+ * 启动加载与设置页保存成功后同步写入（见 main.tsx / LiveCompactSettings）。
+ */
+export const liveCompactShowEventsAtom = atom<boolean>(true)
+
 /** Agent 推理深度 */
 export const agentEffortAtom = atom<AgentEffort | undefined>(undefined)
 

@@ -105,6 +105,8 @@ export function normalizeLiveCompactSettings(input: unknown): LiveCompactSetting
     enabled: raw.enabled === true,
     // 缺省保护（ec918f21 的当前轮护栏）：只有显式 false 才关。
     protectCurrentTurn: raw.protectCurrentTurn !== false,
+    // 显示压缩事件：缺省开（切割通知与原文召回行都显示），只有显式 false 才隐藏。
+    showEvents: raw.showEvents !== false,
     // 三态：只有显式 'absolute' / 'origin' 才保留，其余（含历史脏值）一律回落按窗口比例。
     lineMode: raw.lineMode === 'absolute' || raw.lineMode === 'origin' ? raw.lineMode : 'ratio',
     ratios: normalizeLiveCompactLineRatios(raw.ratios),

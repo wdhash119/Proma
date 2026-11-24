@@ -422,6 +422,19 @@ export const MCP_INTEGRATION_CATALOG: CatalogIntegration[] = [
  * 只有实际渲染的目录卡才能占用“目录服务器名”。被暂时隐藏的目录项不能吞掉
  * Agent 已写入的同名工作区 MCP，否则待 OAuth 的通用连接会既不在目录、也不在“我的 MCP”。
  */
+/**
+ * 合并目录模板与已写入工作区的条目，得到发起授权时应使用的条目。
+ * 已写入的配置优先；工作区条目没有写 oauth 时才保留目录模板里的 OAuth 元数据，
+ * 这样 Agent 按官方文档补进去的公开 clientId 不会被模板覆盖。
+ * Client Secret 不在这里，它只存在加密凭据库里。
+ */
+export function mergeCatalogMcpEntry(
+  catalogEntry: McpServerEntry,
+  configuredEntry?: McpServerEntry,
+): McpServerEntry {
+  return configuredEntry ? { ...catalogEntry, ...configuredEntry } : catalogEntry
+}
+
 export function getCatalogServerNames(): Set<string> {
   return new Set(MCP_INTEGRATION_CATALOG
     .filter(isCatalogIntegrationVisible)

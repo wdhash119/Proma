@@ -41,7 +41,7 @@ import { groupSkills } from './skillGrouping'
 import { EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH, IntegrationCatalog } from './IntegrationCatalog'
 import { CredentialDialog } from './CredentialDialog'
 import { OAuthClientSecretDialog } from './OAuthClientSecretDialog'
-import { buildCatalogMcpGuidePrompt, MCP_INTEGRATION_CATALOG, getCatalogServerNames, isCatalogIntegrationVisible, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCliProbeState, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
+import { buildCatalogMcpGuidePrompt, MCP_INTEGRATION_CATALOG, getCatalogServerNames, isCatalogIntegrationVisible, matchesCatalogSearch, mergeCatalogMcpEntry, type CatalogCliIntegration, type CatalogCliProbeState, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
 
 const embeddedMcpSectionContainerQuery = `
   @container (min-width: ${EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH}) {
@@ -176,7 +176,7 @@ export function AgentSkillsView({
   const [classifyingSkills, setClassifyingSkills] = React.useState(false)
   const [installingCatalogMcpId, setInstallingCatalogMcpId] = React.useState<string | null>(null)
   const [pendingCredentialIntegration, setPendingCredentialIntegration] = React.useState<CatalogCredentialIntegration | null>(null)
-  const [pendingOAuthClientSecret, setPendingOAuthClientSecret] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
+  const [pendingOAuthClientSecret, setPendingOAuthClientSecret] = React.useState<{ name: string; entry: McpServerEntry; displayName?: string } | null>(null)
   const savedOAuthClientSecretsRef = React.useRef(new Set<string>())
 
   const selectSkill = React.useCallback((slug: string): void => {
@@ -293,6 +293,51 @@ export function AgentSkillsView({
     }
   }, [fillCurrentAgentPrompt])
 
+  /**
+   * 发起浏览器授权。`displayName` 只用于提示文案，目录卡片传显示名（如 GitHub）。
+   * 目录卡片与「我的 MCP」卡片都走这里，保证需要 Client Secret 时先弹安全输入框。
+   */
+  const authorizeMcp = React.useCallback(async (
+    name: string,
+    entry: McpServerEntry,
+    displayName?: string,
+  ): Promise<void> => {
+    if (installingCatalogMcpId) return
+    const label = displayName ?? name
+    if ((entry.type !== 'http' && entry.type !== 'sse') || !entry.url || !entry.oauth) {
+      toast.error('当前 MCP 没有可用的 OAuth 配置')
+      return
+    }
+    if (!entry.oauth.clientId && !entry.oauth.registrationEndpoint) {
+      toast.error('OAuth 参数待补全', { description: '请让 Agent 根据官方文档写入公开 clientId 或 registrationEndpoint；token 和 client secret 不会写入配置。' })
+      return
+    }
+    if (entry.oauth.clientSecretRequired && !savedOAuthClientSecretsRef.current.has(name)) {
+      // GitHub 这类不支持动态注册的 provider 需要用户自建 OAuth App：
+      // 先让用户在安全输入框里补 Client Secret，保存后由密钥框重新发起授权。
+      setPendingOAuthClientSecret({ name, entry, ...(displayName ? { displayName } : {}) })
+      return
+    }
+    setInstallingCatalogMcpId(`oauth:${name}`)
+    try {
+      await window.electronAPI.startMcpOAuth({
+        workspaceSlug: data.workspaceSlug,
+        serverName: name,
+        provider: entry.oauth.provider ?? name,
+        serverUrl: entry.url,
+        oauth: entry.oauth,
+      })
+      const verification = await data.toggleMcp(name, true)
+      if (!verification.success) throw new Error(verification.message || 'OAuth 已完成，但 MCP 握手或工具发现失败')
+      toast.success(`${label} 已完成授权`, { description: 'OAuth token 已安全保存，并已通过真实连接验证。' })
+    } catch (error) {
+      console.error(`[Agent 技能] ${label} OAuth 失败:`, error)
+      toast.error(`${label} 授权失败`, { description: error instanceof Error ? error.message : '请检查 OAuth 配置后重试' })
+    } finally {
+      setInstallingCatalogMcpId(null)
+    }
+  }, [data, installingCatalogMcpId])
+
   const installCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
     if (installingCatalogMcpId) return
     if (integration.authentication !== 'none' && !integration.oauthProvider) {
@@ -307,33 +352,16 @@ export function AgentSkillsView({
           const installed = await data.installMcp(integration.serverName, integration.entry)
           if (!installed) return
         }
-        const configuredEntry = data.mcpConfig.servers[integration.serverName]
-        const serverUrl = configuredEntry?.type === 'http' || configuredEntry?.type === 'sse'
-          ? configuredEntry.url
-          : integration.entry.url
-        if (!serverUrl) throw new Error('当前 MCP 缺少可授权的远程地址')
-        const oauth = configuredEntry?.oauth ?? integration.entry.oauth
-        if (oauth && !oauth.clientId && !oauth.registrationEndpoint) {
-          throw new Error('OAuth 配置缺少公开 clientId 或 registrationEndpoint；请让 Agent 根据官方文档补全后再授权')
-        }
-        await window.electronAPI.startMcpOAuth({
-          workspaceSlug: data.workspaceSlug,
-          serverName: integration.serverName,
-          provider: oauth?.provider ?? integration.oauthProvider,
-          serverUrl,
-          ...(oauth ? { oauth } : {}),
-        })
-        const verification = await data.toggleMcp(integration.serverName, true)
-        if (!verification.success) {
-          throw new Error(verification.message || 'MCP 握手或工具发现失败，请检查授权后重试')
-        }
-        toast.success(`${integration.name} 已完成授权`, { description: 'OAuth token 已安全保存，MCP 已启用。' })
-      } catch (error) {
-        console.error(`[Agent 技能] ${integration.name} OAuth 失败:`, error)
-        toast.error(`${integration.name} 授权失败`, { description: error instanceof Error ? error.message : '请稍后重试' })
       } finally {
         setInstallingCatalogMcpId(null)
       }
+      // 授权不在这里直接开浏览器：先合并工作区里已写入的配置（含 Agent 补的 clientId），
+      // 再交给 authorizeMcp，缺 Client Secret 时它会先弹安全输入框。
+      await authorizeMcp(
+        integration.serverName,
+        mergeCatalogMcpEntry(integration.entry, data.mcpConfig.servers[integration.serverName]),
+        integration.name,
+      )
       return
     }
 
@@ -353,41 +381,7 @@ export function AgentSkillsView({
     } finally {
       setInstallingCatalogMcpId(null)
     }
-  }, [data, guideCatalogMcp, installingCatalogMcpId])
-
-  const authorizeMcp = React.useCallback(async (name: string, entry: McpServerEntry): Promise<void> => {
-    if (installingCatalogMcpId) return
-    if ((entry.type !== 'http' && entry.type !== 'sse') || !entry.url || !entry.oauth) {
-      toast.error('当前 MCP 没有可用的 OAuth 配置')
-      return
-    }
-    if (!entry.oauth.clientId && !entry.oauth.registrationEndpoint) {
-      toast.error('OAuth 参数待补全', { description: '请让 Agent 根据官方文档写入公开 clientId 或 registrationEndpoint；token 和 client secret 不会写入配置。' })
-      return
-    }
-    if (entry.oauth.clientSecretRequired && !savedOAuthClientSecretsRef.current.has(name)) {
-      setPendingOAuthClientSecret({ name, entry })
-      return
-    }
-    setInstallingCatalogMcpId(`oauth:${name}`)
-    try {
-      await window.electronAPI.startMcpOAuth({
-        workspaceSlug: data.workspaceSlug,
-        serverName: name,
-        provider: entry.oauth.provider ?? name,
-        serverUrl: entry.url,
-        oauth: entry.oauth,
-      })
-      const verification = await data.toggleMcp(name, true)
-      if (!verification.success) throw new Error(verification.message || 'OAuth 已完成，但 MCP 握手或工具发现失败')
-      toast.success(`${name} 已完成授权`, { description: 'OAuth token 已安全保存，并已通过真实连接验证。' })
-    } catch (error) {
-      console.error(`[Agent 技能] ${name} OAuth 失败:`, error)
-      toast.error(`${name} 授权失败`, { description: error instanceof Error ? error.message : '请检查 OAuth 配置后重试' })
-    } finally {
-      setInstallingCatalogMcpId(null)
-    }
-  }, [data, installingCatalogMcpId])
+  }, [data, authorizeMcp, guideCatalogMcp, installingCatalogMcpId])
 
   const connectCredentialIntegration = React.useCallback(async (integration: CatalogCredentialIntegration, value: string): Promise<void> => {
     if (installingCatalogMcpId) return
@@ -871,7 +865,7 @@ export function AgentSkillsView({
           })
           savedOAuthClientSecretsRef.current.add(pending.name)
           // 先关闭秘密输入弹窗，再由同一张 MCP 卡片继续用户显式的浏览器授权。
-          queueMicrotask(() => { void authorizeMcp(pending.name, pending.entry) })
+          queueMicrotask(() => { void authorizeMcp(pending.name, pending.entry, pending.displayName) })
         }}
       />
 

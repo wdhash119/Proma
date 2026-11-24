@@ -1974,8 +1974,10 @@ export interface WorkspaceMemoryGuidance {
 
 export function getWorkspaceMemoryGuidance(workspaceSlug: string): WorkspaceMemoryGuidance {
   const memoryDir = getWorkspaceAutoMemoryPath(workspaceSlug)
+  // 现役协作画像统一为 collaboration.md；user-profile.md / user_profile.md 仅是旧画像迁移输入，
+  // 不能作为“已建立协作画像”的依据，否则迁移完成前会永久抑制引导。
   return {
-    needsCollaborationProfile: !isRegularFile(join(memoryDir, 'user-profile.md')),
+    needsCollaborationProfile: !isRegularFile(join(memoryDir, 'collaboration.md')),
   }
 }
 

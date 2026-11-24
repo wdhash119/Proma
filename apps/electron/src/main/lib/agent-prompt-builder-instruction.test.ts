@@ -131,3 +131,38 @@ describe('系统提示词中的项目规则段', () => {
     expect(prompt).not.toContain('## 本轮项目地图行动')
   })
 })
+
+describe('系统提示词中的协作画像命名', () => {
+  test('Given 尚未建立协作画像 When 构建提示词 Then 指向 collaboration.md 而不是旧画像', () => {
+    const { instructionContext } = makeWorkspace()
+
+    const prompt = buildSystemPrompt({
+      workspaceSlug: 'default',
+      sessionId: 'session-1',
+      permissionMode: 'bypassPermissions',
+      productivityTools,
+      instructionContext,
+      memoryGuidance: { needsCollaborationProfile: true },
+    })
+
+    expect(prompt).toContain('## 协作知识状态')
+    expect(prompt).toContain('memory/collaboration.md')
+    expect(prompt).not.toContain('memory/user-profile.md')
+    expect(prompt).toContain('`collaboration.md` 与相关主题文件')
+  })
+
+  test('Given 已建立协作画像 When 构建提示词 Then 不注入协作知识状态段', () => {
+    const { instructionContext } = makeWorkspace()
+
+    const prompt = buildSystemPrompt({
+      workspaceSlug: 'default',
+      sessionId: 'session-1',
+      permissionMode: 'bypassPermissions',
+      productivityTools,
+      instructionContext,
+      memoryGuidance: { needsCollaborationProfile: false },
+    })
+
+    expect(prompt).not.toContain('## 协作知识状态')
+  })
+})

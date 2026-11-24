@@ -412,7 +412,11 @@ export function WorkspaceMemoryTab({ workspaceSlug, sessionId, search, embedded 
     () => filterNodes(autoFiles, effectiveSearch, new Set(contentMatches.keys())),
     [autoFiles, contentMatches, effectiveSearch],
   )
-  const hasProfile = autoFiles.some((node) => node.relativePath === 'user-profile.md')
+  // 现役协作画像为 collaboration.md；旧画像文件仍保留兼容，避免迁移完成前禁用补证据入口。
+  const hasProfile = autoFiles.some((node) =>
+    node.relativePath === 'collaboration.md'
+    || node.relativePath === 'user-profile.md'
+    || node.relativePath === 'user_profile.md')
   const migrationIssues = [
     summary?.legacyAutoMemory ? '长期记忆迁移' : null,
     summary?.instructionConflict ? '工作区规则迁移' : null,

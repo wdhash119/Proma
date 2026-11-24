@@ -61,9 +61,10 @@ function hasClosedMathBlock(source: string): boolean {
     if (!trimmed.startsWith('$$')) continue
     const rest = trimmed.slice(2)
     if (!open) {
-      // `$$ 公式 $$` 同行闭合；`$$` 单独开启
+      // `$$ 公式 $$` 同行闭合；否则一律视为开启，含 `$$ 公式` 这种开启行带内容的写法
+      // （remark-math 会把它解析成 math 块，随后独立一行的 `$$` 即闭合）。
       if (rest.trim().length > 0 && rest.trimEnd().endsWith('$$')) return true
-      if (rest.trim().length === 0) open = true
+      open = true
       continue
     }
     // 已在块内：遇到 `$$`（可为行尾闭合）即结束

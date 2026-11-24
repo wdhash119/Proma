@@ -58,6 +58,12 @@ describe('流式尾块降级', () => {
     expect(isChatMarkdownTailSettled('$$\n\\frac{a}{b}', 'math')).toBe(false)
   })
 
+  test('Given 开启行带内容的数学块 When 判定闭合 Then 独立闭合行也算已定型', () => {
+    // remark-math 把 `$$ x` 解析成 math 块的开启行；随后独立一行 `$$` 即闭合。
+    expect(isChatMarkdownTailSettled('$$ x\n$$', 'math')).toBe(true)
+    expect(isChatMarkdownTailSettled('$$ x\ny', 'math')).toBe(false)
+  })
+
   test('Given 表格尾块 When 稳定化 Then 先按纯文本渲染', () => {
     const { types } = streamTypes('结论如下\n\n| 指标 | 实测 |\n| --- | --- |\n| 块签名变化 | 26/32 帧 |')
     expect(types).toEqual(['paragraph', 'text'])

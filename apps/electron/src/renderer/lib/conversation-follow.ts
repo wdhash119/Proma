@@ -116,6 +116,25 @@ export function shouldForceFollowBottom(params: {
   return getFollowDistance(params.metrics) > FORCE_SNAP_EPSILON_PX
 }
 
+/** 单个元素的滚动状态快照（computed overflowY + 几何），供滚轮归属判定 */
+export interface FollowElementScrollState {
+  overflowY: string
+  scrollTop: number
+  clientHeight: number
+  scrollHeight: number
+}
+
+/**
+ * 这个元素能否沿滚轮方向继续滚（即会不会把滚轮消费掉）。
+ * 纯函数，与 DOM 遍历分开，便于单测。
+ */
+export function elementOwnsWheel(state: FollowElementScrollState, deltaY: number): boolean {
+  const scrollable = state.overflowY === 'auto' || state.overflowY === 'scroll' || state.overflowY === 'overlay'
+  if (!scrollable || state.scrollHeight - state.clientHeight <= 0) return false
+  const distance = state.scrollHeight - state.clientHeight - state.scrollTop
+  return deltaY < 0 ? state.scrollTop > 0 : distance > 0
+}
+
 /**
  * 从滚轮目标向上找最近的可滚动祖先，并判断它能不能沿滚轮方向继续滚。
  * 用来判断这次滚轮是被更内层的视口（进度条、报错 `<pre>`）消费，还是落到对话容器本身。
@@ -133,13 +152,16 @@ export function innerViewportOwnsWheel(
   let node: Node | null = target.parentElement ?? (target === outer ? outer : null)
   while (node && node !== outer) {
     if (node instanceof HTMLElement) {
-      const overflowY = window.getComputedStyle(node).overflowY
-      const scrollable = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay'
-      if (scrollable && node.scrollHeight - node.clientHeight > 0) {
-        const distance = node.scrollHeight - node.clientHeight - node.scrollTop
-        const room = deltaY < 0 ? node.scrollTop > 0 : distance > 0
-        if (room) return true
-      }
+      const owns = elementOwnsWheel(
+        {
+          overflowY: window.getComputedStyle(node).overflowY,
+          scrollTop: node.scrollTop,
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+        },
+        deltaY,
+      )
+      if (owns) return true
     }
     node = node.parentElement
   }

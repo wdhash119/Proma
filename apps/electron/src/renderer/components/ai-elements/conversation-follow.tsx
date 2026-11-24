@@ -43,7 +43,7 @@ export function ConversationFollowProvider({
 }: {
   children: React.ReactNode
 }): React.ReactElement {
-  const { scrollRef, contentRef, scrollToBottom } = useStickToBottomContext()
+  const { scrollRef, contentRef, scrollToBottom, stopScroll } = useStickToBottomContext()
   const [mode, setMode] = React.useState<ConversationFollowMode>('follow')
   const modeRef = React.useRef<ConversationFollowMode>('follow')
   const userDrivingUntilRef = React.useRef(0)
@@ -51,8 +51,13 @@ export function ConversationFollowProvider({
   const applyMode = React.useCallback((next: ConversationFollowMode | null): void => {
     if (!next || next === modeRef.current) return
     modeRef.current = next
+    // 脱离时同步解除库的跟随武装：库的滚动分类在 state.resizeDifference 非零时整段被吞
+    // （流式高频 resize，且拖动滚动条不产生 wheel），isAtBottom 可能仍为 true 并继续追底，
+    // 与应用层意图相反。stopScroll 恰好置 escapedFromLock=true + isAtBottom=false；
+    // resume() 走 scrollToBottom（不传 preserveScrollPosition）重新武装，闭环成立。
+    if (next === 'detached') stopScroll()
     setMode(next)
-  }, [])
+  }, [stopScroll])
 
   const markUserDriving = React.useCallback((): void => {
     userDrivingUntilRef.current = Date.now() + USER_DRIVE_WINDOW_MS

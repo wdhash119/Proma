@@ -5,6 +5,7 @@ import {
   FORCE_SNAP_EPSILON_PX,
   decideFollowOnScroll,
   decideFollowOnWheel,
+  elementOwnsWheel,
   getFollowDistance,
   shouldForceFollowBottom,
   type FollowScrollMetrics,
@@ -131,5 +132,34 @@ describe('内容增长后的跟手纠正', () => {
   })
 })
 
-// innerViewportOwnsWheel 依赖 Node/getComputedStyle，bun 测试环境没有 DOM，
-// 该分支由内嵌浏览器与真机验收覆盖，这里不做假 DOM 断言。
+describe('滚轮归属的纯函数判定', () => {
+  const scrollable = { overflowY: 'auto', scrollTop: 100, clientHeight: 200, scrollHeight: 600 }
+
+  test('Given 可滚元素向上滚且未到顶 When 判定 Then 消费滚轮', () => {
+    expect(elementOwnsWheel(scrollable, -120)).toBe(true)
+  })
+
+  test('Given 可滚元素向下滚且未到底 When 判定 Then 消费滚轮', () => {
+    expect(elementOwnsWheel(scrollable, 120)).toBe(true)
+  })
+
+  test('Given 已在顶部 When 向上滚 Then 不消费，交给外层', () => {
+    expect(elementOwnsWheel({ ...scrollable, scrollTop: 0 }, -120)).toBe(false)
+  })
+
+  test('Given 已在底部 When 向下滚 Then 不消费，交给外层', () => {
+    expect(elementOwnsWheel({ ...scrollable, scrollTop: 400 }, 120)).toBe(false)
+  })
+
+  test('Given overflow 不可滚 When 判定 Then 不消费', () => {
+    expect(elementOwnsWheel({ ...scrollable, overflowY: 'hidden' }, -120)).toBe(false)
+    expect(elementOwnsWheel({ ...scrollable, overflowY: 'visible' }, 120)).toBe(false)
+  })
+
+  test('Given 内容不足一屏 When 判定 Then 不消费', () => {
+    expect(elementOwnsWheel({ ...scrollable, scrollHeight: 200 }, -120)).toBe(false)
+  })
+})
+
+// innerViewportOwnsWheel 的 DOM 遍历依赖 Node/getComputedStyle，bun 测试环境没有 DOM，
+// 该分支由内嵌浏览器与真机验收覆盖；逐元素的归属判定已由 elementOwnsWheel 纯函数测试覆盖。

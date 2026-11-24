@@ -17,8 +17,8 @@
 | 能力 | 闭源 | 开源现状 | 状态 |
 | --- | --- | --- | --- |
 | Pi Agent 运行时 | 1.5.2 | 1.6.0（含 `pi-ai` patch，6 条断流重试模式） | ➕ 领先 |
-| Chat 模式主入口 | 已退役 | 已退役，侧栏无 Chat 按钮 | ✅ 一致 |
-| 历史 Chat 管理 | 设置页 `legacy-chat` | 设置页「历史 Chat」，支持搜索/分页/交给 Agent | ✅ 一致 |
+| Chat 模式主入口 | 已退役 | 已退役，侧栏无 Chat 按钮，问答侧栏与问答工具 Skill 一并下线 | ✅ 一致 |
+| 历史 Chat 管理 | 设置页 `legacy-chat` | 只读视图与 Chat→Agent 迁移一并移除，历史数据文件不在启动时删除 | ➖ 开源移除 |
 | 权限模式 / 计划模式 | 已下线 | 已下线，`AgentPermissionService` 保留供 Slack 与协作使用 | ✅ 一致 |
 | 任务进度浮层 | 已下线 | 已下线，`TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`/`TodoRead` 全部移除 | ✅ 一致 |
 | 上下文压缩反馈 | 消息流内单行提示 | `CompactionNotice`，终态 6s 消失 | ✅ 一致 |
@@ -147,7 +147,7 @@
 | shortcuts 快捷键管理 | 同 | ✅ |
 | onboarding Proma 新手引导 | 同 | ✅ |
 | voice-input 语音输入 | 同 + 「按住说话」开关 | ✅ |
-| legacy-chat 历史 Chat | 历史 Chat（本任务新增） | ✅ |
+| legacy-chat 历史 Chat | — | ➖ 开源移除 |
 | migration 数据迁移 | 同 | ✅ |
 | storage 磁盘管理 | 同 | ✅ |
 | appearance 外观设置 | 同 | ✅ |
@@ -177,7 +177,6 @@
 | proma-build-in-proma-app | 有 | — | ❌ 未移植（强依赖 Proma Open API 与商业版模型目录） |
 | proma-web-search | 1.2.0 | — | ⚠️ 未移植：其正文围绕「Proma Cloud 一等工具 + 扣积分」描述，与本地实现不符；路由建议已写进系统提示词 |
 | knowledge-maintenance | — | 有 | ➕ 开源自备 |
-| tool-builder | — | 有 | ➕ 开源自备（已改写为仅对问答侧栏生效） |
 
 ## 11. 明确排除的范围
 

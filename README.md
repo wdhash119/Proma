@@ -6,7 +6,7 @@
 
 - **Agent 与上下文**：完善项目指令、分层记忆、会话协作与交付链路；新增 Live Compact（https://github.com/Tranquillitatis-Lab/hydrogen-harness，https://github.com/carrotciallo/pi-live-compact），在本地按模型上下文窗口比例压缩长对话，支持全局 / 会话开关。
 - **模型与桌面能力**：加入 Computer Use、Proma 自操作和联网检索等本机自动化能力，扩展模型能力手动设置与额度展示等。
-- **产品与工程治理**：退役旧 Chat 主入口、权限 / 计划模式及 Scratch Pad 迁移等历史链路，持续清理死代码与未使用依赖，并补齐 IPC 契约和自动化测试。
+- **产品与工程治理**：退役旧 Chat 主入口、问答侧栏与问答工具 Skill、权限 / 计划模式及 Scratch Pad 迁移等历史链路，持续清理死代码与未使用依赖，并补齐 IPC 契约和自动化测试。
 
 > 以下原样保留原项目 README。其中的功能列表、开源 / 商业版说明、下载地址与更新状态均属于原项目语境；本改造版请以当前代码和 `release-notes/` 为准。
 
@@ -36,7 +36,6 @@
 
 Proma 是一款为专业用户打造的开源通用的桌面端 Agent 产品。功能涵盖了主流 Agent 具备的所有功能，包括 
 
-- Chat 模式
 - Agent 模式
 - 计划模式
 - 项目分区
@@ -178,7 +177,7 @@ Proma  的记忆也是区分项目的，每个项目会有一个自己的 AGENTS
 
 ### 文件预览和编辑
 
-Proma 支持主流的文件预览和编辑，比如 markdown，我们采用了 Live Markdown 方案，你可以像在 Typora 或者 Obsidian 里类似的编辑体验，简约实用。并且也支持 PDF、Docx、PPT、Excel 等文档的预览。你不但可以预览，还可以划线这些部分，多次的跟 Agent 对具体的部分进行描述，甚至你还可以打开问答，快速获得一些简单问题的答案。
+Proma 支持主流的文件预览和编辑，比如 markdown，我们采用了 Live Markdown 方案，你可以像在 Typora 或者 Obsidian 里类似的编辑体验，简约实用。并且也支持 PDF、Docx、PPT、Excel 等文档的预览。你不但可以预览，还可以划线这些部分，把选中的内容作为引用带进一个新建的临时 Agent 会话，围绕这段内容继续跟 Agent 讨论。
 
 ![image-20260908114657248](https://img.erlich.fun/personal-blog/proma/image-20260908114657248.png)
 

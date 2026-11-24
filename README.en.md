@@ -6,7 +6,6 @@
 
 Proma is an open-source, general-purpose desktop Agent product built for professional users. It covers the capabilities expected from leading Agent products, including:
 
-- Chat mode
 - Agent mode
 - Plan mode
 - Project isolation
@@ -119,7 +118,7 @@ For more specific memory, `MEMORY.md` serves as the index, with additional files
 
 ### File Preview and Editing
 
-Proma supports previewing and editing common file types. For Markdown, we use a Live Markdown approach that gives you a simple, practical editing experience similar to Typora or Obsidian. Proma also previews PDFs, DOCX files, presentations, Excel files, and more. You can do more than preview: highlight parts of a document, discuss specific passages with the Agent across multiple turns, or open Q&A to get quick answers to simpler questions.
+Proma supports previewing and editing common file types. For Markdown, we use a Live Markdown approach that gives you a simple, practical editing experience similar to Typora or Obsidian. Proma also previews PDFs, DOCX files, presentations, Excel files, and more. You can do more than preview: highlight parts of a document and turn the selection into a quoted reference in a newly created temporary Agent session, then keep discussing that passage with the Agent.
 
 ![Proma file preview and editing](https://img.erlich.fun/personal-blog/proma/image-20260908114657248.png)
 

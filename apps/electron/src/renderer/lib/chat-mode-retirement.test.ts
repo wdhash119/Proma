@@ -360,3 +360,52 @@ describe('Chat 退役不误伤正常命名', () => {
     expect(sourcesContaining(backendSources, 'AgentSession')).not.toEqual([])
   })
 })
+
+describe('问答工具 Skill 退役与默认 Skill 防回流', () => {
+  const defaultSkillsDir = join(appRoot, 'default-skills')
+
+  function collectDefaultSkillSources(): Array<{ slug: string; source: string }> {
+    const collected: Array<{ slug: string; source: string }> = []
+    for (const entry of readdirSync(defaultSkillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const skillPath = join(defaultSkillsDir, entry.name, 'SKILL.md')
+      if (!existsSync(skillPath)) continue
+      collected.push({ slug: entry.name, source: readFileSync(skillPath, 'utf8') })
+    }
+    return collected
+  }
+
+  test('Given 默认 Skill 目录 When 检查 Then tool-builder 已随问答侧栏一起下线', () => {
+    expect(existsSync(join(defaultSkillsDir, 'tool-builder'))).toBe(false)
+  })
+
+  test('Given 配置层 When 检查 Then tool-builder 已登记为退役默认 Skill', () => {
+    const configPaths = readFileSync(join(appRoot, 'src/main/lib/config-paths.ts'), 'utf8')
+    const retiredBlock = configPaths.match(/RETIRED_DEFAULT_SKILL_SLUGS[^=]*=\s*\[([\s\S]*?)\]/)
+
+    expect(retiredBlock).not.toBeNull()
+    expect(retiredBlock?.[1]).toContain("'tool-builder'")
+  })
+
+  test('Given 默认 Skill 目录 When 检查 Then 不再残留问答工具语义', () => {
+    const offenders = collectDefaultSkillSources()
+      .filter((skill) => /tool-builder|chat-tools\.json/.test(skill.source))
+      .map((skill) => skill.slug)
+
+    expect(offenders).toEqual([])
+  })
+
+  test('Given proma-coach When 检查 Then 版本已递增且不再引导用户创建问答工具', () => {
+    const coach = readFileSync(join(defaultSkillsDir, 'proma-coach/SKILL.md'), 'utf8')
+
+    expect(coach).toContain('version: "1.0.16"')
+    expect(coach).not.toContain('tool-builder')
+    expect(coach).not.toContain('Chat')
+    expect(coach).not.toMatch(/问答(工具|侧栏)/)
+
+    // 退役 Chat 相关路由不得连带删掉仍然有效的下游路由。
+    expect(coach).toContain('skill-creator')
+    expect(coach).toContain('prompt-clarifier')
+    expect(coach).toContain('MCP')
+  })
+})

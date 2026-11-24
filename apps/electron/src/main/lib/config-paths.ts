@@ -420,6 +420,8 @@ function compareSemver(a: string, b: string): number {
 export const RETIRED_DEFAULT_SKILL_SLUGS: readonly string[] = [
   'brainstorming',
   'vault',
+  // Chat 主入口与侧栏「问答」均已下线，问答类工具改为 MCP 服务或直接 HTTP 请求。
+  'tool-builder',
 ]
 
 const RETIRED_DEFAULT_SKILL_SLUG_SET = new Set(RETIRED_DEFAULT_SKILL_SLUGS)

@@ -27,7 +27,7 @@ import { VersionHistory } from './VersionHistory'
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
 
-const GITHUB_RELEASES_URL = 'https://github.com/proma-ai/Proma/releases'
+const GITHUB_RELEASES_URL = 'https://github.com/wdhash119/Proma/releases'
 
 /** 更新状态卡片 */
 function UpdateCard(): React.ReactElement | null {
@@ -482,7 +482,7 @@ export function AboutSettings(): React.ReactElement {
   return (
     <SettingsSection
       title="关于 Proma"
-      description="集成通用 AI Agent 的下一代人工智能软件"
+      description="基于 proma-ai/Proma 开源版的改造分支"
     >
       <SettingsCard>
         <SettingsRow label="版本">
@@ -506,12 +506,12 @@ export function AboutSettings(): React.ReactElement {
         </SettingsRow>
         <SettingsRow label="项目地址">
           <a
-            href="https://github.com/proma-ai/Proma.git"
+            href="https://github.com/wdhash119/Proma"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-primary hover:underline"
           >
-            github.com/proma-ai/Proma
+            github.com/wdhash119/Proma
           </a>
         </SettingsRow>
       </SettingsCard>

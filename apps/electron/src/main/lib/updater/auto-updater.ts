@@ -3,6 +3,11 @@
  *
  * 检测新版本 → 自动后台下载 → 用户选择立即或空闲时重启安装。
  * 自动更新仅在打包后的生产环境中启用。
+ *
+ * 国内网络回退：直连 GitHub 失败（网络错误/超时）时，先经 release 服务解析最新
+ * release tag，再把 feed 切换到代理镜像上「带 tag 的 download 目录」（generic
+ * provider），逐个镜像重试；可用镜像进程内粘滞，重启后重新尝试直连。
+ * 404（release 缺少 latest.yml）等真实错误不做代理重试，直接给出可读提示。
  */
 
 import { autoUpdater } from 'electron-updater'
@@ -13,6 +18,8 @@ import { UPDATER_IPC_CHANNELS } from './updater-types'
 import { createIdleInstallScheduler } from './idle-install-scheduler'
 import { isNewerVersion } from './version'
 import { createUpdateCacheCleanup, getDefaultUpdaterBaseCacheDirectory, shouldDeferUpdateCacheCleanup } from './update-cache-cleanup'
+import { GITHUB_FILE_PROXY_MIRRORS, isMissingFeedErrorMessage, isNetworkErrorMessage, proxiedReleaseFeedUrl } from '../github-proxy'
+import { GITHUB_REPO_OWNER, GITHUB_REPO_NAME, getLatestReleaseTag } from '../github-release-service'
 
 /** 当前更新状态 */
 let currentStatus: UpdateStatus = { status: 'idle' }
@@ -34,6 +41,12 @@ let downloadedStatusDuringCheck: Extract<UpdateStatus, { status: 'downloaded' }>
 
 /** 当前主动下载的版本，用于合并 electron-updater 的 error 事件和 Promise rejection。 */
 let activeDownloadVersion: string | null = null
+
+/** 进程内记住可用的文件代理镜像；重启后重新尝试直连 */
+let activeProxyMirror: string | null = null
+
+/** 代理回退进行中：抑制中间错误上屏与重复触发 */
+let fallbackInProgress = false
 
 /** 由 Agent 服务注入，覆盖所有窗口/后台 Agent 的运行状态。 */
 let hasActiveAgents = (): boolean => false
@@ -90,6 +103,58 @@ function downloadAvailableUpdate(): void {
   void autoUpdater.downloadUpdate().catch(handleDownloadFailure)
 }
 
+/** 把更新 feed 切换到代理镜像上带 tag 的 download 目录 */
+function applyProxyFeed(mirror: string, tag: string): void {
+  autoUpdater.setFeedURL({
+    provider: 'generic',
+    url: proxiedReleaseFeedUrl(mirror, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, tag),
+    channel: 'latest',
+  })
+}
+
+/** 404 等真实错误给出可读提示：换代理也取不到不存在的文件 */
+function describeFeedError(message: string): string {
+  if (isMissingFeedErrorMessage(message)) {
+    return `GitHub Release 缺少 latest.yml 更新清单（发布时需由 electron-builder 生成）。原始错误: ${message}`
+  }
+  return message
+}
+
+/**
+ * 直连失败后的代理回退：解析最新 tag → 逐个镜像挂代理 feed → 重新检查。
+ * 检查成功后 update-available 事件会自动触发代理下载；全部失败才把错误上屏。
+ */
+async function runProxyFallback(): Promise<void> {
+  if (fallbackInProgress) return
+  fallbackInProgress = true
+  try {
+    const tag = await getLatestReleaseTag()
+    if (!tag) {
+      setStatus({ status: 'error', error: '无法连接 GitHub，且未能获取最新 Release 标签（可能暂无发布或网络受限）' })
+      return
+    }
+    for (const mirror of GITHUB_FILE_PROXY_MIRRORS) {
+      applyProxyFeed(mirror, tag)
+      try {
+        await autoUpdater.checkForUpdates()
+        activeProxyMirror = mirror
+        console.log(`[更新] 已切换到代理镜像: ${mirror}`)
+        return
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!isNetworkErrorMessage(message)) {
+          setStatus({ status: 'error', error: describeFeedError(message) })
+          return
+        }
+        console.warn(`[更新] 代理镜像不可用，尝试下一个: ${mirror} (${message})`)
+      }
+    }
+    setStatus({ status: 'error', error: '无法连接 GitHub，所有代理镜像均不可用' })
+  } finally {
+    fallbackInProgress = false
+  }
+}
+
 /**
  * 绑定更新器所需的主窗口与 Agent 状态。
  */
@@ -116,6 +181,12 @@ export async function checkForUpdates(): Promise<void> {
 
   downloadedStatusDuringCheck = currentStatus.status === 'downloaded' ? currentStatus : null
 
+  // 已确认代理可用时刷新 tag，避免钉死旧版本目录；解析失败则沿用上次 feed
+  if (activeProxyMirror) {
+    const tag = await getLatestReleaseTag()
+    if (tag) applyProxyFeed(activeProxyMirror, tag)
+  }
+
   try {
     // 已有下载完成的更新时保持它在界面中可见，也保留用户已安排的空闲安装。
     if (!downloadedStatusDuringCheck) {
@@ -129,9 +200,15 @@ export async function checkForUpdates(): Promise<void> {
       downloadedStatusDuringCheck = null
       return
     }
+    const message = err instanceof Error ? err.message : String(err)
+    // 直连网络失败 → 代理回退；error 事件可能已先触发回退，这里避免重复
+    if (!activeProxyMirror && !fallbackInProgress && isNetworkErrorMessage(message)) {
+      await runProxyFallback()
+      return
+    }
     setStatus({
       status: 'error',
-      error: err instanceof Error ? err.message : String(err),
+      error: describeFeedError(message),
     })
   }
 }
@@ -208,6 +285,8 @@ export function cleanupUpdater(): void {
   }
   downloadedStatusDuringCheck = null
   activeDownloadVersion = null
+  activeProxyMirror = null
+  fallbackInProgress = false
   idleInstallScheduler.dispose()
 }
 
@@ -353,8 +432,15 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.on('error', (err) => {
     if (activeDownloadVersion) {
       handleDownloadFailure(err)
+      // 直连下载失败（检查已成功、下载链路被断）→ 代理回退重查重下
+      if (!activeProxyMirror && !fallbackInProgress && isNetworkErrorMessage(err.message)) {
+        void runProxyFallback()
+      }
       return
     }
+
+    // 回退尝试中的中间错误不上屏，由 runProxyFallback 统一汇报
+    if (fallbackInProgress) return
 
     console.error('[更新] 更新出错:', err)
     if (downloadedStatusDuringCheck) {
@@ -362,9 +448,13 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
       downloadedStatusDuringCheck = null
       return
     }
+    if (!activeProxyMirror && isNetworkErrorMessage(err.message)) {
+      void runProxyFallback()
+      return
+    }
     setStatus({
       status: 'error',
-      error: err.message,
+      error: describeFeedError(err.message),
     })
   })
 
@@ -397,5 +487,5 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
     win = null
   })
 
-  console.log('[更新] 自动更新模块已初始化（自动下载最新版本，支持空闲时安装）')
+  console.log('[更新] 自动更新模块已初始化（自动下载最新版本，支持空闲时安装与国内代理回退）')
 }

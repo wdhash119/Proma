@@ -200,9 +200,9 @@ deb:
 
 # ============================================
 # 发布配置
-# 每个平台的 build job 通过 --publish always 直接上传到 GitHub Release。
+# 每个平台的 build job 通过 --publish always 直接上传到 fork（wdhash119/Proma）的 GitHub Release。
 # ============================================
 publish:
   provider: github
-  owner: proma-ai
+  owner: wdhash119
   repo: Proma

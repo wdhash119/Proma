@@ -6,12 +6,14 @@ import { Input } from '@/components/ui/input'
 
 interface OAuthClientSecretDialogProps {
   serverName: string | null
+  /** 当前连接配置里的公开 clientId；提示用户密钥必须在同一 OAuth App 下生成。 */
+  clientId?: string | null
   onOpenChange: (open: boolean) => void
   onSave: (clientSecret: string) => Promise<void>
 }
 
 /** 用户显式输入 OAuth client secret 的最小安全入口；值只通过 IPC 送入 Keychain。 */
-export function OAuthClientSecretDialog({ serverName, onOpenChange, onSave }: OAuthClientSecretDialogProps): React.ReactElement {
+export function OAuthClientSecretDialog({ serverName, clientId, onOpenChange, onSave }: OAuthClientSecretDialogProps): React.ReactElement {
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [saving, setSaving] = React.useState(false)
 
@@ -43,6 +45,12 @@ export function OAuthClientSecretDialog({ serverName, onOpenChange, onSave }: OA
               {serverName} 的 OAuth 服务要求 Client Secret。它只会加密保存到系统 Keychain，不会写入 mcp.json、显示给 Agent 或回传到页面。
             </DialogDescription>
           </DialogHeader>
+          {clientId && (
+            <p className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              Client Secret 必须在 clientId 为 <code className="font-mono text-foreground">{clientId}</code> 的 OAuth App 下生成。
+              如果你刚新建了 OAuth App，请先让 Agent 把连接配置里的 clientId 更新为新 App 的值，再粘贴新 App 的密钥，否则凭据不匹配会导致授权失败。
+            </p>
+          )}
           <div className="mt-7">
             <label htmlFor="oauth-client-secret" className="text-sm font-medium text-foreground">Client Secret <span className="text-destructive">*</span></label>
             <Input

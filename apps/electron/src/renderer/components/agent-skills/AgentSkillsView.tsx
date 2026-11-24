@@ -853,6 +853,7 @@ export function AgentSkillsView({
 
       <OAuthClientSecretDialog
         serverName={pendingOAuthClientSecret?.name ?? null}
+        clientId={pendingOAuthClientSecret?.entry.oauth?.clientId ?? null}
         onOpenChange={(open) => { if (!open) setPendingOAuthClientSecret(null) }}
         onSave={async (clientSecret) => {
           const pending = pendingOAuthClientSecret

@@ -33,10 +33,10 @@ interface OAuthClientRegistration {
   client_id?: unknown
 }
 
-interface TokenResponse {
-  access_token?: unknown
-  refresh_token?: unknown
-  expires_in?: unknown
+export interface OAuthTokenSet {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
 }
 
 interface McpOAuthCredential {
@@ -278,6 +278,31 @@ async function startCallbackServer(state: string): Promise<{ redirectUri: string
   }
 }
 
+/**
+ * 解析 token 端点响应。GitHub 等提供方在凭据或授权码错误时仍返回 HTTP 200 + error JSON，
+ * 这里把 error / error_description 原样带入异常，避免笼统的「缺少 access_token」掩盖真实原因。
+ */
+export function parseOAuthTokenResponse(token: unknown): OAuthTokenSet {
+  const record: Record<string, unknown> = typeof token === 'object' && token !== null ? (token as Record<string, unknown>) : {}
+  const accessToken = record.access_token
+  if (typeof accessToken !== 'string' || !accessToken) {
+    const error = typeof record.error === 'string' && record.error ? record.error : ''
+    const description = typeof record.error_description === 'string' && record.error_description ? record.error_description : ''
+    const detail = [error, description].filter(Boolean).join(': ')
+    const hint = error === 'incorrect_client_credentials'
+      ? '；请确认 Client Secret 与配置中的 clientId 属于同一个 OAuth App'
+      : ''
+    throw new Error(detail ? `OAuth 令牌端点返回错误：${detail}${hint}` : 'OAuth 令牌端点响应缺少 access_token')
+  }
+  const expiresIn = typeof record.expires_in === 'number' && Number.isFinite(record.expires_in) && record.expires_in > 0 ? record.expires_in : undefined
+  const refreshToken = typeof record.refresh_token === 'string' && record.refresh_token ? record.refresh_token : undefined
+  return {
+    accessToken,
+    ...(refreshToken ? { refreshToken } : {}),
+    ...(expiresIn ? { expiresAt: Date.now() + expiresIn * 1000 } : {}),
+  }
+}
+
 async function exchangeAuthorizationCode(input: {
   tokenEndpoint: string
   clientId: string
@@ -302,12 +327,11 @@ async function exchangeAuthorizationCode(input: {
     body,
   })
   if (!response.ok) throw new Error(`OAuth 授权码交换失败（HTTP ${response.status}）`)
-  const token = await response.json() as TokenResponse
-  const expiresIn = typeof token.expires_in === 'number' && token.expires_in > 0 ? token.expires_in : undefined
+  const tokens = parseOAuthTokenResponse(await response.json())
   return {
-    accessToken: parseString(token.access_token, 'access_token'),
-    ...(typeof token.refresh_token === 'string' && token.refresh_token ? { refreshToken: token.refresh_token } : {}),
-    ...(expiresIn ? { expiresAt: Date.now() + expiresIn * 1000 } : {}),
+    accessToken: tokens.accessToken,
+    ...(tokens.refreshToken ? { refreshToken: tokens.refreshToken } : {}),
+    ...(tokens.expiresAt ? { expiresAt: tokens.expiresAt } : {}),
   }
 }
 
@@ -431,13 +455,12 @@ async function refreshCredential(credential: McpOAuthCredential): Promise<McpOAu
     })(),
   })
   if (!response.ok) throw new Error(`MCP OAuth 刷新失败（HTTP ${response.status}），请重新授权`)
-  const token = await response.json() as TokenResponse
-  const expiresIn = typeof token.expires_in === 'number' && token.expires_in > 0 ? token.expires_in : undefined
+  const tokens = parseOAuthTokenResponse(await response.json())
   return {
     ...credential,
-    accessToken: parseString(token.access_token, 'access_token'),
-    ...(typeof token.refresh_token === 'string' && token.refresh_token ? { refreshToken: token.refresh_token } : {}),
-    ...(expiresIn ? { expiresAt: Date.now() + expiresIn * 1000 } : { expiresAt: undefined }),
+    accessToken: tokens.accessToken,
+    ...(tokens.refreshToken ? { refreshToken: tokens.refreshToken } : {}),
+    expiresAt: tokens.expiresAt,
   }
 }
 

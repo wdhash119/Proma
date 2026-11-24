@@ -27,6 +27,17 @@ export const CHARS_PER_TOKEN_ESTIMATE = 4
 /** 速率统计窗口 */
 export const RATE_WINDOW_MS = 6000
 
+/** 状态行 tick 节奏：耗时秒级文案，1s 刷新足够 */
+export const RUN_STATS_TICK_MS = 1000
+
+/** 缓存命中率 / 输出速率快照节奏：5s 刷新一次，避免数字随流式增量跳动 */
+export const RUN_METRICS_REFRESH_MS = 5000
+
+/** 距上次快照达到 refreshMs 才刷新缓存/速率文案；耗时与事项不走这个闸。 */
+export function shouldRefreshRunMetrics(lastRefreshAt: number, nowMs: number, refreshMs: number = RUN_METRICS_REFRESH_MS): boolean {
+  return nowMs - lastRefreshAt >= refreshMs
+}
+
 /** 窗口内至少要跨这么久才出速率，避免刚起头时把噪声放大 */
 export const RATE_MIN_SPAN_MS = 1000
 

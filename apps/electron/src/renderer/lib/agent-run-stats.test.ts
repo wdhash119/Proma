@@ -7,6 +7,9 @@ import {
   formatTokenRate,
   getCacheHitRate,
   getTrailingRatePerSecond,
+  RUN_METRICS_REFRESH_MS,
+  RUN_STATS_TICK_MS,
+  shouldRefreshRunMetrics,
   sumRunUsage,
   type RunStatMessage,
   type RunTokenSample,
@@ -173,5 +176,25 @@ describe('状态行文案', () => {
     expect(formatTokenRate(105.34)).toBe('105.3 T/s')
     expect(formatTokenRate(0)).toBeNull()
     expect(formatTokenRate(null)).toBeNull()
+  })
+})
+
+describe('状态行刷新节奏', () => {
+  test('Given 节奏常量 When 检查 Then tick 1s、缓存/速率快照 5s', () => {
+    expect(RUN_STATS_TICK_MS).toBe(1000)
+    expect(RUN_METRICS_REFRESH_MS).toBe(5000)
+  })
+
+  test('Given 距上次快照不足 5s When 判定 Then 不刷新缓存/速率', () => {
+    expect(shouldRefreshRunMetrics(10_000, 14_999)).toBe(false)
+  })
+
+  test('Given 距上次快照恰好 5s When 判定 Then 刷新', () => {
+    expect(shouldRefreshRunMetrics(10_000, 15_000)).toBe(true)
+  })
+
+  test('Given 自定义间隔 When 判定 Then 按传入间隔裁决', () => {
+    expect(shouldRefreshRunMetrics(0, 1999, 2000)).toBe(false)
+    expect(shouldRefreshRunMetrics(0, 2000, 2000)).toBe(true)
   })
 })

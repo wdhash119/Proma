@@ -19,8 +19,9 @@
  * - `detached`：用户在读上面的内容，不再跟手；滚回距底 4px 内，或点「回到底部」才恢复。
  * 退出跟随的阈值（96px）刻意大于库的 70px，避免应用与库在 70px 附近来回改状态。
  *
- * 同文件之外的 `ProcessBlockGroup`（进度条内层视口）用的是同一套「意图脱离 + 回到底重挂」
- * 结构，两层视口的行为保持一致。
+ * 同文件之外的 `ProcessBlockGroup`（进度条内层视口）直接复用本文件的纯函数
+ * （decideFollowOnScroll / decideFollowOnWheel / shouldForceFollowBottom / innerViewportOwnsWheel），
+ * 两层视口的跟随行为保持一致；内层不再自写单布尔「意图即脱离 + 距底重挂」逻辑。
  */
 
 export type ConversationFollowMode = 'follow' | 'detached'

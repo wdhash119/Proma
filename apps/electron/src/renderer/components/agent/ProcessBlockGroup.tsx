@@ -1,6 +1,16 @@
 import * as React from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  USER_DRIVE_WINDOW_MS,
+  decideFollowOnScroll,
+  decideFollowOnWheel,
+  getFollowDistance,
+  innerViewportOwnsWheel,
+  shouldForceFollowBottom,
+  type ConversationFollowMode,
+  type FollowScrollMetrics,
+} from '@/lib/conversation-follow'
 import { getToolDisplayName, getToolIcon } from './tool-utils'
 import type {
   SDKContentBlock,
@@ -45,7 +55,6 @@ const PROCESS_GROUP_LIVE_CHILD_WINDOW = 4
 const PROCESS_GROUP_COLLAPSE_DURATION_MS = 500
 const PROCESS_GROUP_AUTO_COLLAPSE_SOUND_DELAY_MS = 900
 const PROCESS_GROUP_AUTO_COLLAPSE_COUNTDOWN_SECONDS = 3
-const PROCESS_GROUP_FOLLOW_BOTTOM_THRESHOLD = 24
 const PROGRESS_SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '])
 
 interface IndexedContentBlock {
@@ -174,14 +183,6 @@ export function buildProcessGroupToolNames(blocks: SDKContentBlock[]): string[] 
 
 type ProcessGroupDisplayMode = 'collapsed' | 'expanded'
 
-function isProgressViewportAtBottom({
-  clientHeight,
-  scrollHeight,
-  scrollTop,
-}: Pick<HTMLElement, 'clientHeight' | 'scrollHeight' | 'scrollTop'>): boolean {
-  return scrollHeight - scrollTop - clientHeight <= PROCESS_GROUP_FOLLOW_BOTTOM_THRESHOLD
-}
-
 function getProcessChildKey(child: React.ReactNode, index: number): string {
   if (React.isValidElement(child) && child.key != null) return String(child.key)
   return `process-child-${index}`
@@ -224,9 +225,10 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
   const [keepProgressViewport, setKeepProgressViewport] = React.useState(!!isStreaming)
   const [collapseCountdown, setCollapseCountdown] = React.useState<number | null>(null)
   const userToggledRef = React.useRef(false)
-  const followLatestRef = React.useRef(true)
-  const smoothScrollTargetRef = React.useRef<number | null>(null)
-  const scrollFrameRef = React.useRef<number | null>(null)
+  // 跟随状态复用外层对话列表的纯函数（lib/conversation-follow）：follow/detached 两态
+  // + 4/96px 滞回 + 滚轮方向判定 + 用户驱动窗口，两层视口行为一致。
+  const modeRef = React.useRef<ConversationFollowMode>('follow')
+  const userDrivingUntilRef = React.useRef(0)
   const wasStreamingRef = React.useRef(!!isStreaming)
   const autoCollapseTimersRef = React.useRef<number[]>([])
   const contentRef = React.useRef<HTMLDivElement>(null)
@@ -263,12 +265,8 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
       setKeepProgressViewport(true)
       if (!wasStreamingRef.current) {
         userToggledRef.current = false
-        followLatestRef.current = true
-        smoothScrollTargetRef.current = null
-        if (scrollFrameRef.current !== null) {
-          cancelAnimationFrame(scrollFrameRef.current)
-          scrollFrameRef.current = null
-        }
+        modeRef.current = 'follow'
+        userDrivingUntilRef.current = 0
       }
       if (!userToggledRef.current) setDisplayMode('expanded')
       wasStreamingRef.current = true
@@ -306,81 +304,73 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
     return clearAutoCollapseTimers
   }, [clearAutoCollapseTimers, isStreaming, keepExpanded])
 
-  const scrollToLatest = React.useCallback(() => {
-    if (!followLatestRef.current) return
-    const viewport = contentRef.current
-    if (!viewport) return
-
-    smoothScrollTargetRef.current = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
-    if (scrollFrameRef.current !== null) return
-
-    const advanceScroll = (): void => {
-      const target = smoothScrollTargetRef.current
-      const activeViewport = contentRef.current
-      if (!followLatestRef.current || target == null || !activeViewport) {
-        scrollFrameRef.current = null
-        return
-      }
-
-      const distance = target - activeViewport.scrollTop
-      if (Math.abs(distance) <= 1) {
-        activeViewport.scrollTop = target
-        smoothScrollTargetRef.current = null
-        scrollFrameRef.current = null
-        return
-      }
-
-      // 内容突增时快速追近，正常增量则保持低成本的连续插值。
-      const nextTop = distance > 72
-        ? target - 48
-        : activeViewport.scrollTop + distance * 0.32
-      activeViewport.scrollTop = nextTop
-      scrollFrameRef.current = requestAnimationFrame(advanceScroll)
-    }
-
-    scrollFrameRef.current = requestAnimationFrame(advanceScroll)
+  const markUserDriving = React.useCallback((): void => {
+    userDrivingUntilRef.current = Date.now() + USER_DRIVE_WINDOW_MS
   }, [])
+
+  const applyMode = React.useCallback((next: ConversationFollowMode | null): void => {
+    if (next && next !== modeRef.current) modeRef.current = next
+  }, [])
+
+  const readMetrics = React.useCallback((): FollowScrollMetrics | null => {
+    const element = contentRef.current
+    if (!element) return null
+    return { scrollTop: element.scrollTop, clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }
+  }, [])
+
+  // 内容增长后跟手到底；用户正在滚（驱动窗口内）或已脱离时不抢 scrollTop。
+  const forceFollowBottom = React.useCallback((): void => {
+    const element = contentRef.current
+    const metrics = readMetrics()
+    if (!element || !metrics) return
+    if (!shouldForceFollowBottom({
+      mode: modeRef.current,
+      metrics,
+      userDrivingUntil: userDrivingUntilRef.current,
+      now: Date.now(),
+    })) return
+    element.scrollTop = element.scrollHeight
+  }, [readMetrics])
 
   React.useLayoutEffect(() => {
     if (!isStreaming || !keepProgressViewport) return
     const content = contentInnerRef.current
     if (!content) return
 
-    const frame = requestAnimationFrame(scrollToLatest)
-    const observer = new ResizeObserver(scrollToLatest)
+    const observer = new ResizeObserver(forceFollowBottom)
     observer.observe(content)
-    return () => {
-      cancelAnimationFrame(frame)
-      if (scrollFrameRef.current !== null) {
-        cancelAnimationFrame(scrollFrameRef.current)
-        scrollFrameRef.current = null
-      }
-      observer.disconnect()
-    }
-  }, [isStreaming, keepProgressViewport, scrollToLatest])
+    forceFollowBottom()
+    return () => observer.disconnect()
+  }, [isStreaming, keepProgressViewport, forceFollowBottom])
 
   React.useLayoutEffect(() => {
-    if (isStreaming && keepProgressViewport) scrollToLatest()
-  }, [stableProcessBlocks, isStreaming, keepProgressViewport, scrollToLatest])
+    if (isStreaming && keepProgressViewport) forceFollowBottom()
+  }, [stableProcessBlocks, isStreaming, keepProgressViewport, forceFollowBottom])
 
-  const handleProgressScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>): void => {
-    if (!isProgressViewportAtBottom(event.currentTarget)) return
-    followLatestRef.current = true
-    scrollToLatest()
-  }, [scrollToLatest])
+  // 滚动几何判定：回到底（≤4px）重挂，离远（>96px）脱离，中间死区保持原状态。
+  const handleProgressScroll = React.useCallback((): void => {
+    const metrics = readMetrics()
+    if (metrics) applyMode(decideFollowOnScroll(modeRef.current, metrics))
+  }, [applyMode, readMetrics])
 
-  const handleProgressScrollIntent = React.useCallback((): void => {
-    smoothScrollTargetRef.current = null
-    followLatestRef.current = false
-    if (scrollFrameRef.current !== null) {
-      cancelAnimationFrame(scrollFrameRef.current)
-      scrollFrameRef.current = null
-    }
-  }, [])
+  // 滚轮是最明确的用户意图：向上滚且离开底部才脱离，向下滚回到底即恢复；
+  // 被更内层可滚动子元素（如代码块）消费的滚轮不影响本视口跟随。
+  const handleProgressWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
+    markUserDriving()
+    const metrics = readMetrics()
+    if (!metrics) return
+    const distanceToBottom = getFollowDistance(metrics)
+    applyMode(decideFollowOnWheel(modeRef.current, {
+      deltaY: event.deltaY,
+      distanceToBottom,
+      innerViewportOwnsWheel: innerViewportOwnsWheel(event.target, contentRef.current, event.deltaY),
+      canScrollDown: distanceToBottom > 0,
+    }))
+  }, [applyMode, markUserDriving, readMetrics])
 
   const handleProgressKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (PROGRESS_SCROLL_KEYS.has(event.key)) handleProgressScrollIntent()
-  }, [handleProgressScrollIntent])
+    if (PROGRESS_SCROLL_KEYS.has(event.key)) markUserDriving()
+  }, [markUserDriving])
 
   // 折叠前测量实际高度，用于丝滑的 height 过渡（子元素不 reflow，只裁剪边界）
   React.useEffect(() => {
@@ -521,9 +511,9 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
           )}
           tabIndex={keepProgressViewport ? 0 : undefined}
           onScroll={keepProgressViewport ? handleProgressScroll : undefined}
-          onPointerDown={keepProgressViewport ? handleProgressScrollIntent : undefined}
-          onWheel={keepProgressViewport ? handleProgressScrollIntent : undefined}
-          onTouchStart={keepProgressViewport ? handleProgressScrollIntent : undefined}
+          onPointerDown={keepProgressViewport ? markUserDriving : undefined}
+          onWheel={keepProgressViewport ? handleProgressWheel : undefined}
+          onTouchStart={keepProgressViewport ? markUserDriving : undefined}
           onKeyDown={keepProgressViewport ? handleProgressKeyDown : undefined}
           style={{
             maxHeight: keepProgressViewport ? `${PROCESS_GROUP_VIEWPORT_HEIGHT}px` : undefined,

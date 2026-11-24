@@ -2,7 +2,7 @@
  * CopyButton - 复制消息内容按钮
  *
  * 使用 MessageAction + Copy/Check 图标切换。
- * 移植自 proma-frontend 的 chat-view/copy-button.tsx。
+ * 通用消息复制按钮，供消息正文、推理内容等共享。
  */
 
 import { useState, useCallback } from 'react'

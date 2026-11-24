@@ -40,7 +40,7 @@ import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { CodeBlock, MermaidBlock } from '@proma/ui'
 import { detectLanguage } from '@proma/core'
 import { FilePathChip, ResolvableFilePathChip, isAbsoluteFilePath, isImageFilePath, isLocalFileReference, isRelativeFilePath } from './file-path-chip'
-import { ChatMarkdown } from '@/components/chat/ChatMarkdown'
+import { MessageMarkdown } from '@/components/markdown/MessageMarkdown'
 import { buildAgentHistoryQuoteLabel, parseAgentHistoryQuoteMention } from '@/lib/quoted-selection'
 import { createMentionPattern } from '@/lib/mention-patterns'
 import { resolveSkillMentionName } from '@/lib/skill-mention-name'
@@ -820,7 +820,7 @@ export const MessageResponse = React.memo(
           className
         )}
       >
-        <ChatMarkdown
+        <MessageMarkdown
           source={normalizeLatexDelimiters(normalizeMalformedStrongDelimiters(renderedMarkdown))}
           remarkPlugins={mergedRemarkPlugins}
           rehypePlugins={REHYPE_PLUGINS}

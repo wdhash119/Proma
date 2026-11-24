@@ -22,14 +22,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  conversationsAtom,
-  selectedModelAtom,
   channelsAtom,
   channelsLoadedAtom,
   modelSelectorOpenAtom,
-} from '@/atoms/chat-atoms'
-import { useConversationModelOptional } from '@/hooks/useConversationSettings'
-import { useConversationIdOptional } from '@/contexts/session-context'
+} from '@/atoms/channel-atoms'
 import { inputToolbarControlHeightClass } from '@/components/ai-elements/input-toolbar-styles'
 import { getModelLogo, getChannelLogo, DefaultLogo } from '@/lib/model-logo'
 import { cn } from '@/lib/utils'
@@ -108,13 +104,13 @@ interface ModelSelectorProps {
   filterChannelId?: string
   /** 仅显示这些渠道的模型（多渠道过滤） */
   filterChannelIds?: string[]
-  /** 外部选中模型（不传则用内部 selectedModelAtom） */
+  /** 外部选中模型；由宿主会话或表单提供，本组件不再持有自己的选择状态 */
   externalSelectedModel?: { channelId: string; modelId: string } | null
   /** 外部选择回调 */
   onModelSelect?: (option: ModelOption) => void
   /** 触发按钮是否显示「渠道 · 模型」（默认只显示模型名） */
   showChannelInTrigger?: boolean
-  /** 不在此选择器中显示的供应商（例如 Chat 暂不支持的协议） */
+  /** 不在此选择器中显示的供应商（例如当前入口不支持的协议） */
   excludedProviders?: readonly ProviderType[]
   /** 是否使用全局 modelSelectorOpenAtom 控制打开状态（用于外部拉起，如错误提示按钮） */
   useSharedOpenState?: boolean
@@ -129,10 +125,6 @@ export function ModelSelector({
   excludedProviders,
   useSharedOpenState = false,
 }: ModelSelectorProps = {}): React.ReactElement {
-  const [conversationModel, setConversationModel] = useConversationModelOptional()
-  const conversationId = useConversationIdOptional()
-  const setConversations = useSetAtom(conversationsAtom)
-  const setGlobalModel = useSetAtom(selectedModelAtom)
   const channels = useAtomValue(channelsAtom)
   const channelsLoaded = useAtomValue(channelsLoadedAtom)
   const setChannels = useSetAtom(channelsAtom)
@@ -143,8 +135,7 @@ export function ModelSelector({
   const [tooltipOpen, setTooltipOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
 
-  // 外部模型优先 → per-conversation 模型
-  const selectedModel = externalSelectedModel !== undefined ? externalSelectedModel : conversationModel
+  const selectedModel = externalSelectedModel ?? null
 
   // 每次打开 Popover 时刷新渠道列表，确保最新
   React.useEffect(() => {
@@ -225,32 +216,10 @@ export function ModelSelector({
     if (open || !displayModelInfo) setTooltipOpen(false)
   }, [displayModelInfo, open])
 
-  /** 选择模型并持久化到当前对话 */
+  /** 选择模型：持久化责任交给宿主（Agent 会话、自动化表单、视觉中继设置各自写入） */
   const handleSelect = (option: ModelOption): void => {
-    if (onModelSelect) {
-      onModelSelect(option)
-      setOpen(false)
-      return
-    }
-
-    // Chat 模式：写入 per-conversation Map + 同步全局默认值
-    if (setConversationModel) {
-      setConversationModel({ channelId: option.channelId, modelId: option.modelId })
-    }
-    setGlobalModel({ channelId: option.channelId, modelId: option.modelId })
+    onModelSelect?.(option)
     setOpen(false)
-
-    // 将模型/渠道选择保存到当前对话元数据
-    if (conversationId) {
-      window.electronAPI
-        .updateConversationModel(conversationId, option.modelId, option.channelId)
-        .then((updated) => {
-          setConversations((prev) =>
-            prev.map((c) => (c.id === updated.id ? updated : c))
-          )
-        })
-        .catch(console.error)
-    }
   }
 
   /** 搜索框键盘导航 */

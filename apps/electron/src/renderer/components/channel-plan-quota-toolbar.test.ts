@@ -12,7 +12,7 @@ describe('Agent 工具栏独立额度徽标', () => {
 
     expect(contextIndex).toBeGreaterThanOrEqual(0)
     expect(quotaIndex).toBeGreaterThan(contextIndex)
-    expect(source).toContain("import { ChannelPlanQuotaBadge } from '@/components/chat/ChannelPlanQuotaBadge'")
+    expect(source).toContain("import { ChannelPlanQuotaBadge } from '@/components/models/ChannelPlanQuotaBadge'")
     expect(source).toContain('channel={stableChannel}')
     expect(source).toContain('variant="toolbar"')
   })
@@ -27,7 +27,7 @@ describe('Agent 工具栏独立额度徽标', () => {
   })
 
   test('Given 独立额度徽标持续挂载 When 检查刷新机制 Then 定期刷新并复用统一查询缓存', () => {
-    const source = readFileSync(join(import.meta.dir, 'chat', 'ChannelPlanQuotaBadge.tsx'), 'utf8')
+    const source = readFileSync(join(import.meta.dir, 'models', 'ChannelPlanQuotaBadge.tsx'), 'utf8')
 
     expect(source).toContain('fetchChannelPlanQuota')
     expect(source).toContain('setInterval')

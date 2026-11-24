@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { normalizeLatexDelimiters } from '@/lib/normalize-latex'
-import { ChatMarkdown } from '@/components/chat/ChatMarkdown'
+import { MessageMarkdown } from '@/components/markdown/MessageMarkdown'
 import type { ComponentProps, ReactNode } from 'react'
 
 // ===== 上下文 =====
@@ -201,7 +201,7 @@ interface ReasoningContentProps extends ComponentProps<typeof CollapsibleContent
   children: string
 }
 
-/** 稳定引用的插件与组件映射，避免 ChatMarkdown 每个 chunk 重建渲染管线。 */
+/** 稳定引用的插件与组件映射，避免 MessageMarkdown 每个 chunk 重建渲染管线。 */
 const REASONING_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const REASONING_REHYPE_PLUGINS = [rehypeKatex]
 const REASONING_COMPONENTS = {
@@ -240,7 +240,7 @@ export const ReasoningContent = React.memo(
         {...props}
       >
         <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-          <ChatMarkdown
+          <MessageMarkdown
             source={normalizeLatexDelimiters(children)}
             remarkPlugins={REASONING_REMARK_PLUGINS}
             rehypePlugins={REASONING_REHYPE_PLUGINS}

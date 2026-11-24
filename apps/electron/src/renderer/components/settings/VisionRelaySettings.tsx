@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Eye, ShieldCheck } from 'lucide-react'
 import type { VisionRelayMode, VisionRelaySettings as VisionRelaySettingsValue } from '@/types/settings'
-import { ModelSelector } from '@/components/chat/ModelSelector'
+import { ModelSelector } from '@/components/models/ModelSelector'
 import { SettingsCard, SettingsRow, SettingsSection, SettingsSegmentedControl } from './primitives'
 
 const DEFAULT_SETTINGS: VisionRelaySettingsValue = { mode: 'off' }

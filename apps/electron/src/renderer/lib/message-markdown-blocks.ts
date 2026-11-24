@@ -11,7 +11,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
 
-export interface ChatMarkdownBlock {
+export interface MessageMarkdownBlock {
   /** React key。流式期间未完成的尾块使用稳定 key，避免反复 remount。 */
   id: string
   /** 该块的原始 Markdown 片段 */
@@ -56,7 +56,7 @@ function hashContent(input: string): string {
  * 依赖 mdast 节点的 offset 信息切回原始源码，避免重新序列化导致格式漂移。
  * 无 offset 的节点（理论上只出现在合成文档中）会被跳过。
  */
-export function parseChatMarkdownBlocks(source: string): ChatMarkdownBlock[] {
+export function parseMessageMarkdownBlocks(source: string): MessageMarkdownBlock[] {
   if (source.length === 0 || source.trim().length === 0) return []
 
   const tree = markdownProcessor.parse(source)
@@ -66,7 +66,7 @@ export function parseChatMarkdownBlocks(source: string): ChatMarkdownBlock[] {
     const whole = trimBlankLines(source)
     return whole.length > 0 ? [{ id: '', source: whole, type: 'document' }] : []
   }
-  const blocks: ChatMarkdownBlock[] = []
+  const blocks: MessageMarkdownBlock[] = []
   for (const node of tree.children) {
     const start = node.position?.start.offset
     const end = node.position?.end.offset
@@ -85,11 +85,11 @@ export function parseChatMarkdownBlocks(source: string): ChatMarkdownBlock[] {
  * - 流式输出时最后一个块固定使用 tail id，避免每个 chunk 都 remount；
  * - 其余变化块按内容散列生成 id。
  */
-export function reconcileChatMarkdownBlocks(
-  previous: readonly ChatMarkdownBlock[],
-  next: readonly ChatMarkdownBlock[],
+export function reconcileMessageMarkdownBlocks(
+  previous: readonly MessageMarkdownBlock[],
+  next: readonly MessageMarkdownBlock[],
   isStreaming: boolean,
-): ChatMarkdownBlock[] {
+): MessageMarkdownBlock[] {
   const lastIndex = next.length - 1
   return next.map((block, index) => {
     const previousBlock = previous[index]

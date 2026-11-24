@@ -2,7 +2,7 @@
  * useCreateSession — 共享的 Agent 会话创建逻辑
  *
  * 从 LeftSidebar 提取，供 WelcomeView、侧边栏、快捷键与搜索对话框共同使用。
- * Chat 主入口已退役；侧栏问答会话由 lib/side-chat 按选区场景创建。
+ * Chat 主入口与侧栏问答会话均已退役；这里只创建 Agent 会话。
  */
 
 import { useAtomValue, useSetAtom } from 'jotai'

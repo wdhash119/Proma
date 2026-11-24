@@ -2,7 +2,7 @@
  * Agent Atoms — Agent 模式的 Jotai 状态管理
  *
  * 管理 Agent 会话列表、当前会话、消息、流式状态等。
- * 模式照搬 chat-atoms.ts。
+ * 与 Chat 时代的状态结构保持兼容的粒度：列表、当前会话、消息与流式状态分离。
  */
 
 import { atom } from 'jotai'
@@ -587,7 +587,7 @@ export function getDelegationTabLabel(title: string | null | undefined): string 
   return title?.trim() || '委派任务'
 }
 
-type AgentSidePanelBaseTab = 'files' | 'changes' | 'chat' | 'temporary-agent' | 'delegation' | WorkspaceComponentTab
+type AgentSidePanelBaseTab = 'files' | 'changes' | 'delegation' | WorkspaceComponentTab
 /** 工作区组件、选区 Agent、每个 Pi 探索分支、协作子 Agent、浏览器网页和文件预览都处于右侧工作区顶栏。 */
 export type AgentSidePanelTab = AgentSidePanelBaseTab | `selection-agent:${string}` | `exploration:${string}` | `browser:${string}` | `preview:${string}` | `terminal:${string}`
 

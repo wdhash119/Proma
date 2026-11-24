@@ -2,7 +2,6 @@
  * TabContent — 标签内容渲染器
  *
  * 根据标签类型渲染 AgentView 或预览内容。
- * Chat 模式已退役，历史 chat 标签会给出可执行的恢复指引。
  */
 
 import * as React from 'react'
@@ -31,16 +30,6 @@ export function TabContent({ tabId }: TabContentProps): React.ReactElement {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
         标签页不存在
-      </div>
-    )
-  }
-
-  if (tab.type === 'chat') {
-    // Chat 模式已退役：旧标签不再渲染 ChatView，避免把已下线的界面重新带回主入口。
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span>Chat 模式已退役</span>
-        <span className="text-xs">历史对话数据仍保留在本地；侧栏问答不受影响。</span>
       </div>
     )
   }

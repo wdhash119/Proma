@@ -1,29 +1,93 @@
 import { describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const rendererRoot = join(import.meta.dir, '..')
 const settingsDirectory = join(rendererRoot, 'components/settings')
 const appShellDirectory = join(rendererRoot, 'components/app-shell')
 
-describe('Chat 模式退役后的主入口契约', () => {
-  test('Given 应用模式 When 检查 Then 唯一生效值为 agent，且拒绝切换', () => {
-    const source = readFileSync(join(rendererRoot, 'atoms/app-mode.ts'), 'utf8')
+/** 收集渲染层全部源码（跳过测试文件本身，避免断言文本命中自己）。 */
+function collectRendererSources(directory: string): Array<{ path: string; source: string }> {
+  const collected: Array<{ path: string; source: string }> = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      collected.push(...collectRendererSources(fullPath))
+      continue
+    }
+    if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue
+    if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) continue
+    collected.push({ path: fullPath, source: readFileSync(fullPath, 'utf8') })
+  }
+  return collected
+}
 
-    // 类型保留联合以便既有比较保持合法，但读取值固定 agent。
-    expect(source).toContain("() => 'agent'")
-    expect(source).toContain("console.warn('[AppMode] Chat 模式已退役，模式切换被忽略')")
+const rendererSources = collectRendererSources(rendererRoot)
+
+function findSourcesContaining(pattern: string): string[] {
+  return rendererSources
+    .filter((file) => file.source.includes(pattern))
+    .map((file) => file.path.slice(rendererRoot.length + 1))
+}
+
+describe('Chat 前端专属代码已全部删除', () => {
+  test('Given Chat 组件树与状态模块 When 检查 Then 文件均已不存在', () => {
+    const removedPaths = [
+      'components/chat',
+      'atoms/chat-atoms.ts',
+      'atoms/chat-tool-atoms.ts',
+      'atoms/app-mode.ts',
+      'hooks/useGlobalChatListeners.ts',
+      'hooks/useConversationSettings.ts',
+      'lib/side-chat.ts',
+    ]
+
+    for (const relativePath of removedPaths) {
+      expect(existsSync(join(rendererRoot, relativePath)), relativePath).toBe(false)
+    }
   })
 
-  test('Given 标签渲染 When 检查 Then 主入口不再渲染 ChatView', () => {
+  test('Given 渲染层源码 When 检查 Then 不再引用 Chat 组件、状态与监听器', () => {
+    expect(findSourcesContaining('components/chat')).toEqual([])
+    expect(findSourcesContaining('atoms/chat-atoms')).toEqual([])
+    expect(findSourcesContaining('atoms/chat-tool-atoms')).toEqual([])
+    expect(findSourcesContaining('atoms/app-mode')).toEqual([])
+    expect(findSourcesContaining('appModeAtom')).toEqual([])
+    expect(findSourcesContaining('useGlobalChatListeners')).toEqual([])
+    expect(findSourcesContaining('useConversationSettings')).toEqual([])
+    expect(findSourcesContaining('lib/side-chat')).toEqual([])
+    expect(findSourcesContaining('ChatView')).toEqual([])
+    expect(findSourcesContaining('chatToolsAtom')).toEqual([])
+  })
+
+  test('Given 标签状态 When 检查 Then 标签类型只剩 agent 与 preview', () => {
+    const source = readFileSync(join(rendererRoot, 'atoms/tab-atoms.ts'), 'utf8')
+
+    expect(source).toContain("export type TabType = 'agent' | 'preview'")
+    expect(source).not.toContain("'chat'")
+    expect(source).not.toContain('streamingConversationIdsAtom')
+  })
+
+  test('Given 标签渲染 When 检查 Then 主入口不再有 Chat 占位分支', () => {
     const source = readFileSync(join(rendererRoot, 'components/tabs/TabContent.tsx'), 'utf8')
 
-    expect(source).not.toContain("from '@/components/chat'")
-    expect(source).toContain('Chat 模式已退役')
-    expect(source).toContain('历史对话数据仍保留在本地；侧栏问答不受影响。')
+    expect(source).not.toContain('Chat 模式已退役')
+    expect(source).not.toContain("tab.type === 'chat'")
     expect(source).not.toContain('设置 → 历史 Chat')
   })
 
+  test('Given 渲染入口 When 检查 Then 不再挂载 Chat 监听器与工具初始化', () => {
+    const source = readFileSync(join(rendererRoot, 'main.tsx'), 'utf8')
+
+    expect(source).not.toContain('ChatListenersInitializer')
+    expect(source).not.toContain('ChatToolInitializer')
+    expect(source).not.toContain('selectedModelAtom')
+    // 历史 Chat 标签仍可能残留在持久化 tabState 中，恢复时必须静默过滤。
+    expect(source).toContain("t.type === 'agent'")
+  })
+})
+
+describe('Chat 退役后的主入口契约', () => {
   test('Given 侧栏 When 检查 Then 模式切换器与 Chat 入口已移除', () => {
     const source = readFileSync(join(appShellDirectory, 'LeftSidebar.tsx'), 'utf8')
 
@@ -33,6 +97,7 @@ describe('Chat 模式退役后的主入口契约', () => {
     // 模式固定为 Agent 后，头部「Bot + Agent」模式标签已移除；折叠按钮并入操作行保留。
     expect(source).not.toContain('<span className="truncate">Agent</span>')
     expect(source).toContain('sidebar-collapse-button')
+    expect(source).not.toContain('listConversations')
   })
 
   test('Given 全局快捷键 When 检查 Then 不再提供模式切换', () => {
@@ -56,32 +121,27 @@ describe('历史 Chat 入口已移除', () => {
     expect(existsSync(join(settingsDirectory, 'ChatHistorySettings.tsx'))).toBe(false)
   })
 
-  test('Given 历史 Chat 数据层 When 检查 Then 保留列表与迁移 IPC，删除无调用方的死 IPC', () => {
-    const preload = readFileSync(join(rendererRoot, '../preload/index.ts'), 'utf8')
-    const shared = readFileSync(join(rendererRoot, '../../../../packages/shared/src/types/chat.ts'), 'utf8')
-    const mainIpc = readFileSync(join(rendererRoot, '../main/ipc.ts'), 'utf8')
-
-    expect(preload).toContain('listConversations')
-    expect(preload).toContain('migrateChatToAgent')
-    // 历史 Chat 设置页删除后，删除对话无调用方，四层同步清理；
-    // 问答会话内检索（迷你地图搜索完整历史）仍是活链路，必须保留。
-    expect(preload).not.toContain('deleteConversation')
-    expect(preload).toContain('searchConversationSessionMessages')
-    expect(shared).not.toContain('DELETE_CONVERSATION')
-    expect(shared).toContain('SEARCH_SESSION_MESSAGES')
-    expect(mainIpc).not.toContain('CHAT_IPC_CHANNELS.DELETE_CONVERSATION')
-    expect(mainIpc).toContain('CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES')
-    expect(preload).not.toContain('toggleArchiveConversation')
-    expect(preload).not.toContain('extractAttachmentText')
-  })
-
   test('Given 旧文案入口 When 检查 Then 引导与 FAQ 不再指向已删除的设置页', () => {
     const onboarding = readFileSync(join(rendererRoot, 'components/onboarding/OnboardingView.tsx'), 'utf8')
     const faq = readFileSync(join(rendererRoot, 'components/onboarding/faq-content.ts'), 'utf8')
 
     expect(onboarding).not.toContain('设置 → 历史 Chat')
     expect(faq).not.toContain('设置 → 历史 Chat')
-    expect(faq).toContain('历史对话数据仍然保留在本地')
+    // 历史 Chat 数据已按用户授权物理清理，引导与 FAQ 不得再承诺数据仍保留在本地。
+    expect(faq).not.toContain('仍然保留在本地')
+    expect(onboarding).not.toContain('仍然保留在本地')
+    expect(faq).toContain('Chat 主入口已移除')
+  })
+
+  test('Given 选区提问引导 When 检查文案 Then 准确区分临时 Agent 与探索分支的上下文继承', () => {
+    const onboarding = readFileSync(join(rendererRoot, 'components/onboarding/OnboardingView.tsx'), 'utf8')
+    const faq = readFileSync(join(rendererRoot, 'components/onboarding/faq-content.ts'), 'utf8')
+
+    expect(onboarding).toContain('打开临时 Agent')
+    expect(onboarding).toContain('探索此分支')
+    expect(onboarding).toContain('不继承任何会话历史')
+    expect(onboarding).toContain('继承分叉点之前的全部对话历史')
+    expect(faq).toContain('会继承分叉点之前的完整对话历史')
   })
 })
 
@@ -95,14 +155,14 @@ describe('人设管理取代系统提示词管理', () => {
     expect(source).not.toContain('提示词管理')
   })
 
-  test('Given 问答主入口 When 检查 Then 使用人设选择器且旧提示词组件已移除', () => {
-    const header = readFileSync(join(rendererRoot, 'components/chat/ChatHeader.tsx'), 'utf8')
-    const view = readFileSync(join(rendererRoot, 'components/chat/ChatView.tsx'), 'utf8')
+  test('Given 人设状态 When 检查 Then 只保留 Agent 共享的人设配置与默认人设', () => {
+    const source = readFileSync(join(rendererRoot, 'atoms/persona-atoms.ts'), 'utf8')
 
-    expect(header).toContain('PersonaSelector')
-    expect(header).not.toContain('SystemPromptSelector')
-    expect(view).not.toContain('PromptEditorSidebar')
-    expect(view).not.toContain('system-prompt-atoms')
+    expect(source).toContain('personaConfigAtom')
+    expect(source).toContain('defaultPersonaIdAtom')
+    expect(source).not.toContain('selectedPersonaIdAtom')
+    expect(source).not.toContain('conversationPersonaIdAtom')
+    expect(source).not.toContain('resolvePersonaSystemMessage')
   })
 
   test('Given Agent 输入栏 When 检查 Then 提供会话人设选择器', () => {

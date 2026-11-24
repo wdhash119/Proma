@@ -5,13 +5,13 @@
  *
  * 流程：
  *  Step 1：欢迎（点击「进入引导界面」→ 白色闪屏淡出）
- *  Step 2：Agent vs Chat 科普（绿色指针指向界面截图中的切换按钮）
+ *  Step 2：Agent 主入口说明（绿色指针指向界面截图中的 Agent 入口）
  *  Step 3：会话文件/项目文件区别
  *  Step 4：项目概念
  *  Step 5：子会话科普（图：collaboration 子会话）
  *  Step 6：自动任务科普（图：自动任务配置页）
  *  Step 7：记忆功能科普（图：Agent 技能的记忆页面）
- *  Step 8：侧边回答科普（图：历史选区问答）
+ *  Step 8：选区提问科普（图：历史选区问答）
  *  Step 9：FAQ 汇总页（按主题分组）
  */
 
@@ -22,10 +22,10 @@ import { CURRENT_ONBOARDING_VERSION } from '../../../types'
 import hopperSeasideWhiteHouse from '@/assets/onboarding/hopper-seaside-white-house.png'
 import guideVisual from '@/assets/onboarding/guide-visual.png'
 import guideAgentExample from '@/assets/onboarding/guide-agent-example.png'
-import guideChatExample from '@/assets/onboarding/guide-chat-example.png'
+import guideAnswerExample from '@/assets/onboarding/guide-chat-example.png'
 import guideAutomation from '@/assets/onboarding/guide-automation.png'
 import guideMemory from '@/assets/onboarding/guide-memory.png'
-import guideSideAnswer from '@/assets/onboarding/guide-side-answer.png'
+import guideSelectionExample from '@/assets/onboarding/guide-side-answer.png'
 import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 import { AutomationGuideExamples } from './AutomationGuideExamples'
@@ -34,7 +34,7 @@ import { MemoryGuideExamples } from './MemoryGuideExamples'
 import { SubagentGuideExamples } from './SubagentGuideExamples'
 import { FAQ_GROUPS } from './faq-content'
 
-type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'memory' | 'sideanswer' | 'subagent' | 'faq'
+type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'memory' | 'selection' | 'subagent' | 'faq'
 
 interface OnboardingViewProps {
   onComplete: () => void
@@ -419,8 +419,8 @@ function GuideExamplesPage({ intro, nextLabel, onNext, onBack, children, showScr
   )
 }
 
-/** Agent / Chat 首章：保留模式说明，并在同页继续展示真实工作流。 */
-function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+/** Agent 首章：说明唯一主入口，并在同页继续展示真实工作流。 */
+function AgentGuidePage({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   return (
     <GuideExamplesPage
       showScrollHint
@@ -433,7 +433,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         title: 'Agent 是唯一主入口',
         paragraphs: [
           <>Proma 现在只有 <b className="font-medium text-neutral-900">Agent</b> 一个主入口，所有对话都在 Agent 中进行。</>,
-          <>历史对话数据仍然保留在本地；侧栏问答不受影响。</>,
+          <>旧的 Chat 主入口与问答面板已移除；需要围绕某段文字追问时，选中后用 Agent 打开即可。</>,
           <>
             Agent 能自主规划做调研、操作电脑、写代码、PPT 和文档，为你的想法赋形；简单的概念提问也直接在 Agent 里问即可。
           </>,
@@ -447,7 +447,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         <div className="space-y-16 md:space-y-20">
           <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
             <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
-              <img src={guideChatExample} alt="用 Agent 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
+              <img src={guideAnswerExample} alt="用 Agent 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
             </figure>
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · 快速提问</div>
@@ -582,13 +582,13 @@ function FaqPage({ nextLabel, onNext, onBack, highlight }: { nextLabel: string; 
 
 /** 引导步骤标题（欢迎页独立，不在地图中显示） */
 const STEP_LABELS: Array<{ step: Exclude<OnboardingStep, 'welcome'>; label: string }> = [
-  { step: 'guide', label: 'Agent / Chat' },
+  { step: 'guide', label: 'Agent 入门' },
   { step: 'project', label: '项目' },
   { step: 'files', label: '文件' },
   { step: 'subagent', label: '子会话' },
   { step: 'automation', label: '自动任务' },
   { step: 'memory', label: '记忆' },
-  { step: 'sideanswer', label: '侧边回答' },
+  { step: 'selection', label: '选区提问' },
   { step: 'faq', label: 'FAQ' },
 ]
 
@@ -665,7 +665,7 @@ export function OnboardingView({ onComplete, initialStep = 'welcome' }: Onboardi
   const [step, setStep] = useState<OnboardingStep>(initialStep)
   const [flash, setFlash] = useState(false)
   const [fading, setFading] = useState(false)
-  const [faqBackStep, setFaqBackStep] = useState<'subagent' | 'sideanswer'>('sideanswer')
+  const [faqBackStep, setFaqBackStep] = useState<'subagent' | 'selection'>('selection')
   const handleFinish = async () => {
     await window.electronAPI.updateSettings({
       onboardingCompleted: true,
@@ -697,9 +697,9 @@ export function OnboardingView({ onComplete, initialStep = 'welcome' }: Onboardi
   const handleNextFromProject = () => transitionTo('files')
   const handleNextFromFiles = () => transitionTo('subagent')
   const handleNextFromAutomation = () => transitionTo('memory')
-  const handleNextFromMemory = () => transitionTo('sideanswer')
-  const handleNextFromSideAnswer = () => {
-    setFaqBackStep('sideanswer')
+  const handleNextFromMemory = () => transitionTo('selection')
+  const handleNextFromSelection = () => {
+    setFaqBackStep('selection')
     transitionTo('faq')
   }
   const handleNextFromSubagent = () => transitionTo('automation')
@@ -794,7 +794,7 @@ export function OnboardingView({ onComplete, initialStep = 'welcome' }: Onboardi
         )}
 
         {step === 'guide' && (
-          <AgentChatGuidePage
+          <AgentGuidePage
             onNext={handleNextFromGuide}
             onBack={() => transitionTo('welcome')}
           />
@@ -938,23 +938,25 @@ export function OnboardingView({ onComplete, initialStep = 'welcome' }: Onboardi
           </GuideExamplesPage>
         )}
 
-        {step === 'sideanswer' && (
+        {step === 'selection' && (
           <GuideFeatureStep
             anchor={{ x: 0.66, y: 0.044 }}
             arrowMode="none"
-            imageSrc={guideSideAnswer}
+            imageSrc={guideSelectionExample}
             highlight="进阶指南 · 第 4 步"
-            title="侧边回答"
+            title="选区提问"
             paragraphs={[
-              <>在 Agent 对话中，可以选中一段文字，然后打开侧边回答。</>,
-              <>这会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
-                围绕你选中的内容讲解，不打断主对话也不占用上下文。
+              <>在文件或 Vault 里选中文字，选择<b className="font-medium text-neutral-900">「打开临时 Agent」</b>：
+                它只带这段引用，不继承任何会话历史，适合查词、解释概念。
               </>,
-              <>适合查词、解释概念、拆解长文。
+              <>在 Agent 回复里选中文字，选择<b className="font-medium text-neutral-900">「探索此分支」</b>：
+                它从这条回复分叉，会继承分叉点之前的全部对话历史，适合沿着某条结论继续深挖。
+              </>,
+              <>两种追问都在右侧面板里进行，不会把你追问的内容写回主会话的上下文与草稿。
               </>,
             ]}
             nextLabel="下一个"
-            onNext={handleNextFromSideAnswer}
+            onNext={handleNextFromSelection}
             onBack={() => transitionTo('memory')}
           />
         )}

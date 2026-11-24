@@ -276,7 +276,7 @@ function VaultMarkdownEditor({
   readResult: VaultReadResult
   /** Stable renderer-safe identity of the currently authorized Vault. */
   vaultId: string
-  /** 嵌入 Agent 右侧工作区时，用于接入 Agent 引用与右侧问答。 */
+  /** 嵌入 Agent 右侧工作区时，用于接入 Agent 引用与右侧选区 Agent。 */
   sessionId?: string
   onSave: (request: VaultSaveRequest, options?: { silent?: boolean }) => Promise<VaultSaveResult>
   onRename: VaultRename

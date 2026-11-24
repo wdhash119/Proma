@@ -13,7 +13,7 @@ import { PROVIDER_LABELS } from '@proma/shared'
 import type { Channel } from '@proma/shared'
 import { getChannelLogo, PromaLogo } from '@/lib/model-logo'
 import { agentChannelIdAtom, agentModelIdAtom } from '@/atoms/agent-atoms'
-import { channelsAtom } from '@/atoms/chat-atoms'
+import { channelsAtom } from '@/atoms/channel-atoms'
 import { SettingsSection, SettingsCard, SettingsRow } from './primitives'
 import {
   AlertDialog,
@@ -318,7 +318,7 @@ function PromaProviderCard(): React.ReactElement {
     <SettingsRow
       label="Proma"
       icon={<img src={PromaLogo} alt="Proma" className="w-8 h-8 rounded" />}
-      description="Proma 商业版｜安全、稳定、优惠的内置模型｜适用于 Chat 与 Agent"
+      description="Proma 商业版｜安全、稳定、优惠的内置模型｜适用于 Agent 与自动化任务"
     >
       <Button size="sm" variant="outline" className="gap-1.5" onClick={openPromaDownload}>
         <ExternalLink size={13} />

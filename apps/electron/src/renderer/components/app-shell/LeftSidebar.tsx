@@ -4,8 +4,8 @@
  * 包含：
  * - 会话列表与项目入口
  * - 导航菜单项（点击切换主内容区视图）
- * - 置顶对话区域（可展开/收起）
- * - 对话列表（新对话按钮 + 右键菜单 + 按 updatedAt 降序排列）
+ * - 置顶会话区域（可展开/收起）
+ * - Agent 会话列表（新建任务 + 右键菜单 + 按 updatedAt 降序排列）
  */
 
 import * as React from 'react'
@@ -15,23 +15,11 @@ import { Pin, PinOff, Star, Settings, Plus, CirclePlus, Trash2, Pencil, PanelLef
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { SearchDialog } from './SearchDialog'
-import { UserAvatar } from '@/components/chat/UserAvatar'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { planningTabAtom } from '@/atoms/planning-atoms'
-import { appModeAtom } from '@/atoms/app-mode'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
-import {
-  conversationsAtom,
-  currentConversationIdAtom,
-  streamingConversationIdsAtom,
-  conversationModelsAtom,
-  conversationContextLengthAtom,
-  conversationThinkingEnabledAtom,
-  conversationParallelModeAtom,
-  agentSideChatMapAtom,
-  conversationQuotedSelectionMapAtom,
-} from '@/atoms/chat-atoms'
 import {
   agentSessionsAtom,
   agentSDKMessagesCacheAtom,
@@ -80,6 +68,7 @@ import {
   previewFilesMapAtom,
   previewContentRefreshVersionAtom,
   previewResolvedPathAtom,
+  quotedSelectionMapAtom,
 } from '@/atoms/preview-atoms'
 import { clearPreviewCacheForSession } from '@/components/diff/DiffTabContent'
 import {
@@ -98,7 +87,6 @@ import { hasUpdateAtom, updateStatusAtom, type UpdateStatus } from '@/atoms/upda
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { clearBrowserSessionStateAtom } from '@/atoms/browser-atoms'
 import { hasEnvironmentIssuesAtom } from '@/atoms/environment'
-import { conversationPersonaIdAtom } from '@/atoms/persona-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
@@ -545,8 +533,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const settingsOpen = useAtomValue(settingsOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setSettingsTab = useSetAtom(settingsTabAtom)
-  const setConversations = useSetAtom(conversationsAtom)
-  const setCurrentConversationId = useSetAtom(currentConversationIdAtom)
   const draftSessionIds = useAtomValue(draftSessionIdsAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
   const setAgentMessagesCache = useSetAtom(agentSDKMessagesCacheAtom)
@@ -583,8 +569,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const newProjectInputRef = React.useRef<HTMLInputElement>(null)
   const [relativeTimeNow, setRelativeTimeNow] = React.useState(() => Date.now())
   const [userProfile, setUserProfile] = useAtom(userProfileAtom)
-  const streamingIds = useAtomValue(streamingConversationIdsAtom)
-  const mode = useAtomValue(appModeAtom)
   const isMac = React.useMemo(() => detectIsMac(), [])
   const hasUpdate = useAtomValue(hasUpdateAtom)
   const updateStatus = useAtomValue(updateStatusAtom)
@@ -677,9 +661,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   /** 归档视图按需加载归档列表，离开后恢复轻量 active 列表。 */
   React.useEffect(() => {
-    if (mode !== 'agent') return
     refreshAgentSidebarSessions(viewMode === 'archived').catch(console.error)
-  }, [mode, refreshAgentSidebarSessions, viewMode])
+  }, [refreshAgentSidebarSessions, viewMode])
 
   const handleUpdateButtonClick = React.useCallback((): void => {
     setSettingsTab('about')
@@ -691,29 +674,22 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     return () => window.clearInterval(id)
   }, [])
 
-  // Chat 列表改由 virtualizer 按 index 定位；普通 Agent 项目列表当前仍是树状 DOM，
-  // 保留既有的原生定位行为，避免打开后台 Agent 会话后选中项不可见。
+  // 项目列表仍是树状 DOM，保留既有的原生定位行为，避免打开后台 Agent 会话后选中项不可见。
   React.useEffect(() => {
-    if (!activeTabId || mode !== 'agent' || viewMode !== 'active') return
+    if (!activeTabId || viewMode !== 'active') return
     requestAnimationFrame(() => {
       const el = document.querySelector('.agent-session-item-active')
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     })
-  }, [activeTabId, mode, viewMode])
+  }, [activeTabId, viewMode])
 
-  // per-conversation/session Map atoms（删除时清理）
-  const setConvModels = useSetAtom(conversationModelsAtom)
-  const setConvContextLength = useSetAtom(conversationContextLengthAtom)
-  const setConvThinking = useSetAtom(conversationThinkingEnabledAtom)
-  const setConvParallel = useSetAtom(conversationParallelModeAtom)
-  const setConvPersonaId = useSetAtom(conversationPersonaIdAtom)
+  // per-session Map atoms（删除时清理）
   const setPreviewPanelOpen = useSetAtom(previewPanelOpenMapAtom)
   const setPreviewFile = useSetAtom(previewFileMapAtom)
   const setPreviewFiles = useSetAtom(previewFilesMapAtom)
   const setPreviewContentRefreshVersion = useSetAtom(previewContentRefreshVersionAtom)
   const setPreviewResolvedPaths = useSetAtom(previewResolvedPathAtom)
-  const setAgentSideChatMap = useSetAtom(agentSideChatMapAtom)
-  const setConversationQuotedSelections = useSetAtom(conversationQuotedSelectionMapAtom)
+  const setQuotedSelections = useSetAtom(quotedSelectionMapAtom)
   const setDiffPanelTab = useSetAtom(agentDiffPanelTabAtom)
   const setDiffRefreshVersion = useSetAtom(agentDiffRefreshVersionAtom)
   const setDiffUnseen = useSetAtom(agentDiffUnseenChangesAtom)
@@ -728,7 +704,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const setSessionViewStateMap = useSetAtom(sessionViewStateMapAtom)
   const clearBrowserSessionState = useSetAtom(clearBrowserSessionStateAtom)
 
-  /** 清理 per-conversation/session Map atoms 条目 */
+  /** 清理 per-session Map atoms 条目 */
   const cleanupMapAtoms = React.useCallback((id: string) => {
     const deleteKey = <T,>(prev: Map<string, T>): Map<string, T> => {
       if (!prev.has(id)) return prev
@@ -736,11 +712,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       map.delete(id)
       return map
     }
-    setConvModels(deleteKey)
-    setConvContextLength(deleteKey)
-    setConvThinking(deleteKey)
-    setConvParallel(deleteKey)
-    setConvPersonaId(deleteKey)
     setPreviewPanelOpen(deleteKey)
     setPreviewFile(deleteKey)
     setPreviewFiles(deleteKey)
@@ -754,19 +725,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
     setPreviewContentRefreshVersion(deletePreviewSessionEntries)
     setPreviewResolvedPaths(deletePreviewSessionEntries)
-    setConversationQuotedSelections(deleteKey)
-    setAgentSideChatMap((prev) => {
-      let changed = false
-      const map = new Map(prev)
-      if (map.delete(id)) changed = true
-      for (const [sessionId, conversationId] of map) {
-        if (conversationId === id) {
-          map.delete(sessionId)
-          changed = true
-        }
-      }
-      return changed ? map : prev
-    })
+    setQuotedSelections(deleteKey)
     store.set(agentSideDelegationMapAtom, (prev) => removeDelegatedSessionSelection(prev, id))
     setUnviewedDelegatedCompleted((prev) => markSessionCompletionViewed(prev, id))
     setDiffPanelTab(deleteKey)
@@ -820,7 +779,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     sessionExistsAtom.remove(id)
 
     clearPreviewCacheForSession(id)
-  }, [clearBrowserSessionState, setConvModels, setConvContextLength, setConvThinking, setConvParallel, setConvPersonaId, setPreviewPanelOpen, setPreviewFile, setPreviewFiles, setPreviewContentRefreshVersion, setPreviewResolvedPaths, setConversationQuotedSelections, setAgentSideChatMap, setDiffPanelTab, setDiffRefreshVersion, setDiffUnseen, setDiffUnseenFiles, setNonGitFileChanges, setFileChangesCurrentRun, setDiffData, setAgentSidePanelOpenMap, setSessionChannelMap, setSessionModelMap, setSessionPathMap, setSessionViewStateMap, setStreamingStates, setLiveMessagesMap, setSessionPendingFiles, store])
+  }, [clearBrowserSessionState, setPreviewPanelOpen, setPreviewFile, setPreviewFiles, setPreviewContentRefreshVersion, setPreviewResolvedPaths, setQuotedSelections, setDiffPanelTab, setDiffRefreshVersion, setDiffUnseen, setDiffUnseenFiles, setNonGitFileChanges, setFileChangesCurrentRun, setDiffData, setAgentSidePanelOpenMap, setSessionChannelMap, setSessionModelMap, setSessionPathMap, setSessionViewStateMap, setStreamingStates, setLiveMessagesMap, setSessionPendingFiles, store])
 
   const currentWorkspaceSlug = React.useMemo(() => {
     if (!currentWorkspaceId) return null
@@ -844,12 +803,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   /** 待删除 Agent 会话下的委派子会话数量，用于删除确认弹窗提示是否级联删除 */
   const pendingDeleteChildCount = React.useMemo<number>(() => {
-    if (!pendingDeleteId || mode !== 'agent') return 0
+    if (!pendingDeleteId) return 0
     return getDirectDelegatedChildren(agentSessions, pendingDeleteId).length
-  }, [agentSessions, mode, pendingDeleteId])
+  }, [agentSessions, pendingDeleteId])
 
   React.useEffect(() => {
-    if (!currentWorkspaceSlug || mode !== 'agent') {
+    if (!currentWorkspaceSlug) {
       setCapabilities(null)
       return
     }
@@ -857,7 +816,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       .getWorkspaceCapabilities(currentWorkspaceSlug)
       .then(setCapabilities)
       .catch(console.error)
-  }, [currentWorkspaceSlug, mode, activeView, capabilitiesVersion])
+  }, [currentWorkspaceSlug, activeView, capabilitiesVersion])
 
   /** 置顶 Agent 会话列表（仅活跃模式显示，跨项目展示，排除 draft） */
   const pinnedAgentSessions = React.useMemo(
@@ -892,69 +851,60 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   /** 已归档 Agent 会话数量由主进程轻量统计返回，active 视图不扫描归档元数据。 */
 
-  // 初始加载对话列表 + 用户档案
+  // 初始加载用户档案
   React.useEffect(() => {
-    window.electronAPI
-      .listConversations()
-      .then((list) => {
-        setConversations(list)
-      })
-      .catch(console.error)
     window.electronAPI
       .getUserProfile()
       .then(setUserProfile)
       .catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setConversations, setUserProfile])
+  }, [setUserProfile])
 
   // 窗口聚焦时重新同步列表，修复长时间后前后端不一致
   React.useEffect(() => {
     const handleFocus = (): void => {
-      window.electronAPI.listConversations().then(setConversations).catch(console.error)
-      if (mode === 'agent') {
-        refreshAgentSidebarSessions(viewMode === 'archived').catch(console.error)
-      }
+      refreshAgentSidebarSessions(viewMode === 'archived').catch(console.error)
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [mode, refreshAgentSidebarSessions, setConversations, viewMode])
+  }, [refreshAgentSidebarSessions, viewMode])
 
   /** 规划与能力不再替换主内容区，而是作为项目级右侧组件逐项打开。 */
   const handleOpenPlanningComponent = React.useCallback((component: 'todos' | 'calendar' | 'automations'): void => {
     setAutomationForm({ open: false, draft: null })
     // 尚未创建会话时没有右侧宿主，保留原全屏规划视图作为无损兜底。
-    if (mode !== 'agent' || !currentAgentSessionId) {
+    if (!currentAgentSessionId) {
       setPlanningTab(component)
       setActiveView('planning')
       return
     }
     setActiveView('conversations')
     openWorkspaceComponent(component)
-  }, [currentAgentSessionId, mode, openWorkspaceComponent, setAutomationForm, setActiveView, setPlanningTab])
+  }, [currentAgentSessionId, openWorkspaceComponent, setAutomationForm, setActiveView, setPlanningTab])
 
-  /** Obsidian 在 Chat 中占用主内容区，在有 Agent 会话时复用右侧项目级工作区。 */
+  /** 没有活动会话时 Obsidian 占满主内容区，有 Agent 会话时复用右侧项目级工作区。 */
   const handleOpenVault = React.useCallback((): void => {
-    if (mode !== 'agent' || !currentAgentSessionId) {
+    if (!currentAgentSessionId) {
       setActiveView('vault')
       return
     }
     setActiveView('conversations')
     openWorkspaceComponent('vault')
-  }, [currentAgentSessionId, mode, openWorkspaceComponent, setActiveView])
+  }, [currentAgentSessionId, openWorkspaceComponent, setActiveView])
 
   const handleOpenCapabilityComponent = React.useCallback((component: 'skills' | 'mcp' | 'memory'): void => {
-    if (mode !== 'agent' || !currentAgentSessionId) {
+    if (!currentAgentSessionId) {
       setAgentSkillsTab(component)
       setActiveView('agent-skills')
       return
     }
     setActiveView('conversations')
     openWorkspaceComponent(component)
-  }, [currentAgentSessionId, mode, openWorkspaceComponent, setActiveView, setAgentSkillsTab])
+  }, [currentAgentSessionId, openWorkspaceComponent, setActiveView, setAgentSkillsTab])
 
   /** MCP/Skills 为同一低频管理入口；在右侧工作区中一次展开两个独立 Tab，保留 Skills 为当前焦点。 */
   const handleOpenMcpSkillsComponents = React.useCallback((): void => {
-    if (mode !== 'agent' || !currentAgentSessionId) {
+    if (!currentAgentSessionId) {
       setAgentSkillsTab('skills')
       setActiveView('agent-skills')
       return
@@ -962,12 +912,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('conversations')
     openWorkspaceComponent('mcp')
     openWorkspaceComponent('skills')
-  }, [currentAgentSessionId, mode, openWorkspaceComponent, setActiveView, setAgentSkillsTab])
-
-  // 切换模式时重置归档视图
-  React.useEffect(() => {
-    setViewMode('active')
-  }, [mode, setViewMode])
+  }, [currentAgentSessionId, openWorkspaceComponent, setActiveView, setAgentSkillsTab])
 
   /** 请求删除对话（弹出确认框） */
   const handleRequestDelete = React.useCallback((id: string): void => {
@@ -978,92 +923,88 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const handleConfirmDelete = async (cascade: boolean = false): Promise<void> => {
     if (!pendingDeleteId) return
 
-    if (mode === 'agent') {
-      const sessionId = pendingDeleteId
-      // activeSessionId 会把 Preview Tab 归一化为其所属 Agent 会话，不能只比较 Tab ID。
-      const deletingActiveSession = activeSessionId === sessionId
-      // 级联删除时在发起 IPC 前固定子会话快照，确保删除范围与弹窗展示一致，
-      // 避免弹窗打开期间新增的子会话被意外删除。
-      const childIds = cascade
-        ? getDirectDelegatedChildren(store.get(agentSessionsAtom), sessionId).map((child) => child.id)
-        : []
+    const sessionId = pendingDeleteId
+    // activeSessionId 会把 Preview Tab 归一化为其所属 Agent 会话，不能只比较 Tab ID。
+    const deletingActiveSession = activeSessionId === sessionId
+    // 级联删除时在发起 IPC 前固定子会话快照，确保删除范围与弹窗展示一致，
+    // 避免弹窗打开期间新增的子会话被意外删除。
+    const childIds = cascade
+      ? getDirectDelegatedChildren(store.get(agentSessionsAtom), sessionId).map((child) => child.id)
+      : []
 
-      try {
-        // 先删子后删父：若子会话删除中途失败，父会话仍在，UI 一致性更好。
-        if (childIds.length > 0) {
-          const failedChildIds: string[] = []
-          for (const childId of childIds) {
-            try {
-              await window.electronAPI.deleteAgentSession(childId)
-            } catch (error) {
-              console.error(`[侧边栏] 级联删除子会话失败 (${childId}):`, error)
-              failedChildIds.push(childId)
-            }
-          }
-          if (failedChildIds.length > 0) {
-            toast.error(`部分子会话删除失败（${failedChildIds.length} 个），请手动清理`)
-          }
-          closeArchivedAgentTabs(childIds)
-          for (const childId of childIds) {
-            setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, childId))
-            setAgentMessagesCache((prev) => {
-              if (!prev.has(childId)) return prev
-              const next = new Map(prev)
-              next.delete(childId)
-              return next
-            })
+    try {
+      // 先删子后删父：若子会话删除中途失败，父会话仍在，UI 一致性更好。
+      if (childIds.length > 0) {
+        const failedChildIds: string[] = []
+        for (const childId of childIds) {
+          try {
+            await window.electronAPI.deleteAgentSession(childId)
+          } catch (error) {
+            console.error(`[侧边栏] 级联删除子会话失败 (${childId}):`, error)
+            failedChildIds.push(childId)
           }
         }
-
-        // 先由主进程确认删除成功，再清理本地状态；失败时保留当前会话与输入，避免假删除。
-        await window.electronAPI.deleteAgentSession(sessionId)
-        // 刷新失败不应中断已成功删除会话的本地收尾，否则会残留一个指向已删除数据的 Tab。
-        await refreshAgentSidebarSessions(viewMode === 'archived').catch((refreshError) => {
-          console.error('[侧边栏] 刷新 Agent 会话列表失败:', refreshError)
-          setAgentSessions((prev) => prev.filter((session) => session.id !== sessionId))
-        })
-
-        const currentTabs = store.get(tabsAtom)
-        const currentActiveTabId = store.get(activeTabIdAtom)
-        const tabResult = closeTab(currentTabs, currentActiveTabId, sessionId)
-        setTabs(tabResult.tabs)
-        setActiveTabId(tabResult.activeTabId)
-
-        // 删除/归档是会话终态，清理 draft 与所有 per-session 内存状态。
-        setDraftSessionIds((prev: Set<string>) => {
-          if (!prev.has(sessionId)) return prev
-          const next = new Set(prev)
-          next.delete(sessionId)
-          return next
-        })
-        cleanupMapAtoms(sessionId)
-        setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, sessionId))
-        setAgentMessagesCache((prev) => {
-          if (!prev.has(sessionId)) return prev
-          const next = new Map(prev)
-          next.delete(sessionId)
-          return next
-        })
-
-        if (deletingActiveSession) {
-          // Scratch Pad 在普通 Agent 工作流中要保留当前上下文；仅在会话已被删除时
-          // 显式清空旧指针，防止右侧面板继续引用已删除会话。
-          setCurrentAgentSessionId(null)
-          setCurrentConversationId(null)
-
-          // 保持用户在 Agent 工作流内：新会话先作为隐藏 draft，首条消息发出后才进入侧栏。
-          const draftId = await createAgent({ draft: true })
-          if (!draftId) {
-            toast.error('已删除会话，但无法创建新的 Agent 会话')
-          }
+        if (failedChildIds.length > 0) {
+          toast.error(`部分子会话删除失败（${failedChildIds.length} 个），请手动清理`)
         }
-      } catch (error) {
-        console.error('[侧边栏] 删除 Agent 会话失败:', error)
-        toast.error('删除 Agent 会话失败，请重试')
-      } finally {
-        setPendingDeleteId(null)
+        closeArchivedAgentTabs(childIds)
+        for (const childId of childIds) {
+          setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, childId))
+          setAgentMessagesCache((prev) => {
+            if (!prev.has(childId)) return prev
+            const next = new Map(prev)
+            next.delete(childId)
+            return next
+          })
+        }
       }
-      return
+
+      // 先由主进程确认删除成功，再清理本地状态；失败时保留当前会话与输入，避免假删除。
+      await window.electronAPI.deleteAgentSession(sessionId)
+      // 刷新失败不应中断已成功删除会话的本地收尾，否则会残留一个指向已删除数据的 Tab。
+      await refreshAgentSidebarSessions(viewMode === 'archived').catch((refreshError) => {
+        console.error('[侧边栏] 刷新 Agent 会话列表失败:', refreshError)
+        setAgentSessions((prev) => prev.filter((session) => session.id !== sessionId))
+      })
+
+      const currentTabs = store.get(tabsAtom)
+      const currentActiveTabId = store.get(activeTabIdAtom)
+      const tabResult = closeTab(currentTabs, currentActiveTabId, sessionId)
+      setTabs(tabResult.tabs)
+      setActiveTabId(tabResult.activeTabId)
+
+      // 删除/归档是会话终态，清理 draft 与所有 per-session 内存状态。
+      setDraftSessionIds((prev: Set<string>) => {
+        if (!prev.has(sessionId)) return prev
+        const next = new Set(prev)
+        next.delete(sessionId)
+        return next
+      })
+      cleanupMapAtoms(sessionId)
+      setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, sessionId))
+      setAgentMessagesCache((prev) => {
+        if (!prev.has(sessionId)) return prev
+        const next = new Map(prev)
+        next.delete(sessionId)
+        return next
+      })
+
+      if (deletingActiveSession) {
+        // Scratch Pad 在普通 Agent 工作流中要保留当前上下文；仅在会话已被删除时
+        // 显式清空旧指针，防止右侧面板继续引用已删除会话。
+        setCurrentAgentSessionId(null)
+
+        // 保持用户在 Agent 工作流内：新会话先作为隐藏 draft，首条消息发出后才进入侧栏。
+        const draftId = await createAgent({ draft: true })
+        if (!draftId) {
+          toast.error('已删除会话，但无法创建新的 Agent 会话')
+        }
+      }
+    } catch (error) {
+      console.error('[侧边栏] 删除 Agent 会话失败:', error)
+      toast.error('删除 Agent 会话失败，请重试')
+    } finally {
+      setPendingDeleteId(null)
     }
   }
 
@@ -1661,7 +1602,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     clearQuickSwitchHints,
     refreshQuickSwitchTargets,
     sidebarCollapsed,
-    mode,
     viewMode,
     agentSessions,
     pinnedAgentSessions,
@@ -2058,7 +1998,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }))
   }, [agentSessions, draftSessionIds, viewMode, workspaces])
 
-  /** Chat 已退役：rail 的 Agent 入口只负责回到最近的活跃会话，或保持在当前会话。 */
+  /** rail 的 Agent 入口只负责回到最近的活跃会话，或保持在当前会话。 */
   const handleRailModeSwitch = React.useCallback(() => {
     setViewMode('active')
     if (currentAgentSessionId) {
@@ -2113,12 +2053,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       childSessions: tree.childSessions,
     }))
   }, [
-    mode,
     agentSessions,
     draftSessionIds,
     currentWorkspaceId,
     activeSessionId,
-    streamingIds,
     agentIndicatorMap,
     unviewedCompletedSessionIds,
     workspaceNameMap,
@@ -2146,16 +2084,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>确认删除{mode === 'agent' ? '会话' : '对话'}</AlertDialogTitle>
+          <AlertDialogTitle>确认删除会话</AlertDialogTitle>
           <AlertDialogDescription>
-            {mode === 'agent' && pendingDeleteChildCount > 0
+            {pendingDeleteChildCount > 0
               ? `此会话下还有 ${pendingDeleteChildCount} 个子会话。删除后将无法恢复，请选择是否一并删除子会话。`
               : '删除后将无法恢复，确定要删除这个对话吗？'}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>取消</AlertDialogCancel>
-          {mode === 'agent' && pendingDeleteChildCount > 0 ? (
+          {pendingDeleteChildCount > 0 ? (
             <>
               <AlertDialogAction
                 onClick={() => { void handleConfirmDelete(false) }}
@@ -2781,12 +2719,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         active: isWorkspaceComponentActive("vault"),
         onClick: handleOpenVault,
       }] : []),
-      ...(mode === "agent" ? [{
+      {
         label: "项目记忆",
         icon: <Brain size={16} />,
         active: isWorkspaceComponentActive("memory"),
         onClick: () => handleOpenCapabilityComponent("memory"),
-      }] : []),
+      },
       {
         label: "定时任务",
         icon: <Clock size={16} />,
@@ -2794,13 +2732,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         badge: automationCount > 0 ? formatAutomationCount(automationCount) : undefined,
         onClick: () => handleOpenPlanningComponent("automations"),
       },
-      ...(mode === "agent" ? [{
+      {
         label: "MCP/Skills",
         icon: <Blocks size={16} />,
         active: isWorkspaceComponentActive("skills") || isWorkspaceComponentActive("mcp"),
         showUpdate: (capabilities?.skills.filter((skill) => skill.hasUpdate).length ?? 0) > 0,
         onClick: handleOpenMcpSkillsComponents,
-      }] : []),
+      },
     ];
 
     return (
@@ -3107,16 +3045,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         )}
       </div>
 
-      {mode === 'agent' && (
-        <div className="px-3 pb-0.5">
-          <WorkspaceComponentSidebarEntry
-            label="项目记忆"
-            icon={<Brain size={16} />}
-            active={isWorkspaceComponentActive('memory')}
-            onClick={() => handleOpenCapabilityComponent('memory')}
-          />
-        </div>
-      )}
+      <div className="px-3 pb-0.5">
+        <WorkspaceComponentSidebarEntry
+          label="项目记忆"
+          icon={<Brain size={16} />}
+          active={isWorkspaceComponentActive('memory')}
+          onClick={() => handleOpenCapabilityComponent('memory')}
+        />
+      </div>
       <div className="space-y-0.5 px-3 pb-0.5">
         <WorkspaceComponentSidebarEntry
           label="定时任务"
@@ -3132,15 +3068,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}>{formatAutomationCount(automationCount)}</span>
           ) : undefined}
         />
-        {mode === 'agent' && (
-          <WorkspaceComponentSidebarEntry
-            label="MCP/Skills"
-            icon={<Blocks size={16} />}
-            active={isWorkspaceComponentActive('skills') || isWorkspaceComponentActive('mcp')}
-            onClick={handleOpenMcpSkillsComponents}
-            badge={(capabilities?.skills.filter((skill) => skill.hasUpdate).length ?? 0) > 0 ? <span className="size-2.5 rounded-full bg-blue-500" /> : undefined}
-          />
-        )}
+        <WorkspaceComponentSidebarEntry
+          label="MCP/Skills"
+          icon={<Blocks size={16} />}
+          active={isWorkspaceComponentActive('skills') || isWorkspaceComponentActive('mcp')}
+          onClick={handleOpenMcpSkillsComponents}
+          badge={(capabilities?.skills.filter((skill) => skill.hasUpdate).length ?? 0) > 0 ? <span className="size-2.5 rounded-full bg-blue-500" /> : undefined}
+        />
       </div>
 
       {/* 原生与虚拟列表共享顶部反馈，切换视图时不沿用上一列表的滚动状态。 */}

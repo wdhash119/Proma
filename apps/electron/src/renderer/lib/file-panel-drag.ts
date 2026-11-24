@@ -2,7 +2,7 @@
  * file-panel-drag — 右侧文件面板（会话文件 / 项目文件）拖拽到 Agent 输入框的协议
  *
  * 面板中的文件行通过 draggable + dragstart 写入自定义 MIME 载荷，
- * Agent 输入框 drop 时识别该载荷并把文件作为引用（添加到聊天）加入待发送附件。
+ * Agent 输入框 drop 时识别该载荷并把文件作为引用（添加到 Agent 输入框）加入待发送附件。
  *
  * 载荷结构：
  *   application/x-proma-file-panel → JSON string of FilePanelDragItem[]

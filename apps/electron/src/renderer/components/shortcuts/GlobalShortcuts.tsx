@@ -11,7 +11,6 @@
 
 import { useEffect, useCallback, useMemo } from 'react'
 import { useAtomValue, useSetAtom, useAtom, useStore } from 'jotai'
-import { appModeAtom } from '@/atoms/app-mode'
 import { settingsOpenAtom, channelFormDirtyAtom, settingsCloseRequestedAtom } from '@/atoms/settings-tab'
 import { searchDialogOpenAtom } from '@/atoms/search-atoms'
 import {
@@ -176,7 +175,7 @@ export function GlobalShortcuts(): null {
     useCallback(() => setSearchOpen(true), [setSearchOpen]),
   )
 
-  // Cmd+N → 新建 Agent 会话（Chat 模式已退役）
+  // Cmd+N → 新建 Agent 会话
   useShortcut(
     'new-session',
     useCallback(() => {
@@ -210,15 +209,7 @@ export function GlobalShortcuts(): null {
     ),
   )
 
-  // Cmd+K → 清除上下文（通过 CustomEvent 分发到 ChatInput）
-  useShortcut(
-    'clear-context',
-    useCallback(() => {
-      window.dispatchEvent(new CustomEvent('proma:clear-context'))
-    }, []),
-  )
-
-  // Cmd+L → 聚焦输入框（通过 CustomEvent 分发到 ChatInput/AgentView）
+  // Cmd+L → 聚焦输入框（通过 CustomEvent 分发到 AgentView）
   useShortcut(
     'focus-input',
     useCallback(() => {
@@ -404,7 +395,6 @@ export function GlobalShortcuts(): null {
 
       if (target.type === 'agent' || target.type === 'preview') {
         const sessionId = target.sessionId
-        store.set(appModeAtom, 'agent')
         store.set(currentAgentSessionIdAtom, sessionId)
         store.set(agentSessionDraftsAtom, (prev) => {
           const map = new Map(prev)
@@ -456,7 +446,6 @@ export function GlobalShortcuts(): null {
         if (!session) return
 
         store.set(agentSessionsAtom, sessions)
-        store.set(appModeAtom, 'agent')
         store.set(activeViewAtom, 'conversations')
         store.set(currentAgentSessionIdAtom, session.id)
 

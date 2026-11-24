@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom, useStore } from 'jotai'
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultFocus, VaultReadResult, VaultSummary, VaultTreeEntry } from '@proma/shared'
@@ -20,10 +20,10 @@ import { useVaultScrollMemory } from './useVaultScrollMemory'
 import { getVaultScrollKey } from './vault-scroll-memory'
 import type { LiveMarkdownEditorHandle, LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
+import { appendQuoteToSessionDraft } from '@/lib/agent-draft-quote'
 import { insertAgentInputQuote } from '@/lib/agent-input-quote'
 import { useFocusAgentSessionInput } from '@/hooks/useFocusAgentSessionInput'
 import { useOpenSelectionAgent } from '@/hooks/useOpenSelectionAgent'
-import { quotedSelectionMapAtom } from '@/atoms/preview-atoms'
 import {
   focusedVaultFolderAtomFamily,
   getVaultSessionScope,
@@ -297,7 +297,7 @@ function VaultMarkdownEditor({
   const editorPageRef = React.useRef<HTMLDivElement>(null)
   const [selection, setSelection] = React.useState<VaultTextSelection | null>(null)
   const openSelectionAgentPendingRef = React.useRef(false)
-  const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
+  const selectionStore = useStore()
   const openSelectionAgent = useOpenSelectionAgent(sessionId ?? '')
   const focusAgentSessionInput = useFocusAgentSessionInput()
   // Keep the reading position per surface and per note, so switching the center
@@ -350,11 +350,11 @@ function VaultMarkdownEditor({
     const quote = createQuote()
     if (!quote) return
     if (!insertAgentInputQuote(sessionId, quote)) {
-      setQuotedSelectionMap((previous) => new Map(previous).set(sessionId, quote))
+      appendQuoteToSessionDraft(selectionStore, sessionId, quote)
     }
     clearSelection()
     focusAgentSessionInput(sessionId)
-  }, [clearSelection, createQuote, focusAgentSessionInput, sessionId, setQuotedSelectionMap])
+  }, [clearSelection, createQuote, focusAgentSessionInput, selectionStore, sessionId])
   const openSelectionAgentFromVault = React.useCallback(async (): Promise<void> => {
     if (!sessionId) {
       toast.info('请从 Agent 会话右侧打开 Obsidian 后再发起临时 Agent')

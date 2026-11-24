@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { ChevronRight, Code2, Copy, Check, Eye, FolderOpen, List, Pencil, RotateCw, Save, WrapText, X } from 'lucide-react'
-import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { atom, useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import DOMPurify from 'dompurify'
 import { File as PierreFile } from '@pierre/diffs/react'
 import { toast } from 'sonner'
@@ -23,7 +23,6 @@ import {
   previewCodeWrapAtom,
   previewContentRefreshVersionAtom,
   previewResolvedPathAtom,
-  quotedSelectionMapAtom,
 } from '@/atoms/preview-atoms'
 import { markdownTocOpenAtom } from '@/atoms/markdown-toc'
 import { useFocusAgentSessionInput } from '@/hooks/useFocusAgentSessionInput'
@@ -45,6 +44,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PIERRE_FILE_CSS } from '@/components/agent/tool-result-renderers/pierre-styles'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
+import { appendQuoteToSessionDraft } from '@/lib/agent-draft-quote'
 import { insertAgentInputQuote } from '@/lib/agent-input-quote'
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -391,7 +391,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
 
   // ===== 选中文本引用（Quoted Selection）=====
 
-  const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
+  const selectionStore = useStore()
   const openSelectionAgent = useOpenSelectionAgent(sessionId)
   const focusAgentSessionInput = useFocusAgentSessionInput()
   const [previewSelection, setPreviewSelection] = React.useState<PreviewTextSelection | null>(null)
@@ -1429,14 +1429,14 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       capturedAt: Date.now(),
     }
     // 与 Agent 历史选区相同：直接向 RichTextInput 插入 chip，因而可多次引用并与草稿共存。
-    // 仅在输入框尚未挂载的非常规场景回退旧的单条引用状态。
+    // 输入框尚未挂载时同样追加到草稿，不能写单条引用快照覆盖先前追加的引用。
     if (!insertAgentInputQuote(sessionId, quote)) {
-      setQuotedSelectionMap((prev) => new Map(prev).set(sessionId, quote))
+      appendQuoteToSessionDraft(selectionStore, sessionId, quote)
     }
     window.getSelection()?.removeAllRanges()
     clearPreviewSelection()
     focusAgentSessionInput(sessionId)
-  }, [clearPreviewSelection, focusAgentSessionInput, previewSelection, sessionId, setQuotedSelectionMap])
+  }, [clearPreviewSelection, focusAgentSessionInput, previewSelection, selectionStore, sessionId])
 
   const handleOpenSelectionAgent = React.useCallback(async (): Promise<void> => {
     if (!previewSelection || openSelectionAgentPendingRef.current) return

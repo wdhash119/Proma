@@ -11,7 +11,8 @@ import {
   currentAgentWorkspaceIdAtom,
   getSelectionAgentSidePanelTab,
 } from '@/atoms/agent-atoms'
-import { quotedSelectionMapAtom, type QuotedSelection } from '@/atoms/preview-atoms'
+import type { QuotedSelection } from '@/atoms/preview-atoms'
+import { appendQuoteToSessionDraft } from '@/lib/agent-draft-quote'
 import { insertAgentInputQuote } from '@/lib/agent-input-quote'
 import { getOrCreateSelectionAgent } from '@/lib/selection-agent-session'
 import { useFocusAgentSessionInput } from './useFocusAgentSessionInput'
@@ -37,8 +38,10 @@ export function useOpenSelectionAgent(parentSessionId: string): (input: OpenSele
         focusAgentSessionInput(selectionSessionId)
       }))
     }
-    const setFallbackQuote = (selectionSessionId: string): void => {
-      store.set(quotedSelectionMapAtom, (previous) => new Map(previous).set(selectionSessionId, quote))
+    // 目标输入框尚未挂载时不能写单条引用快照：那会覆盖此前已追加的引用。
+    // 改为直接追加到该会话的草稿（markdown + HTML + 同步版本），挂载后按原契约恢复。
+    const appendQuoteToDraft = (selectionSessionId: string): void => {
+      appendQuoteToSessionDraft(store, selectionSessionId, quote)
     }
 
     const existing = store.get(agentSideSelectionSessionMapAtom).get(parentSessionId)
@@ -46,7 +49,7 @@ export function useOpenSelectionAgent(parentSessionId: string): (input: OpenSele
       ? sessions.find((session) => session.id === existing.sessionId)
       : undefined
     if (existing && existingMeta) {
-      if (!insertAgentInputQuote(existing.sessionId, quote)) setFallbackQuote(existing.sessionId)
+      if (!insertAgentInputQuote(existing.sessionId, quote)) appendQuoteToDraft(existing.sessionId)
       activate(existing.sessionId)
       return existingMeta
     }
@@ -71,8 +74,8 @@ export function useOpenSelectionAgent(parentSessionId: string): (input: OpenSele
         sessionId: created.id,
         sourceLabel: quote.sourceLabel ?? quote.filePath,
       }))
-      // 新 AgentView 尚未挂载，先由会话级 fallback atom 持有；chip 条与发送消费使用同一 key。
-      setFallbackQuote(created.id)
+      // 新 AgentView 尚未挂载：直接把引用追加进该会话草稿，保证连续多次选区不会互相覆盖。
+      appendQuoteToDraft(created.id)
       activate(created.id)
       return created
     } catch (error) {

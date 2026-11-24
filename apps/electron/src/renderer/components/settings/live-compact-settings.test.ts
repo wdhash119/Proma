@@ -146,7 +146,7 @@ describe('Live Compact 设置页：新布局（开关行 → 阈值设置 → �
 describe('Live Compact 设置页：显示压缩事件开关', () => {
   const settings = readAppFile(SETTINGS_PAGE)
 
-  test('Given 开关行 When 检查 Then 显示压缩事件格始终可配，取值只有显式 false 才关', () => {
+  test('Given 开关行 When 检查 Then 显示压缩事件格随主闸隐藏，取值只有显式 false 才关', () => {
     const toggleRow = sliceBetween(settings, '{/* 开关行', '{/* 阈值设置')
     expect(toggleRow).toContain('label="显示压缩事件"')
     expect(toggleRow).toContain('helpLabel="显示压缩事件说明"')
@@ -154,9 +154,10 @@ describe('Live Compact 设置页：显示压缩事件开关', () => {
     expect(toggleRow).toContain('onCheckedChange={(checked) => void updateShowEvents(checked)}')
     // 取值与主进程归一化一致：只有显式 false 才算关。
     expect(settings).toContain('const showEvents = settings.showEvents !== false')
-    // 纯渲染层开关，独立于主闸：开关行里只有保护开关包在主闸条件块里（计数 1），
-    // 显示压缩事件不另包一层，主闸关闭时仍可配置。
-    expect(toggleRow.split('{settings.enabled && (').length - 1).toBe(1)
+    // 保护格与显示压缩事件格都随主闸条件渲染（计数 2）；showEvents 取值本身仍保留在 settings。
+    expect(toggleRow.split('{settings.enabled && (').length - 1).toBe(2)
+    const displayGuard = toggleRow.split('{settings.enabled && (')[2] ?? ''
+    expect(displayGuard).toContain('label="显示压缩事件"')
   })
 
   test('Given 开关 When 检查 Then 经 settings 通道只发 showEvents 补丁并同步渲染 atom', () => {
@@ -185,7 +186,8 @@ describe('Live Compact 设置页：阈值设置', () => {
 
   test('Given 主闸关闭 When 检查 Then 阈值设置整节条件渲染，草稿状态留在父组件不被卸载重置', () => {
     const sectionIndex = settings.indexOf('title="阈值设置"')
-    const guardIndex = settings.lastIndexOf('{settings.enabled && (', sectionIndex)
+    // 开关行里保护格与显示格也各有一个主闸条件块，这里只认包住 SettingsSection 的那个。
+    const guardIndex = settings.lastIndexOf('{settings.enabled && (\n        <SettingsSection', sectionIndex)
 
     expect(guardIndex).toBeGreaterThan(-1)
     // 条件表达式直接包住 SettingsSection 本身：关掉主闸后整节连同输入框一起卸载。

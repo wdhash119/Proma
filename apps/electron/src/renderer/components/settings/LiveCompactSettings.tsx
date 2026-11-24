@@ -6,7 +6,8 @@
  *    （关闭即硬停所有会话；开启后会话默认启用，可在会话工具栏单独关）与
  *    「结束轮保护」`liveCompact.protectCurrentTurn`（缺省开，关闭回到上游行为）与
  *    「显示压缩事件」`liveCompact.showEvents`（缺省开，纯渲染层开关，关闭隐藏切割通知与原文召回行）。
- *    主开关关闭时保护开关无意义，直接不渲染；显示开关不依赖主闸，始终可配。
+ *    主开关关闭时保护开关与显示压缩事件开关都无意义，整格不渲染
+ *    （showEvents 取值仍保留在 settings 里，重新开启后原样恢复）。
  * 2. 阈值设置（主开关关闭时整节不渲染）：卡顶是两个无标签分段控件——
  *    「原算法（上游默认）/ 自定义」与「比例 / 绝对值」（原算法生效时后者不渲染）。
  *    自定义生效时单一 `md:grid-cols-2` 网格逐行成对渲染：左 cell 是上游 Origin 只读值，
@@ -570,14 +571,16 @@ export function LiveCompactSettings(): React.ReactElement {
             onCheckedChange={(checked) => void updateProtectCurrentTurn(checked)}
           />
         )}
-        <ToggleInline
-          label="显示压缩事件"
-          help={SHOW_EVENTS_HELP}
-          helpLabel="显示压缩事件说明"
-          checked={showEvents}
-          disabled={showEventsSaving || loading}
-          onCheckedChange={(checked) => void updateShowEvents(checked)}
-        />
+        {settings.enabled && (
+          <ToggleInline
+            label="显示压缩事件"
+            help={SHOW_EVENTS_HELP}
+            helpLabel="显示压缩事件说明"
+            checked={showEvents}
+            disabled={showEventsSaving || loading}
+            onCheckedChange={(checked) => void updateShowEvents(checked)}
+          />
+        )}
       </div>
 
       {/* 阈值设置：主开关关闭时整节不渲染；草稿状态在父组件里，重新开启后原样恢复 */}

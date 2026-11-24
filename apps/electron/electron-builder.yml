@@ -137,6 +137,10 @@ dmg:
 # ============================================
 win:
   icon: resources/icon.ico
+  # 文件名用连字符：latest.yml 的 url 会把空格规范化为连字符，
+  # GitHub provider 能自行匹配资产，但代理回退的 generic feed 按 url 直取文件，
+  # 名字不一致会 404，故产物名与 url 保持一致。
+  artifactName: Proma-Setup-${version}.${ext}
   target:
     - target: nsis
       arch:

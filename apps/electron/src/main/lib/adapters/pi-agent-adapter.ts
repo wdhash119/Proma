@@ -71,6 +71,7 @@ import {
   updateMemory,
   type MemoryEntryOperation,
 } from '../memory-service'
+import { auditMemory } from '../memory-audit'
 import { presentArtifacts } from '../session-artifact-service'
 import { ProjectInstructionScopeController } from './pi-project-instruction-scope'
 import type { ProjectInstructionSource } from '../project-instruction-resolver'
@@ -999,10 +1000,10 @@ function buildPromaProductToolDefinitions(
     sdk.defineTool({
       name: 'MemorySearch',
       label: '检索记忆',
-      description: '按关键词跨全局画像与项目记忆逐行检索，返回来源、行号与命中片段。用于写入前确认已有事实，避免重复记账。',
-      promptSnippet: '跨全局画像与项目记忆检索已有事实。',
+      description: '按词法跨全局画像与项目记忆逐行检索，返回来源、行号、命中片段与得分。中文按 2-gram、英文与版本号/路径按完整 token 及其子段匹配，按命中权重与查询覆盖率排序；不做同义词与语义联想。用于写入前确认已有事实，避免重复记账；结果只是词法候选，冲突事实必须读取原文核对，不能只按分数裁决。',
+      promptSnippet: '跨全局画像与项目记忆检索已有事实（中文按 2-gram、英文/版本号/路径按完整 token 与子段，词法匹配不做语义联想）。',
       parameters: Type.Object({
-        query: Type.String({ description: '关键词；多个词用空格分隔，按子串匹配。' }),
+        query: Type.String({ description: '检索文本；中文按 2-gram 分词，英文短语、版本号与路径按完整 token 及子段匹配，重复词不会加权。' }),
         limit: Type.Optional(Type.Number({ description: '最多返回条数，默认 20。' })),
       }),
       async execute(_toolCallId, params) {
@@ -1030,18 +1031,20 @@ function buildPromaProductToolDefinitions(
     sdk.defineTool({
       name: 'MemoryUpdate',
       label: '更新记忆',
-      description: '带 revision 校验写入记忆。优先用 operations 增删改单条 "- " 事实，只有整篇重排时才传 content。',
+      description: '带 revision 校验写入记忆。优先用 operations 增删改单条 "- " 事实，只有整篇重排时才传 content，content 与 operations 只能二选一。单条最长 1000 UTF-16 码元；重复 add 幂等跳过，其他写入不得制造完全重复条目。项目 user-profile.md 与 user_profile.md 仅供迁移读取，不能写入。update 省略 source/occurredAt 时保留原值；正文与元数据均无变化时幂等，不刷新记录时间。',
       promptSnippet: '带版本校验地单条增删改记忆。',
       parameters: Type.Object({
         target: Type.String({ description: 'global-profile、MEMORY.md 或 memory/ 下的主题文件名。' }),
         revision: Type.String({ description: '最近一次 MemoryInspect 返回的 revision。' }),
         summary: Type.String({ description: '一句话说明这次改写做了什么，写入历史快照。' }),
-        content: Type.Optional(Type.String({ description: '整篇新正文；仅在不适合单条操作时使用。' })),
+        content: Type.Optional(Type.String({ description: '整篇新正文；仅在不适合单条操作时使用。其中的 "- " 条目同样受 1000 码元上限与完全重复校验。' })),
         operations: Type.Optional(Type.Array(Type.Object({
           op: Type.Union([Type.Literal('add'), Type.Literal('update'), Type.Literal('remove')]),
-          entry: Type.Optional(Type.String({ description: 'add / update 的新条目，必须以 "- " 开头且为单行。' })),
+          entry: Type.Optional(Type.String({ description: 'add / update 的新条目，必须以 "- " 开头、为单行且不超过 1000 UTF-16 码元。' })),
           match: Type.Optional(Type.String({ description: 'update / remove 的匹配文本，按整行匹配且必须唯一。' })),
           after: Type.Optional(Type.String({ description: 'add 时插入到该条目之后。' })),
+          source: Type.Optional(Type.String({ description: '可选溯源说明（session id、文件路径等），单行且不含〔〕｜。它只是调用方注记，不代表服务已验证内容；与 entry 自带后缀冲突时会被拒绝。' })),
+          occurredAt: Type.Optional(Type.String({ description: '可选发生时间：YYYY-MM-DD，或带时区的 ISO 8601（会被规范成 UTC）。日期必须真实存在；不带时区的时间会被拒绝。记录时间由服务在实际写入时自动生成，entry 里的旧记录时间不会被直接采用。' })),
         }))),
       }),
       async execute(_toolCallId, params) {
@@ -1071,6 +1074,20 @@ function buildPromaProductToolDefinitions(
         const input = params as Record<string, unknown>
         const limit = typeof input.limit === 'number' ? input.limit : 10
         return createJsonToolResult({ revisions: listMemoryHistory(String(input.target ?? ''), workspaceSlug, limit) })
+      },
+    }),
+    sdk.defineTool({
+      name: 'MemoryAudit',
+      label: '记忆审计',
+      description: '只读启发式审计当前工作区记忆，按 exact-duplicate、near-duplicate、possible-conflict、unindexed-theme、dangling-route 五类列出候选。候选基于字面相似度与索引链接，不是语义结论，也不判断哪条正确、哪条更新，不自动合并或删除：每条命中都必须读取原文人工确认，删除、合并或改写仍要按正常记忆流程逐步确认。审计过程不修改任何文件、不产生历史快照。',
+      promptSnippet: '只读审计记忆重复与路由候选。',
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ description: '每类发现最多返回条数，默认 20，范围 1–50。' })),
+      }),
+      async execute(_toolCallId, params) {
+        const input = params as Record<string, unknown>
+        const limit = typeof input.limit === 'number' ? input.limit : undefined
+        return createJsonToolResult({ report: auditMemory(workspaceSlug, limit) })
       },
     }),
     sdk.defineTool({

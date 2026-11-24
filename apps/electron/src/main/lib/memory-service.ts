@@ -28,6 +28,16 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { getConfigDir } from './config-paths'
 import { getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspace-manager'
 import { writeTextFileAtomic } from './safe-file'
+import {
+  applyMemoryOperations,
+  assertMemoryContentEntries,
+  MAX_MEMORY_ENTRY_CHARS,
+  MemoryError,
+  type MemoryEntryOperation,
+} from './memory-entry-metadata'
+
+export { applyMemoryOperations, MAX_MEMORY_ENTRY_CHARS, MemoryError }
+export type { MemoryEntryOperation }
 
 /** 记忆目标层级：全局画像、项目索引、项目主题文件。 */
 type MemoryTargetKind = 'global-profile' | 'project-index' | 'project-theme'
@@ -98,16 +108,6 @@ interface MemorySearchHit {
   score: number
 }
 
-export interface MemoryEntryOperation {
-  op: 'add' | 'update' | 'remove'
-  /** add / update 的新条目，必须是以 `- ` 开头的单行事实。 */
-  entry?: string
-  /** update / remove 的匹配文本；按行匹配，必须唯一命中。 */
-  match?: string
-  /** add 时插入到指定条目之后。 */
-  after?: string
-}
-
 interface MemoryUpdateInput {
   target: string
   revision: string
@@ -116,7 +116,7 @@ interface MemoryUpdateInput {
   operations?: MemoryEntryOperation[]
 }
 
-interface MemoryUpdateResult {
+export interface MemoryUpdateResult {
   target: string
   revision: string
   chars: number
@@ -147,8 +147,6 @@ export interface MemoryArchiveResult {
   /** 本次归档在历史里的快照 ID（如果有）。 */
   snapshotId?: string
 }
-
-export class MemoryError extends Error {}
 
 /** 全局画像超出 100 条事实或 5000 UTF-16 码元预算。 */
 export class ProfileBudgetExceededError extends MemoryError {
@@ -226,7 +224,7 @@ function projectThemeTargets(workspaceSlug: string): string[] {
   const dir = projectMemoryDir(workspaceSlug)
   return readdirSync(dir)
     .filter((name) => name.endsWith('.md'))
-    .filter((name) => name !== PROJECT_INDEX_TARGET && name !== 'user-profile.md' && name !== 'project-preferences.md')
+    .filter((name) => name !== PROJECT_INDEX_TARGET && name !== 'user-profile.md' && name !== 'user_profile.md' && name !== 'project-preferences.md')
     .sort()
 }
 
@@ -293,11 +291,8 @@ function resolveTargetPath(target: string, workspaceSlug?: string): { filePath: 
   if (!target.endsWith('.md') || target.includes('/') || target.includes('\\') || target.startsWith('.')) {
     throw new MemoryError(`非法的记忆目标：${target}`)
   }
-  if (!projectThemeTargets(workspaceSlug).includes(target)) {
-    // 主题文件允许首次创建：Agent 可先完善已有主题，必要时再新增一个。
-    console.log(`[记忆] 将创建新的记忆主题：${target}`)
-  }
-  return { filePath: join(projectDir, target), kind: 'project-theme', label: `项目记忆/${target}` }
+  const filePath = join(projectDir, target)
+  return { filePath, kind: 'project-theme', label: `项目记忆/${target}` }
 }
 
 /** 读取单个记忆目标；目标不存在时返回空文档，便于首次创建。 */
@@ -313,68 +308,6 @@ export function readMemoryDocument(target: string, workspaceSlug?: string): Memo
     path: filePath,
     budgetChars: TARGET_BUDGET_CHARS[target],
   }
-}
-
-// ===== 单条条目操作 =====
-
-function splitLines(content: string): string[] {
-  return content.split('\n')
-}
-
-function normalizeEntry(entry: string | undefined): string {
-  const value = entry?.trim()
-  if (!value) throw new MemoryError('entry 不能为空')
-  if (!value.startsWith('- ')) throw new MemoryError('entry 必须是以 "- " 开头的单条事实')
-  if (value.includes('\n')) throw new MemoryError('entry 必须是单行事实')
-  return value
-}
-
-function findSingleMatchIndex(lines: string[], match: string, op: string): number {
-  const needle = match.trim()
-  if (!needle) throw new MemoryError(`${op} 需要 match`)
-  const indexes = lines
-    .map((line, index) => (line.trim() === needle ? index : -1))
-    .filter((index) => index >= 0)
-  if (indexes.length === 0) throw new MemoryError(`未找到匹配条目：${needle}`)
-  if (indexes.length > 1) throw new MemoryError(`匹配到多条相同条目，请提供更完整的文本：${needle}`)
-  return indexes[0]!
-}
-
-/**
- * 按单条事实修改正文。只触碰命中的行，未涉及的段落、标题与顺序保持原样。
- */
-export function applyMemoryOperations(content: string, operations: MemoryEntryOperation[]): string {
-  if (operations.length === 0) throw new MemoryError('operations 不能为空')
-  let lines = splitLines(content)
-
-  for (const operation of operations) {
-    if (operation.op === 'add') {
-      const entry = normalizeEntry(operation.entry)
-      if (operation.after) {
-        const anchor = findSingleMatchIndex(lines, operation.after, 'add')
-        lines = [...lines.slice(0, anchor + 1), entry, ...lines.slice(anchor + 1)]
-        continue
-      }
-      // 默认追加到末尾的非空事实之后，保留文末换行语义。
-      let insertAt = lines.length
-      while (insertAt > 0 && lines[insertAt - 1]?.trim() === '') insertAt -= 1
-      lines = [...lines.slice(0, insertAt), entry, ...lines.slice(insertAt)]
-      continue
-    }
-
-    if (operation.op === 'update') {
-      const entry = normalizeEntry(operation.entry)
-      const index = findSingleMatchIndex(lines, operation.match ?? '', 'update')
-      lines = [...lines.slice(0, index), entry, ...lines.slice(index + 1)]
-      continue
-    }
-
-    const index = findSingleMatchIndex(lines, operation.match ?? '', 'remove')
-    lines = [...lines.slice(0, index), ...lines.slice(index + 1)]
-  }
-
-  const next = lines.join('\n')
-  return next.endsWith('\n') || next.length === 0 ? next : `${next}\n`
 }
 
 // ===== 版本历史 =====
@@ -521,6 +454,8 @@ export function restoreMemoryRevision(
   if (expectedCurrentRevision !== currentRevision) {
     throw new MemoryError(`记忆已被修改，请刷新后再恢复（当前 revision: ${currentRevision}）`)
   }
+  // 恢复只保留既有预算与体积契约：历史快照里可能存在今天才禁止的长条目，
+  // 不能因为新增的单条长度/重复校验让旧版本无法恢复；新规则只管新写入。
   assertWritableMemoryContent(target, snapshot.content)
   const snapshotId = snapshotMemory(filePath, target, current, `恢复到 ${id} 之前的自动快照`)
   writeMemoryFileText(filePath, snapshot.content)
@@ -539,6 +474,10 @@ export function restoreMemoryRevision(
  * 传入 `operations` 时只改单条事实，传入 `content` 时整篇重写。
  */
 export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): MemoryUpdateResult {
+  // 旧项目画像仍可被 MemoryInspect 与迁移扫描读取，但不能再作为活跃主题续写。
+  if (LEGACY_PROFILE_NAMES.some((name) => name === input.target)) {
+    throw new MemoryError(`项目旧画像 ${input.target} 只作为迁移输入，不接受 MemoryUpdate 写入；请使用 collaboration.md 或先完成迁移`)
+  }
   const { filePath } = resolveTargetPath(input.target, workspaceSlug)
   assertRegularMemoryFile(filePath)
   const current = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
@@ -547,6 +486,9 @@ export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): 
     throw new MemoryError(`记忆已被修改，请重新读取后再写入（当前 revision: ${currentRevision}）`)
   }
   if (!input.summary.trim()) throw new MemoryError('summary 不能为空')
+  if (input.content !== undefined && input.operations !== undefined) {
+    throw new MemoryError('content 与 operations 只能二选一，不能同时传入；请分两次调用以明确写入顺序')
+  }
 
   const next = input.content !== undefined
     ? input.content
@@ -558,8 +500,14 @@ export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): 
     return { target: input.target, revision: currentRevision, chars: countChars(current) }
   }
 
-  // 统一在服务层校验体积与全局画像预算，覆盖 content 与 operations 两条写入路径。
+  // 统一在服务层校验体积与全局画像预算，覆盖 content 与 operations 两条写入路径；
+  // 顺序上先做整体预算、再做单条事实校验：整体超预算（如全局画像 >5000 码元）是更高优先级的
+  // ProfileBudgetExceededError 契约，不能让单条 1000 码元上限把它抢先覆盖。
   assertWritableMemoryContent(input.target, next)
+  if (input.content !== undefined) assertMemoryContentEntries(next)
+  if (!existsSync(filePath) && input.target !== GLOBAL_PROFILE_TARGET && input.target !== PROJECT_INDEX_TARGET) {
+    console.log(`[记忆] 将创建新的记忆主题：${input.target}`)
+  }
   const snapshotId = snapshotMemory(filePath, input.target, current, input.summary)
   writeMemoryFileText(filePath, next)
   return {
@@ -572,22 +520,204 @@ export function updateMemory(input: MemoryUpdateInput, workspaceSlug?: string): 
 
 // ===== 检索 =====
 
-function tokenize(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/[\s,，、;；|/]+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
+/**
+ * 纯本地词法检索：不引入 SQLite / 向量 / 新依赖，也不做同义词与语义联想。
+ *
+ * 分词规则：
+ * - CJK 连续串：单字与双字整体保留；三字以上拆成 2-gram（中文无空格，2-gram 是召回与噪声的均衡点）；
+ * - ASCII：完整 token 原样保留（`0.19.141`、`k3.1-pro`、`apps/.../memory-service.ts`），
+ *   并额外拆出 `. _ : / \\ -` 分隔子段，避免查「子目录名」时完全摸不到；
+ * - 其他文字（希腊、西里尔、泰、希伯来等）：按空白/标点成词后整词匹配，
+ *   不在这些文字上做 2-gram，但也不允许它们变成搜不到的隐式空洞。
+ *
+ * 打分与会话无关、可重复：命中权重按查询词去重后累加（同一词出现多次不会加权），
+ * 再用查询覆盖率（命中权重 / 查询总权重）抑制「长查询里只中一个低权重碎片」的噪声行；
+ * 完整 CJK 串另给整串权重，保证完整短语优先于零散 2-gram。
+ * 排序依次比较得分、行文本长度（同等命中下更聚焦的行靠前）、来源与行号，结果确定。
+ */
+const CJK_BIGRAM_WEIGHT = 1.2
+const CJK_SINGLE_WEIGHT = 0.8
+const CJK_DOUBLE_WEIGHT = 1.6
+const CJK_PHRASE_WEIGHT = 3
+const ASCII_FULL_TOKEN_WEIGHT = 5
+const ASCII_SUB_TOKEN_WEIGHT = 1.2
+/** 其他文字整词（如俄文/希腊文/泰文单词）权重：与 ASCII 完整 token 同等对待。 */
+const OTHER_WORD_WEIGHT = 5
+/** ASCII 完整 token（含版本号、路径）；后续子段按 `. _ : / \\ -` 拆开。 */
+const ASCII_RUN_PATTERN = /[a-z0-9][a-z0-9._:/\\-]*/g
+const ASCII_SEPARATOR_PATTERN = /[._:/\\-]+/
+const ASCII_TRAILING_SEPARATOR_PATTERN = /[._:/\\-]+$/
+
+type MemoryQueryTermKind = 'cjk' | 'ascii-full' | 'ascii-sub' | 'word'
+
+interface MemoryQueryTerm {
+  kind: MemoryQueryTermKind
+  text: string
+  weight: number
+}
+
+interface MemoryQuery {
+  /** 去重后的查询词；同一词只计一次权重。 */
+  terms: MemoryQueryTerm[]
+  /** 查询里完整出现的 CJK 串；整串命中另计权重，代表完整短语。 */
+  phrases: string[]
+  /** 查询侧总权重，用作覆盖率分母。 */
+  totalWeight: number
+}
+
+function isCjkChar(char: string): boolean {
+  const code = char.codePointAt(0) ?? 0
+  return (code >= 0x3400 && code <= 0x4dbf)
+    || (code >= 0x4e00 && code <= 0x9fff)
+    || (code >= 0xf900 && code <= 0xfaff)
+    || (code >= 0x3040 && code <= 0x30ff)
+    || (code >= 0xac00 && code <= 0xd7af)
+}
+
+/** 把文本拆成 CJK 连续串与非 CJK 片段。 */
+function cjkRuns(text: string): string[] {
+  const runs: string[] = []
+  let current = ''
+  for (const char of text) {
+    if (isCjkChar(char)) {
+      current += char
+      continue
+    }
+    if (current) {
+      runs.push(current)
+      current = ''
+    }
+  }
+  if (current) runs.push(current)
+  return runs
+}
+
+/** ASCII token 的分隔子段；单字符子段不单独参与匹配，避免把 `1` 当成有效关键词。 */
+function asciiSubTokens(token: string): string[] {
+  return token
+    .split(ASCII_SEPARATOR_PATTERN)
+    .filter((segment) => segment.length >= 2 && segment !== token)
+}
+
+function asciiTokens(text: string): string[] {
+  const tokens: string[] = []
+  for (const match of text.matchAll(ASCII_RUN_PATTERN)) {
+    const token = match[0].replace(ASCII_TRAILING_SEPARATOR_PATTERN, '')
+    if (token) tokens.push(token)
+  }
+  return tokens
 }
 
 /**
- * 跨全局画像与项目记忆检索。逐行打分，返回命中最多的行片段；
- * 不做模糊纠错，命中条件严格按子串包含，避免编造不存在的记忆。
+ * 既不属于 CJK 也不属于 ASCII 的文字与符号：按空白和标点切分。
+ * 保留 emoji、数学符号及非 ASCII 单字，避免旧 substring 查询能力回退。
+ */
+function otherWordTokens(text: string): string[] {
+  const stripped = Array.from(text)
+    .map((char) => (isCjkChar(char) || /[a-z0-9]/.test(char) ? ' ' : char))
+    .join('')
+  return stripped
+    .split(/[\s\p{P}]+/u)
+    .map((word) => word.trim())
+    .filter(Boolean)
+}
+
+/** 一行的 ASCII 匹配词表：完整 token 与其分隔子段；子段按整词比较，避免 substring 误命中。 */
+function lineAsciiTokens(loweredLine: string): Set<string> {
+  const tokens = new Set<string>()
+  for (const token of asciiTokens(loweredLine)) {
+    tokens.add(token)
+    for (const segment of asciiSubTokens(token)) tokens.add(segment)
+  }
+  return tokens
+}
+
+function buildMemoryQuery(query: string): MemoryQuery {
+  const normalized = query.toLowerCase().trim()
+  const terms: MemoryQueryTerm[] = []
+  const phrases: string[] = []
+  const seen = new Set<string>()
+
+  const pushTerm = (kind: MemoryQueryTermKind, text: string, weight: number): void => {
+    const key = `${kind}:${text}`
+    if (seen.has(key)) return
+    seen.add(key)
+    terms.push({ kind, text, weight })
+  }
+
+  for (const run of cjkRuns(normalized)) {
+    if (run.length === 1) {
+      pushTerm('cjk', run, CJK_SINGLE_WEIGHT)
+      continue
+    }
+    if (run.length === 2) {
+      pushTerm('cjk', run, CJK_DOUBLE_WEIGHT)
+      continue
+    }
+    for (let index = 0; index + 1 < run.length; index += 1) {
+      pushTerm('cjk', run.slice(index, index + 2), CJK_BIGRAM_WEIGHT)
+    }
+    if (!phrases.includes(run)) phrases.push(run)
+  }
+
+  for (const token of asciiTokens(normalized)) {
+    pushTerm('ascii-full', token, ASCII_FULL_TOKEN_WEIGHT)
+    for (const segment of asciiSubTokens(token)) {
+      pushTerm('ascii-sub', segment, ASCII_SUB_TOKEN_WEIGHT)
+    }
+  }
+
+  for (const word of otherWordTokens(normalized)) {
+    pushTerm('word', word, OTHER_WORD_WEIGHT)
+  }
+
+  const totalWeight = terms.reduce((sum, term) => sum + term.weight, 0) + phrases.length * CJK_PHRASE_WEIGHT
+  return { terms, phrases, totalWeight }
+}
+
+/** 单行得分：命中权重 × 覆盖率因子；无命中返回 0。 */
+function scoreMemoryLine(query: MemoryQuery, line: string): number {
+  if (query.totalWeight <= 0) return 0
+  const lowered = line.toLowerCase()
+  let matched = 0
+  let tokens: Set<string> | undefined
+
+  for (const term of query.terms) {
+    if (term.kind === 'ascii-sub') {
+      tokens ??= lineAsciiTokens(lowered)
+      if (tokens.has(term.text)) matched += term.weight
+      continue
+    }
+    // CJK 词与 ASCII 完整 token 都按子串命中：中文没有词边界，完整 token 允许落在更长的路径里。
+    if (lowered.includes(term.text)) matched += term.weight
+  }
+
+  for (const phrase of query.phrases) {
+    if (lowered.includes(phrase)) matched += CJK_PHRASE_WEIGHT
+  }
+
+  if (matched <= 0) return 0
+  const coverage = Math.min(1, matched / query.totalWeight)
+  // 覆盖率同时参与乘法，而不是只按命中个数/长度累加：
+  // 长查询里只中一个低权重碎片时得分被压到最低，不会挤到高覆盖行前面。
+  return Math.round(matched * (0.35 + 0.65 * coverage) * 10000) / 10000
+}
+
+function compareSearchHits(left: MemorySearchHit, right: MemorySearchHit): number {
+  if (right.score !== left.score) return right.score - left.score
+  if (left.text.length !== right.text.length) return left.text.length - right.text.length
+  if (left.source !== right.source) return left.source < right.source ? -1 : 1
+  return left.line - right.line
+}
+
+/**
+ * 跨全局画像与项目记忆检索。逐行按词法权重打分，返回得分最高的行片段；
+ * 不做模糊纠错与同义词语义联想，避免编造不存在的记忆。
  */
 export function searchMemory(query: string, workspaceSlug?: string, limit = 20): MemorySearchHit[] {
-  const tokens = tokenize(query)
-  if (tokens.length === 0) return []
-  const maxHits = Math.min(Math.max(1, limit), MAX_SEARCH_HITS)
+  const memoryQuery = buildMemoryQuery(query)
+  if (memoryQuery.totalWeight <= 0) return []
+  const maxHits = Math.min(Math.max(1, Number.isFinite(limit) ? Math.floor(limit) : 20), MAX_SEARCH_HITS)
 
   const documents: Array<{ target: string; source: string; content: string }> = []
   const globalPath = getGlobalMemoryFilePath()
@@ -608,17 +738,13 @@ export function searchMemory(query: string, workspaceSlug?: string, limit = 20):
     const lines = document.content.split('\n')
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index] ?? ''
-      const lowered = line.toLowerCase()
-      let score = 0
-      for (const token of tokens) {
-        if (lowered.includes(token)) score += token.length
-      }
-      if (score === 0) continue
+      const score = scoreMemoryLine(memoryQuery, line)
+      if (score <= 0) continue
       hits.push({ source: document.source, target: document.target, line: index + 1, text: line.trim(), score })
     }
   }
 
-  return hits.sort((left, right) => right.score - left.score).slice(0, maxHits)
+  return hits.sort(compareSearchHits).slice(0, maxHits)
 }
 
 // ===== 底层文件访问（旧画像、来源索引、归档） =====

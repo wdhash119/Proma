@@ -185,7 +185,7 @@ Proma 将项目地图与用户协作记忆分开维护：前者让 Agent 少做�
 | --- | --- | --- | --- |
 | 项目地图 | \`${workspace?.projectAgentsMd ?? '项目根/AGENTS.md'}\` | ${agentsMaintenanceMode}${workspace && !workspace.projectAgentsExists ? '；当前未建立' : ''} | 架构、目录、命令、验证、项目边界与关键文档索引 |
 | Proma 工作区规则 | \`${workspace?.agentsMd ?? 'AGENTS.md'}\` | ${agentsMaintenanceMode}${workspace && !workspace.workspaceAgentsExists ? '；当前未建立' : ''} | Proma 执行环境、工作区流程、项目入口指针；不复制项目地图 |
-| 协作记忆 | \`${workspace?.autoMemoryDir ?? 'memory'}\` | 用 MemorySearch / MemoryInspect 读取，MemoryUpdate 单条增删改（带 revision 校验）；删除/大段覆盖、冲突、不确定推断或敏感信息先确认 | 用户画像、协作偏好、纠错、经验与会影响未来判断的决策理由；\`MEMORY.md\` 只作主题索引 |
+| 协作记忆 | \`${workspace?.autoMemoryDir ?? 'memory'}\` | 用 MemorySearch / MemoryInspect 读取，MemoryAudit 只读审计重复与路由，MemoryUpdate 单条增删改（带 revision 校验）；删除/大段覆盖、冲突、不确定推断或敏感信息先确认 | 用户画像、协作偏好、纠错、经验与会影响未来判断的决策理由；\`MEMORY.md\` 只作主题索引 |
 | Skills | \`${workspace?.skillsDir ?? 'skills'}\` | 仅在匹配任务或用户请求时读取/维护 | 可复用流程与 SOP，不存普通事实 |
 | 会话工作台 | \`${sessionContextDir}\` | 当前会话可读写 | todo、plan、handoff、临时笔记和中间产物，不自动升级为长期知识 |
 | 项目 Context | \`${projectContextDir}\` | 按当前任务读取；仅在用户要求或交付跨会话资料时写入 | 长调研、设计、证据与 checklist，不作为个人偏好库 |
@@ -193,11 +193,12 @@ Proma 将项目地图与用户协作记忆分开维护：前者让 Agent 少做�
 ${agentsMaintenanceRequirement}
 - 两份 \`AGENTS.md\` 的职责不得重叠。项目事实写项目根；Proma 特有规则写工作区文件并链接项目根。工作区 \`AGENTS.md\` 不得枚举已安装或可用的 Skills：它们已由系统提示词动态注入。优先维护已有 \`<!-- proma:... -->\` 受管区块；没有时只追加紧凑区块，绝不整体重写或覆盖用户手写规则。
 - 长期记忆根固定为工作区 \`memory/\`，不是项目根或会话工作台的 \`.claude/memory/\`。不要读取、创建或修改后者；旧目录仅由 Proma 的安全迁移处理。
-- 记忆有专门工具：MemorySearch 跨全局画像与项目记忆检索，MemoryInspect 读取正文与 revision，MemoryUpdate 按单条「- 」事实增删改并自带历史快照，MemoryHistory 查看历史版本。改写记忆一律走 MemoryUpdate，不要用 Edit/Write 直接覆盖记忆文件；单条增删改优先于整篇重写。
-- 写入协作记忆前，先读取 \`MEMORY.md\`、\`user-profile.md\` 与相关主题文件；对用户直接表达、已验证或重复出现，且会影响未来协作判断的稳定知识做最小写入。若记忆时间敏感、状态会更新，或记录具有后续判断价值的阶段性进展，必须在对应正文相邻标注事实/状态的发生、生效或截至时间（至少日期；日内顺序、截止点或时区会影响判断时写明时间和时区）；不得以文件修改时间替代。稳定事实无需额外添加时间戳。普通写入直接完成后告知，不得先追问“要不要记住/是否更新”；不要从单次行为推断。`,
+- 记忆有专门工具：MemorySearch 跨全局画像与项目记忆检索，MemoryInspect 读取正文与 revision，MemoryUpdate 按单条「- 」事实增删改并自带历史快照，MemoryHistory 查看历史版本，MemoryAudit 做只读审计。改写记忆一律走 MemoryUpdate，不要用 Edit/Write 直接覆盖记忆文件；单条增删改优先于整篇重写。
+- MemoryAudit 只给出字面启发式候选（完全重复、近似重复、疑似冲突、未登记主题、悬空路由），**不是语义结论**，也不判断哪条正确或更新。准备整理时先读命中的原文核对，删除、合并或改写仍需按正常流程逐步确认，不要把候选直接当成待执行清单。
+- 写入协作记忆前，先读取 \`MEMORY.md\`、\`collaboration.md\` 与相关主题文件；对用户直接表达、已验证或重复出现，且会影响未来协作判断的稳定知识做最小写入。若记忆时间敏感、状态会更新，或记录具有后续判断价值的阶段性进展，必须在对应正文相邻标注事实/状态的发生、生效或截至时间（至少日期；日内顺序、截止点或时区会影响判断时写明时间和时区）；不得以文件修改时间替代。稳定事实无需额外添加时间戳。普通写入直接完成后告知，不得先追问“要不要记住/是否更新”；不要从单次行为推断。`,
     ctx.memoryGuidance?.needsCollaborationProfile && workspace
       ? `## 协作知识状态
-当前尚未建立 \`memory/user-profile.md\`。这是状态提醒，不要求你立即收集资料；仅在当前任务自然暴露出高价值协作信号时，按项目根 \`AGENTS.md\` 的知识演进约定渐进处理。`
+当前尚未建立 \`memory/collaboration.md\`。这是状态提醒，不要求你立即收集资料；仅在当前任务自然暴露出高价值协作信号时，按项目根 \`AGENTS.md\` 的知识演进约定渐进处理。`
       : undefined,
     ctx.memoryRefreshOpportunity && workspace
       ? `## 项目记忆复查邀请

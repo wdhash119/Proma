@@ -59,6 +59,7 @@ import {
   isFileBrowserAutoRevealActive,
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
+  agentSideSelectionSessionMapAtom,
   agentSideDelegationMapAtom,
   agentSDKMessagesCacheAtom,
   agentLiveMessagesAtomFamily,
@@ -75,6 +76,8 @@ import {
   getDelegationSidePanelTab,
   getExplorationSessionIdFromSidePanelTab,
   getExplorationSidePanelTab,
+  getSelectionAgentSessionIdFromSidePanelTab,
+  getSelectionAgentSidePanelTab,
   getPreviewIdFromSidePanelTab,
   getPreviewSidePanelTab,
   getTerminalIdFromSidePanelTab,
@@ -856,6 +859,12 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const sideTemporaryAgentMap = useAtomValue(agentSideTemporaryAgentMapAtom)
   const setSideTemporaryAgentMap = useSetAtom(agentSideTemporaryAgentMapAtom)
   const sideTemporaryAgents = sideTemporaryAgentMap.get(sessionId) ?? []
+  const sideSelectionSessionMap = useAtomValue(agentSideSelectionSessionMapAtom)
+  const setSideSelectionSessionMap = useSetAtom(agentSideSelectionSessionMapAtom)
+  const sideSelectionSession = sideSelectionSessionMap.get(sessionId) ?? null
+  const validSideSelectionSession = sideSelectionSession && sessions.some((session) => session.id === sideSelectionSession.sessionId)
+    ? sideSelectionSession
+    : null
   const sideDelegationMap = useAtomValue(agentSideDelegationMapAtom)
   const setSideDelegationMap = useSetAtom(agentSideDelegationMapAtom)
   const setUnviewedDelegatedCompleted = useSetAtom(unviewedCompletedDelegatedSessionIdsAtom)
@@ -874,6 +883,10 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const activeExplorationSessionId = getExplorationSessionIdFromSidePanelTab(activeTab)
   const activeExplorationBranch = activeExplorationSessionId
     ? sideTemporaryAgents.find((branch) => branch.sessionId === activeExplorationSessionId) ?? null
+    : null
+  const activeSelectionSessionId = getSelectionAgentSessionIdFromSidePanelTab(activeTab)
+  const activeSelectionSession = activeSelectionSessionId && validSideSelectionSession?.sessionId === activeSelectionSessionId
+    ? validSideSelectionSession
     : null
   // Todo / 日程 / 能力 / 记忆的数据仍归属于 workspace，但右侧 Tab 仅属于当前 session。
   const [workspaceComponentTabs, setWorkspaceComponentTabs] = useAtom(agentSessionComponentTabsAtomFamily(sessionId))
@@ -902,7 +915,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const effectiveActiveTab: AgentSidePanelTab = activeTab === 'chat' && !sideChatConversationId
     ? 'files'
     // `temporary-agent` 是旧的单分支内存状态；新状态使用 exploration:<sessionId>。
-    : activeTab === 'temporary-agent' || (activeExplorationSessionId !== null && !activeExplorationBranch) || (activeTab === 'delegation' && !selectedDelegationSession) || (activeTerminalId !== null && !terminalTabs.some((terminal) => terminal.terminalId === activeTerminalId))
+    : activeTab === 'temporary-agent' || (activeExplorationSessionId !== null && !activeExplorationBranch) || (activeSelectionSessionId !== null && !activeSelectionSession) || (activeTab === 'delegation' && !selectedDelegationSession) || (activeTerminalId !== null && !terminalTabs.some((terminal) => terminal.terminalId === activeTerminalId))
       ? 'files'
       : isWorkspaceComponentTab(activeTab) && (!workspaceSlug || !workspaceComponentTabs.includes(activeTab) || !isWorkspaceComponentEnabled(activeTab))
         ? 'files'
@@ -991,6 +1004,18 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     })
     if (activeTab === 'chat') returnToPreviousTabAfterClose('chat')
   }, [activeTab, returnToPreviousTabAfterClose, sessionId, setSideChatMap])
+
+  const handleCloseSelectionAgentTab = React.useCallback((selectionSessionId: string) => {
+    setSideSelectionSessionMap((previous) => {
+      if (previous.get(sessionId)?.sessionId !== selectionSessionId) return previous
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
+    if (getSelectionAgentSessionIdFromSidePanelTab(activeTab) === selectionSessionId) {
+      returnToPreviousTabAfterClose(getSelectionAgentSidePanelTab(selectionSessionId))
+    }
+  }, [activeTab, returnToPreviousTabAfterClose, sessionId, setSideSelectionSessionMap])
 
   const handleCloseExplorationTab = React.useCallback((branchSessionId: string) => {
     setSideTemporaryAgentMap((prev) => {
@@ -1156,7 +1181,10 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       markDelegationSessionViewed(sideDelegationSessionId)
     } else {
       const explorationSessionId = getExplorationSessionIdFromSidePanelTab(tab)
-      if (explorationSessionId && sideTemporaryAgents.some((branch) => branch.sessionId === explorationSessionId)) {
+      const selectionSessionId = getSelectionAgentSessionIdFromSidePanelTab(tab)
+      if (selectionSessionId && validSideSelectionSession?.sessionId === selectionSessionId) {
+        rememberStopGenerationTarget({ kind: 'agent', sessionId: selectionSessionId })
+      } else if (explorationSessionId && sideTemporaryAgents.some((branch) => branch.sessionId === explorationSessionId)) {
         rememberStopGenerationTarget({ kind: 'agent', sessionId: explorationSessionId })
       } else if (tab === 'chat' && sideChatConversationId) {
         rememberStopGenerationTarget({ kind: 'chat', sessionId: sideChatConversationId })
@@ -1183,7 +1211,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     if (queue.sessionId !== sessionId) return
     queue.desiredTabId = browserTabId
     flushBrowserTabSelection()
-  }, [flushBrowserTabSelection, markDelegationSessionViewed, onTabChange, previewFiles, sessionId, setPreviewFileMap, sideChatConversationId, sideDelegationSessionId, sideTemporaryAgents, split, updateSplit])
+  }, [flushBrowserTabSelection, markDelegationSessionViewed, onTabChange, previewFiles, sessionId, setPreviewFileMap, sideChatConversationId, sideDelegationSessionId, sideTemporaryAgents, split, updateSplit, validSideSelectionSession])
 
   // Agent/浏览器等外部事件仍只更新兼容 activeTab；分屏时把新目标落到当前焦点 Pane。
   React.useEffect(() => {
@@ -1306,6 +1334,12 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       closable: true,
     })),
     ...(sideChatConversationId ? [{ id: 'chat' as const, label: '问答', icon: <MessageCircle className="size-3.5" />, closable: true }] : []),
+    ...(validSideSelectionSession ? [{
+      id: getSelectionAgentSidePanelTab(validSideSelectionSession.sessionId),
+      label: sessions.find((item) => item.id === validSideSelectionSession.sessionId)?.title || '选区 Agent',
+      icon: <MessageSquarePlus className="size-3.5" />,
+      closable: true,
+    }] : []),
     ...sideTemporaryAgents.map((branch) => ({
       id: getExplorationSidePanelTab(branch.sessionId),
       label: sessions.find((item) => item.id === branch.sessionId)?.title || '探索分支',
@@ -1327,7 +1361,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       closable: true,
       activity: showBrowserActivity && activeBrowserTabId !== tab.tabId && browserState.activeTabId === tab.tabId,
     })) ?? []),
-  ], [activeBrowserTabId, browserState, previewFiles, selectedDelegationSession, selectedDelegationStatus, sessions, showBrowserActivity, sideChatConversationId, sideTemporaryAgents, terminalTabs, workspaceComponentTabs])
+  ], [activeBrowserTabId, browserState, previewFiles, selectedDelegationSession, selectedDelegationStatus, sessions, showBrowserActivity, sideChatConversationId, sideTemporaryAgents, terminalTabs, validSideSelectionSession, workspaceComponentTabs])
   workspaceTabsRef.current = workspaceTabs
 
   React.useEffect(() => {
@@ -1373,12 +1407,14 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     const previewId = getPreviewIdFromSidePanelTab(tab)
     if (previewId) { handleClosePreviewTab(previewId); return }
     if (tab === 'chat') { handleCloseChatTab(); return }
+    const selectionSessionId = getSelectionAgentSessionIdFromSidePanelTab(tab)
+    if (selectionSessionId) { handleCloseSelectionAgentTab(selectionSessionId); return }
     const explorationSessionId = getExplorationSessionIdFromSidePanelTab(tab)
     if (explorationSessionId) { handleCloseExplorationTab(explorationSessionId); return }
     if (tab === 'delegation') { handleCloseDelegationTab(); return }
     const browserTabId = getBrowserTabIdFromSidePanelTab(tab)
     if (browserTabId) void handleCloseBrowserTab(browserTabId)
-  }, [exitSplitInsteadOfClosingBoundTab, handleCloseBrowserTab, handleCloseChatTab, handleCloseDelegationTab, handleCloseExplorationTab, handleClosePreviewTab, returnToPreviousTabAfterClose, sessionId, setTerminalTabsMap, setWorkspaceComponentTabs])
+  }, [exitSplitInsteadOfClosingBoundTab, handleCloseBrowserTab, handleCloseChatTab, handleCloseDelegationTab, handleCloseExplorationTab, handleClosePreviewTab, handleCloseSelectionAgentTab, returnToPreviousTabAfterClose, sessionId, setTerminalTabsMap, setWorkspaceComponentTabs])
 
   React.useEffect(() => {
     const handleCloseActiveWorkspaceTab = (event: Event) => {
@@ -1550,6 +1586,10 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     const paneExplorationBranch = paneExplorationSessionId
       ? sideTemporaryAgents.find((branch) => branch.sessionId === paneExplorationSessionId) ?? null
       : null
+    const paneSelectionSessionId = getSelectionAgentSessionIdFromSidePanelTab(paneTab)
+    const paneSelectionSession = paneSelectionSessionId && validSideSelectionSession?.sessionId === paneSelectionSessionId
+      ? validSideSelectionSession
+      : null
     const paneDelegationSessionId = paneTab === 'delegation' ? sideDelegationSessionId : null
     const paneDelegationSession = paneDelegationSessionId
       ? sessions.find((item) => item.id === paneDelegationSessionId && item.parentSessionId === sessionId && !!item.sourceDelegationId) ?? null
@@ -1603,6 +1643,10 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       ) : (
         <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">暂无问答会话</div>
       )
+    ) : paneSelectionSession ? (
+      <SideAgentSessionContent contentKey={`selection-agent:${paneSelectionSession.sessionId}`}>
+        <AgentView sessionId={paneSelectionSession.sessionId} embedded />
+      </SideAgentSessionContent>
     ) : paneExplorationBranch ? (
       <SideAgentSessionContent contentKey={`exploration:${paneExplorationBranch.sessionId}`}>
         <AgentView sessionId={paneExplorationBranch.sessionId} embedded />

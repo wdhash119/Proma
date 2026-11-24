@@ -140,7 +140,7 @@ export function GlobalShortcuts(): null {
       if (
         isActiveAgentSidePanelOpen
         && activeAgentSidePanelTab
-        && (isWorkspaceComponentTab(activeAgentSidePanelTab) || activeAgentSidePanelTab.startsWith('preview:') || activeAgentSidePanelTab.startsWith('browser:') || activeAgentSidePanelTab.startsWith('exploration:') || activeAgentSidePanelTab === 'delegation' || activeAgentSidePanelTab.startsWith('terminal:'))
+        && (isWorkspaceComponentTab(activeAgentSidePanelTab) || activeAgentSidePanelTab.startsWith('preview:') || activeAgentSidePanelTab.startsWith('browser:') || activeAgentSidePanelTab.startsWith('selection-agent:') || activeAgentSidePanelTab.startsWith('exploration:') || activeAgentSidePanelTab === 'delegation' || activeAgentSidePanelTab.startsWith('terminal:'))
       ) {
         window.dispatchEvent(new CustomEvent(CLOSE_ACTIVE_RIGHT_WORKSPACE_TAB_EVENT, {
           detail: { sessionId: activeTab.sessionId },

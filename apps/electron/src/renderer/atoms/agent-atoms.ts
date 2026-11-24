@@ -588,8 +588,8 @@ export function getDelegationTabLabel(title: string | null | undefined): string 
 }
 
 type AgentSidePanelBaseTab = 'files' | 'changes' | 'chat' | 'temporary-agent' | 'delegation' | WorkspaceComponentTab
-/** 工作区组件、每个 Pi 探索分支、协作子 Agent、浏览器网页和文件预览都处于右侧工作区顶栏。 */
-export type AgentSidePanelTab = AgentSidePanelBaseTab | `exploration:${string}` | `browser:${string}` | `preview:${string}` | `terminal:${string}`
+/** 工作区组件、选区 Agent、每个 Pi 探索分支、协作子 Agent、浏览器网页和文件预览都处于右侧工作区顶栏。 */
+export type AgentSidePanelTab = AgentSidePanelBaseTab | `selection-agent:${string}` | `exploration:${string}` | `browser:${string}` | `preview:${string}` | `terminal:${string}`
 
 /** 用户主动进入这些项目级能力时，Agent 后续的改动提示不得抢走当前视图。 */
 export function isUserPriorityWorkspaceComponentTab(
@@ -616,6 +616,23 @@ export const agentSideTemporaryAgentMapAtom = atom<Map<string, AgentExplorationB
 
 export function getExplorationSidePanelTab(branchSessionId: string): AgentSidePanelTab {
   return `exploration:${branchSessionId}`
+}
+
+/** 文件或 Obsidian 选区打开的普通 Agent；key 为拥有右侧工作区的主会话。 */
+export interface AgentSelectionSessionTab {
+  sessionId: string
+  sourceLabel: string
+}
+
+/** 仅保存右侧展示关系。选区 Agent 是普通持久化会话，关闭 Tab 不删除历史。 */
+export const agentSideSelectionSessionMapAtom = atom<Map<string, AgentSelectionSessionTab>>(new Map())
+
+export function getSelectionAgentSidePanelTab(selectionSessionId: string): AgentSidePanelTab {
+  return `selection-agent:${selectionSessionId}`
+}
+
+export function getSelectionAgentSessionIdFromSidePanelTab(tab: AgentSidePanelTab | string): string | null {
+  return tab.startsWith('selection-agent:') ? tab.slice('selection-agent:'.length) : null
 }
 
 /** 右侧当前观察的协作子 Agent：key 为父会话 ID，value 为唯一子会话 ID。 */

@@ -8,10 +8,8 @@ interface SelectionActionPopoverProps {
   onAddToAgent: () => void
   /** Pi `/tree`：从当前 Agent 历史节点创建右侧探索分支。 */
   onOpenExplorationBranch?: () => void | Promise<void>
-  /** 兼容尚未迁移的临时 Agent 入口。 */
-  onOpenTemporaryAgent?: () => void | Promise<void>
-  /** 兼容尚未迁移的文件 / Scratch 选区入口。 */
-  onOpenChat?: () => void | Promise<void>
+  /** 文件 / Obsidian 选区：创建或复用右侧带引用的普通 Agent。 */
+  onOpenSelectionAgent?: () => void | Promise<void>
 }
 
 export function SelectionActionPopover({
@@ -19,10 +17,9 @@ export function SelectionActionPopover({
   y,
   onAddToAgent,
   onOpenExplorationBranch,
-  onOpenTemporaryAgent,
-  onOpenChat,
+  onOpenSelectionAgent,
 }: SelectionActionPopoverProps): React.ReactElement {
-  const openSideAssistant = onOpenExplorationBranch ?? onOpenTemporaryAgent ?? onOpenChat
+  const openSideAssistant = onOpenExplorationBranch ?? onOpenSelectionAgent
   // 顶部选区若仍向上展开，浮窗会被窗口边缘裁掉；此时改为在选区下方展示。
   const openBelow = y < 72
   // 浮窗有两个不可换行的动作。靠近视口边缘时改为向内对齐，避免 flex item 收缩后中文逐字竖排。
@@ -58,7 +55,7 @@ export function SelectionActionPopover({
             }}
           >
             <MessageSquarePlus className="size-4" />
-            {onOpenExplorationBranch ? '探索此分支' : onOpenTemporaryAgent ? '打开临时 Agent' : '打开右侧问答'}
+            {onOpenExplorationBranch ? '探索此分支' : '打开临时 Agent'}
           </button>
         )}
       </div>

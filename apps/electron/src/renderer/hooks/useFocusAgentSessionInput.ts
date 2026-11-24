@@ -31,7 +31,14 @@ export function useFocusAgentSessionInput(): FocusAgentSessionInput {
 
   return React.useCallback((sessionId: string): boolean => {
     const agentTab = tabs.find((tab) => tab.type === 'agent' && tab.sessionId === sessionId)
-    if (!agentTab) return false
+    const focusInput = (): void => {
+      window.dispatchEvent(new CustomEvent('proma:focus-input', { detail: { sessionId } }))
+    }
+    // 右侧选区 / 探索 Agent 没有主 Tab，只聚焦其嵌入输入框，不切换主会话。
+    if (!agentTab) {
+      requestAnimationFrame(() => requestAnimationFrame(focusInput))
+      return true
+    }
 
     setActiveTabId(agentTab.id)
     setAppMode('agent')
@@ -54,7 +61,7 @@ export function useFocusAgentSessionInput(): FocusAgentSessionInput {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (store.get(activeTabIdAtom) !== agentTab.id) return
-        window.dispatchEvent(new CustomEvent('proma:focus-input'))
+        focusInput()
       })
     })
 

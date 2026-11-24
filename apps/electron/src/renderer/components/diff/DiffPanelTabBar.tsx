@@ -1,12 +1,12 @@
 /**
  * DiffPanelTabBar — 右侧工作区的统一顶栏。
  *
- * 文件、改动、预览、问答和每个浏览器网页位于同一层级；网页不再拥有嵌套 Tab 栏。
+ * 文件、改动、预览、探索/委派/选区会话和每个浏览器网页位于同一层级；网页不再拥有嵌套 Tab 栏。
  */
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Blocks, Brain, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, MessageCircle, PanelRight, Plus, ServerCog, SquareTerminal, X } from 'lucide-react'
+import { Blocks, Brain, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, PanelRight, Plus, ServerCog, SquareTerminal, X } from 'lucide-react'
 import { OBSIDIAN_NAME, ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import { cn } from '@/lib/utils'
 import { getScrollLeftToRevealTab } from '@/lib/tab-visibility'
@@ -58,7 +58,6 @@ interface DiffPanelTabBarProps {
   onOpenWorkspaceComponent?: (component: WorkspaceComponentTab) => void
   onOpenVault?: () => void
   productivityTools?: ProductivityToolsSettings
-  onOpenChat?: () => void
   /** 仅当前右侧 Tab 需要的紧凑动作，渲染于标签列表之后，不影响内容区布局。 */
   activeTabAction?: React.ReactNode
   visibleTabs?: Partial<Record<RightWorkspacePane, AgentSidePanelTab>>
@@ -82,7 +81,6 @@ export function DiffPanelTabBar({
   onOpenWorkspaceComponent,
   onOpenVault,
   productivityTools = { todosEnabled: true, calendarEnabled: true, obsidianEnabled: true },
-  onOpenChat,
   activeTabAction,
   visibleTabs,
   onTabDragChange,
@@ -514,15 +512,6 @@ export function DiffPanelTabBar({
                 <DropdownMenuItem onSelect={() => onOpenWorkspaceComponent('memory')}>
                   <Brain className="size-3.5" />
                   打开项目记忆
-                </DropdownMenuItem>
-              </>
-            )}
-            {onOpenChat && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={onOpenChat}>
-                  <MessageCircle className="size-3.5" />
-                  打开问答
                 </DropdownMenuItem>
               </>
             )}

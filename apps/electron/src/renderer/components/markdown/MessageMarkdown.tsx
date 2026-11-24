@@ -1,5 +1,5 @@
 /**
- * ChatMarkdown — 聊天与推理内容的增量 Markdown 渲染器。
+ * MessageMarkdown — 消息正文与推理内容的增量 Markdown 渲染器。
  *
  * 与整篇 react-markdown 渲染的区别：先把源码切成顶层块，再让每个块独立渲染，
  * 流式输出时只有尾块会重新解析。尾块若结构尚未定型（`-`、`#`、`|`、`$$` 刚出现，
@@ -12,13 +12,13 @@ import * as React from 'react'
 import Markdown, { type Components, type UrlTransform } from 'react-markdown'
 import type { PluggableList } from 'unified'
 import {
-  parseChatMarkdownBlocks,
-  reconcileChatMarkdownBlocks,
-  type ChatMarkdownBlock,
-} from '@/lib/chat-markdown-blocks'
-import { stabilizeChatMarkdownStreamTail } from '@/lib/chat-markdown-stream-tail'
+  parseMessageMarkdownBlocks,
+  reconcileMessageMarkdownBlocks,
+  type MessageMarkdownBlock,
+} from '@/lib/message-markdown-blocks'
+import { stabilizeMessageMarkdownStreamTail } from '@/lib/message-markdown-stream-tail'
 
-interface ChatMarkdownProps {
+interface MessageMarkdownProps {
   /** Markdown 源码 */
   source: string
   /** 已归一化的 remark 插件（稳定引用） */
@@ -33,8 +33,8 @@ interface ChatMarkdownProps {
   isStreaming?: boolean
 }
 
-interface ChatMarkdownBlockViewProps {
-  block: ChatMarkdownBlock
+interface MessageMarkdownBlockViewProps {
+  block: MessageMarkdownBlock
   remarkPlugins?: PluggableList
   rehypePlugins?: PluggableList
   urlTransform?: UrlTransform
@@ -47,13 +47,13 @@ interface ChatMarkdownBlockViewProps {
  * `type === 'text'` 是流式尾块的降级形态：结构尚未定型（`-`、`#`、`|`、围栏、`$$`
  * 刚出现）的尾块先按纯文本输出，不解析 markdown，避免已上屏的行立刻换盒子重新断行。
  */
-const ChatMarkdownBlockView = React.memo(function ChatMarkdownBlockView({
+const MessageMarkdownBlockView = React.memo(function MessageMarkdownBlockView({
   block,
   remarkPlugins,
   rehypePlugins,
   urlTransform,
   components,
-}: ChatMarkdownBlockViewProps): React.ReactElement {
+}: MessageMarkdownBlockViewProps): React.ReactElement {
   if (block.type === 'text') {
     return <p className="whitespace-pre-wrap break-words">{block.source}</p>
   }
@@ -69,21 +69,21 @@ const ChatMarkdownBlockView = React.memo(function ChatMarkdownBlockView({
   )
 })
 
-export const ChatMarkdown = React.memo(function ChatMarkdown({
+export const MessageMarkdown = React.memo(function MessageMarkdown({
   source,
   remarkPlugins,
   rehypePlugins,
   urlTransform,
   components,
   isStreaming = false,
-}: ChatMarkdownProps): React.ReactElement {
-  const previousBlocksRef = React.useRef<readonly ChatMarkdownBlock[]>([])
+}: MessageMarkdownProps): React.ReactElement {
+  const previousBlocksRef = React.useRef<readonly MessageMarkdownBlock[]>([])
 
   const blocks = React.useMemo(() => {
-    const parsed = parseChatMarkdownBlocks(source)
+    const parsed = parseMessageMarkdownBlocks(source)
     // 流式中先把未定型的尾块降级成纯文本，定型（被空行冻结或自身已闭合）后才换成真元素。
-    const stabilized = isStreaming ? stabilizeChatMarkdownStreamTail(parsed) : parsed
-    const reconciled = reconcileChatMarkdownBlocks(previousBlocksRef.current, stabilized, isStreaming)
+    const stabilized = isStreaming ? stabilizeMessageMarkdownStreamTail(parsed) : parsed
+    const reconciled = reconcileMessageMarkdownBlocks(previousBlocksRef.current, stabilized, isStreaming)
     previousBlocksRef.current = reconciled
     return reconciled
   }, [source, isStreaming])
@@ -91,7 +91,7 @@ export const ChatMarkdown = React.memo(function ChatMarkdown({
   return (
     <>
       {blocks.map((block) => (
-        <ChatMarkdownBlockView
+        <MessageMarkdownBlockView
           key={block.id}
           block={block}
           remarkPlugins={remarkPlugins}

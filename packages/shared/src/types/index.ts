@@ -18,8 +18,14 @@ export * from './channel'
 // 代理配置相关类型
 export * from './proxy'
 
-// Chat 相关类型
-export * from './chat'
+// 文件附件与文件对话框相关类型
+export * from './attachment'
+
+// 供应商请求消息（中立类型，供 core 适配器使用）
+export * from './provider'
+
+// 会话消息搜索（Agent 迷你地图）相关类型
+export * from './session-search'
 
 // Agent 相关类型
 export * from './agent'
@@ -42,9 +48,6 @@ export * from './github'
 
 // 人设（Persona）相关类型
 export * from './persona'
-
-// Chat 工具（function calling）相关类型
-export * from './chat-tool'
 
 // 飞书集成相关类型
 export * from './feishu'

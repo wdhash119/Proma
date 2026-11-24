@@ -163,7 +163,7 @@ linux:
     StartupWMClass: proma
   category: Development
   synopsis: 本地优先的 AI 桌面 Agent
-  description: Proma 把多模型 Chat、通用 Agent、工作区、Skills、MCP 与记忆能力放进同一个开源客户端，数据和配置默认留在本地（~/.proma/）。
+  description: Proma 把多模型通用 Agent、工作区、Skills、MCP 与记忆能力放进同一个开源客户端，数据和配置默认留在本地（~/.proma/）。
   maintainer: ErlichLiu <erlichliu@gmail.com>
   target:
     - target: AppImage

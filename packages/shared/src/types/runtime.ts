@@ -414,5 +414,15 @@ export const IPC_CHANNELS = {
   WINDOW_IS_FOCUSED: 'window:is-focused',
   /** 在系统剪贴板中写入纯文本 */
   WRITE_CLIPBOARD_TEXT: 'clipboard:write-text',
+
+  // ===== 通用文件读写（Agent 图片/资源另存与附件读取） =====
+  /** 读取本机文件为 base64（绝对路径需位于安全目录内） */
+  READ_ATTACHMENT: 'file:read-attachment',
+  /** 另存图片到用户选择的位置（原生 Save As 对话框） */
+  SAVE_IMAGE_AS: 'file:save-image-as',
+  /** 保存应用内置资源文件到用户选择的位置（原生 Save As 对话框） */
+  SAVE_RESOURCE_FILE_AS: 'file:save-resource-file-as',
+  /** 打开文件选择对话框 */
+  OPEN_FILE_DIALOG: 'file:open-dialog',
 } as const
 

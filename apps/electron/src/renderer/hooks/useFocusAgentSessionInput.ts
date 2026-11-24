@@ -6,8 +6,6 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
-import { appModeAtom } from '@/atoms/app-mode'
-import { currentConversationIdAtom } from '@/atoms/chat-atoms'
 import {
   agentSessionsAtom,
   currentAgentSessionIdAtom,
@@ -23,19 +21,22 @@ export function useFocusAgentSessionInput(): FocusAgentSessionInput {
   const tabs = useAtomValue(tabsAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
   const setActiveTabId = useSetAtom(activeTabIdAtom)
-  const setAppMode = useSetAtom(appModeAtom)
-  const setCurrentConversationId = useSetAtom(currentConversationIdAtom)
   const setCurrentAgentSessionId = useSetAtom(currentAgentSessionIdAtom)
   const setCurrentAgentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const setUnviewedCompleted = useSetAtom(unviewedCompletedSessionIdsAtom)
 
   return React.useCallback((sessionId: string): boolean => {
     const agentTab = tabs.find((tab) => tab.type === 'agent' && tab.sessionId === sessionId)
-    if (!agentTab) return false
+    const focusInput = (): void => {
+      window.dispatchEvent(new CustomEvent('proma:focus-input', { detail: { sessionId } }))
+    }
+    // 右侧选区 / 探索 Agent 没有主 Tab，只聚焦其嵌入输入框，不切换主会话。
+    if (!agentTab) {
+      requestAnimationFrame(() => requestAnimationFrame(focusInput))
+      return true
+    }
 
     setActiveTabId(agentTab.id)
-    setAppMode('agent')
-    setCurrentConversationId(null)
     setCurrentAgentSessionId(sessionId)
     setUnviewedCompleted((prev) => {
       if (!prev.has(sessionId)) return prev
@@ -54,7 +55,7 @@ export function useFocusAgentSessionInput(): FocusAgentSessionInput {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (store.get(activeTabIdAtom) !== agentTab.id) return
-        window.dispatchEvent(new CustomEvent('proma:focus-input'))
+        focusInput()
       })
     })
 
@@ -62,10 +63,8 @@ export function useFocusAgentSessionInput(): FocusAgentSessionInput {
   }, [
     agentSessions,
     setActiveTabId,
-    setAppMode,
     setCurrentAgentSessionId,
     setCurrentAgentWorkspaceId,
-    setCurrentConversationId,
     setUnviewedCompleted,
     store,
     tabs,

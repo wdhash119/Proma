@@ -19,7 +19,7 @@ interface VaultLiveMarkdownEditorProps {
   value: string
   onChange: (value: string) => void
   onSave: () => void
-  /** 选区变化由 Vault 外层处理为引用/右侧问答浮窗。 */
+  /** 选区变化由 Vault 外层处理为引用或右侧选区 Agent。 */
   onTextSelectionChange?: (selection: LiveMarkdownTextSelection | null) => void
   /** CodeMirror 异步挂载完成后通知外层，用于恢复阅读位置。 */
   onReady?: () => void

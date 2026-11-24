@@ -1,4 +1,4 @@
-import type { ChatMarkdownBlock } from './chat-markdown-blocks'
+import type { MessageMarkdownBlock } from './message-markdown-blocks'
 
 /**
  * 流式尾块稳定化。
@@ -82,7 +82,7 @@ function hasClosedMathBlock(source: string): boolean {
  * @param source 尾块源码
  * @param type 解析出的块类型
  */
-export function isChatMarkdownTailSettled(source: string, type: string): boolean {
+export function isMessageMarkdownTailSettled(source: string, type: string): boolean {
   switch (type) {
     // ATX 标题到行尾就结束了；只要尾块里还有第二行，标题本身已经冻结。
     case 'heading':
@@ -112,14 +112,14 @@ export function isChatMarkdownTailSettled(source: string, type: string): boolean
  *
  * @param blocks 当前帧解析出的块序列
  */
-export function stabilizeChatMarkdownStreamTail(
-  blocks: readonly ChatMarkdownBlock[],
-): readonly ChatMarkdownBlock[] {
+export function stabilizeMessageMarkdownStreamTail(
+  blocks: readonly MessageMarkdownBlock[],
+): readonly MessageMarkdownBlock[] {
   if (blocks.length === 0) return blocks
-  const tail = blocks[blocks.length - 1] as ChatMarkdownBlock
+  const tail = blocks[blocks.length - 1] as MessageMarkdownBlock
   if (!tail) return blocks
   if (!STRUCTURAL_BLOCK_TYPES.has(tail.type)) return blocks
-  if (isChatMarkdownTailSettled(tail.source, tail.type)) return blocks
+  if (isMessageMarkdownTailSettled(tail.source, tail.type)) return blocks
   const next = blocks.slice(0, -1)
   next.push({ ...tail, type: 'text' })
   return next

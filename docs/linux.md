@@ -78,7 +78,7 @@ Linux 第一版代码和发布配置以 Ubuntu 22.04 x86_64 为目标。发布�
 2. AppImage 和 deb 构建；
 3. deb 安装、卸载和升级；
 4. AppImage 启动与更新；
-5. Chat/Agent 流式响应和 JSONL 落盘；
+5. Agent 流式响应和 JSONL 落盘；
 6. 工作区、Skills、MCP、内嵌终端和内嵌浏览器；
 7. X11 与 Wayland 基本启动；
 8. 中文输入、剪贴板、窗口图标和任务栏关联。

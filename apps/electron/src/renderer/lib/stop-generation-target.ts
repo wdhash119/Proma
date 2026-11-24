@@ -1,6 +1,4 @@
-type StopGenerationTarget =
-  | { kind: 'agent'; sessionId: string }
-  | { kind: 'chat'; sessionId: string }
+type StopGenerationTarget = { kind: 'agent'; sessionId: string }
 
 interface SessionTabLike {
   type: string
@@ -9,12 +7,12 @@ interface SessionTabLike {
 
 let lastInteractedStopTarget: StopGenerationTarget | null = null
 
-/** Records the Agent or Chat view that most recently received focus or a click. */
+/** Records the Agent view that most recently received focus or a click. */
 export function rememberStopGenerationTarget(target: StopGenerationTarget): void {
   lastInteractedStopTarget = target
 }
 
-/** Returns the Agent or Chat view where the user's input cursor or last click is. */
+/** Returns the Agent view where the user's input cursor or last click is. */
 export function getLastInteractedStopTarget(): StopGenerationTarget | null {
   return lastInteractedStopTarget
 }
@@ -35,33 +33,25 @@ interface DelegationSelectionLike {
 }
 
 /**
- * Resolves a fallback target when the user has not yet focused or clicked a
- * conversation view in this window.
+ * Resolves a fallback target when the user has not yet focused or clicked an
+ * Agent view in this window.
  */
 export function resolveStopGenerationTarget(
   activeTab: SessionTabLike | null,
   activeAgentSidePanelTab: string | undefined,
   activeDelegation: DelegationSelectionLike | null = null,
 ): StopGenerationTarget | null {
-  if (!activeTab) return null
+  if (activeTab?.type !== 'agent') return null
 
-  if (activeTab.type === 'agent') {
-    const delegatedChildSessionId = activeAgentSidePanelTab === 'delegation'
-      && activeDelegation?.type === 'agent'
-      ? activeDelegation.sessionId
-      : null
+  const delegatedChildSessionId = activeAgentSidePanelTab === 'delegation'
+    && activeDelegation?.type === 'agent'
+    ? activeDelegation.sessionId
+    : null
 
-    return {
-      kind: 'agent',
-      sessionId: delegatedChildSessionId || activeTab.sessionId,
-    }
+  return {
+    kind: 'agent',
+    sessionId: delegatedChildSessionId || activeTab.sessionId,
   }
-
-  if (activeTab.type === 'chat') {
-    return { kind: 'chat', sessionId: activeTab.sessionId }
-  }
-
-  return null
 }
 
 /** Reads and validates a target attached to the global stop shortcut event. */
@@ -71,7 +61,7 @@ export function getStopGenerationTarget(event: Event): StopGenerationTarget | nu
 
   const candidate = detail as Partial<StopGenerationTarget>
   if (
-    (candidate.kind !== 'agent' && candidate.kind !== 'chat')
+    candidate.kind !== 'agent'
     || typeof candidate.sessionId !== 'string'
     || candidate.sessionId.length === 0
   ) {

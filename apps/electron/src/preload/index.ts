@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, MEMORY_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -24,21 +24,8 @@ import type {
   CodexOAuthLoginResult,
   XaiOAuthLoginResult,
   XaiOAuthDeviceCode,
-  ConversationMeta,
-  ChatMessage,
-  ChatSendInput,
-  GenerateTitleInput,
-  StreamChunkEvent,
-  StreamReasoningEvent,
-  StreamCompleteEvent,
-  StreamErrorEvent,
-  StreamToolActivityEvent,
-  AttachmentSaveInput,
-  AttachmentSaveResult,
   FileDialogResult,
   FileOrFolderDialogResult,
-  RecentMessagesResult,
-  SessionMessageSearchResponse,
   AgentSessionMeta,
   AgentActiveSessionSnapshot,
   SetAgentSessionActiveWorktreeInput,
@@ -81,8 +68,6 @@ import type {
   PersonaUpdateInput,
   PersonaImportResult,
   PersonaExportResult,
-  ChatToolInfo,
-  ChatToolState,
   MoveSessionToWorkspaceInput,
   ForkSessionInput,
   RewindSessionInput,
@@ -394,63 +379,9 @@ export interface ElectronAPI {
     callback: (deviceCode: import('@proma/shared').QianwenOAuthDeviceCode) => void,
   ) => () => void
 
-  // ===== 对话管理相关 =====
+  // ===== 通用文件读写 =====
 
-  /** 获取对话列表 */
-  listConversations: () => Promise<ConversationMeta[]>
-
-  /** 创建对话 */
-  createConversation: (title?: string, modelId?: string, channelId?: string) => Promise<ConversationMeta>
-
-  /** 获取对话消息 */
-  getConversationMessages: (id: string) => Promise<ChatMessage[]>
-
-  /** 获取对话最近 N 条消息（分页加载） */
-  getRecentMessages: (id: string, limit: number) => Promise<RecentMessagesResult>
-
-  /** 获取指定消息附近的有限窗口，供搜索定位 */
-  getConversationMessagesAround: (id: string, messageId: string, radius?: number) => Promise<ChatMessage[]>
-
-  /** 更新对话标题 */
-  updateConversationTitle: (id: string, title: string) => Promise<ConversationMeta>
-
-  /** 更新对话使用的模型/渠道 */
-  updateConversationModel: (id: string, modelId: string, channelId: string) => Promise<ConversationMeta>
-
-  /** 切换对话置顶状态 */
-  togglePinConversation: (id: string) => Promise<ConversationMeta>
-  searchConversationSessionMessages: (conversationId: string, query: string) => Promise<SessionMessageSearchResponse>
-
-  // ===== 消息发送 =====
-
-  /** 发送消息（触发 AI 流式响应） */
-  sendMessage: (input: ChatSendInput) => Promise<boolean>
-
-  /** 中止生成 */
-  stopGeneration: (conversationId: string) => Promise<void>
-
-  /** 删除指定消息 */
-  deleteMessage: (conversationId: string, messageId: string) => Promise<ChatMessage[]>
-
-  /** 从指定消息开始截断（包含该消息） */
-  truncateMessagesFrom: (
-    conversationId: string,
-    messageId: string,
-    preserveFirstMessageAttachments?: boolean,
-  ) => Promise<ChatMessage[]>
-
-  /** 更新上下文分隔线 */
-  updateContextDividers: (conversationId: string, dividers: string[]) => Promise<ConversationMeta>
-
-  /** 生成对话标题 */
-  generateTitle: (input: GenerateTitleInput) => Promise<string | null>
-
-  // ===== 附件管理相关 =====
-
-  /** 保存附件到本地 */
-  saveAttachment: (input: AttachmentSaveInput) => Promise<AttachmentSaveResult>
-
-  /** 读取附件（返回 base64 字符串） */
+  /** 读取文件（返回 base64 字符串） */
   readAttachment: (localPath: string) => Promise<string>
 
   /** 另存图片到用户选择的位置（原生 Save As 对话框） */
@@ -458,9 +389,6 @@ export interface ElectronAPI {
 
   /** 保存应用内置资源文件到用户选择的位置（原生 Save As 对话框） */
   saveResourceFileAs: (resourceRelativePath: string, defaultFilename: string) => Promise<boolean>
-
-  /** 删除附件 */
-  deleteAttachment: (localPath: string) => Promise<void>
 
   /** 打开文件选择对话框 */
   openFileDialog: () => Promise<FileDialogResult>
@@ -557,23 +485,6 @@ export interface ElectronAPI {
   /** 检测系统代理 */
   detectSystemProxy: () => Promise<SystemProxyDetectResult>
 
-  // ===== 流式事件订阅（返回清理函数） =====
-
-  /** 订阅内容片段事件 */
-  onStreamChunk: (callback: (event: StreamChunkEvent) => void) => () => void
-
-  /** 订阅推理片段事件 */
-  onStreamReasoning: (callback: (event: StreamReasoningEvent) => void) => () => void
-
-  /** 订阅流式完成事件 */
-  onStreamComplete: (callback: (event: StreamCompleteEvent) => void) => () => void
-
-  /** 订阅流式错误事件 */
-  onStreamError: (callback: (event: StreamErrorEvent) => void) => () => void
-
-  /** 订阅流式工具活动事件 */
-  onStreamToolActivity: (callback: (event: StreamToolActivityEvent) => void) => () => void
-
   // ===== Agent 会话管理相关 =====
 
   /** 获取 Agent 会话列表 */
@@ -634,9 +545,6 @@ export interface ElectronAPI {
 
   /** 删除 Agent 会话 */
   deleteAgentSession: (id: string) => Promise<void>
-
-  /** 迁移 Chat 对话记录到 Agent 会话 */
-  migrateChatToAgent: (conversationId: string, agentSessionId: string) => Promise<void>
 
   /** 切换 Agent 会话置顶状态 */
   togglePinAgentSession: (id: string) => Promise<AgentSessionMeta>
@@ -854,17 +762,6 @@ export interface ElectronAPI {
   onAgentTitleUpdated: (callback: (data: { sessionId: string; title: string }) => void) => () => void
   /** 订阅 Agent 主动更新活动 Worktree 的事件 */
   onAgentActiveWorktreeUpdated: (callback: (session: AgentSessionMeta) => void) => () => void
-
-  // ===== Chat 工具管理 =====
-
-  /** 获取所有工具信息 */
-  getChatTools: () => Promise<ChatToolInfo[]>
-
-  /** 更新工具开关状态 */
-  updateChatToolState: (toolId: string, state: ChatToolState) => Promise<void>
-
-  /** 监听自定义工具配置变更 */
-  onCustomToolChanged: (callback: () => void) => () => void
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -1600,100 +1497,21 @@ const electronAPI: ElectronAPI = {
     return () => ipcRenderer.removeListener(CHANNEL_IPC_CHANNELS.QIANWEN_OAUTH_DEVICE_CODE, listener)
   },
 
-  // 对话管理
-  listConversations: () => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.LIST_CONVERSATIONS)
-  },
-
-  createConversation: (title?: string, modelId?: string, channelId?: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.CREATE_CONVERSATION, title, modelId, channelId)
-  },
-
-  getConversationMessages: (id: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.GET_MESSAGES, id)
-  },
-
-  getRecentMessages: (id: string, limit: number) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.GET_RECENT_MESSAGES, id, limit)
-  },
-
-  getConversationMessagesAround: (id: string, messageId: string, radius?: number) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.GET_MESSAGES_AROUND, id, messageId, radius)
-  },
-
-  updateConversationTitle: (id: string, title: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.UPDATE_TITLE, id, title)
-  },
-
-  updateConversationModel: (id: string, modelId: string, channelId: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.UPDATE_MODEL, id, modelId, channelId)
-  },
-
-  togglePinConversation: (id: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.TOGGLE_PIN, id)
-  },
-
-  searchConversationSessionMessages: (conversationId: string, query: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES, conversationId, query)
-  },
-
-  // 消息发送
-  sendMessage: (input: ChatSendInput) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SEND_MESSAGE, input)
-  },
-
-  stopGeneration: (conversationId: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.STOP_GENERATION, conversationId)
-  },
-
-  deleteMessage: (conversationId: string, messageId: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.DELETE_MESSAGE, conversationId, messageId)
-  },
-
-  truncateMessagesFrom: (
-    conversationId: string,
-    messageId: string,
-    preserveFirstMessageAttachments = false,
-  ) => {
-    return ipcRenderer.invoke(
-      CHAT_IPC_CHANNELS.TRUNCATE_MESSAGES_FROM,
-      conversationId,
-      messageId,
-      preserveFirstMessageAttachments,
-    )
-  },
-
-  updateContextDividers: (conversationId: string, dividers: string[]) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.UPDATE_CONTEXT_DIVIDERS, conversationId, dividers)
-  },
-
-  generateTitle: (input: GenerateTitleInput) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.GENERATE_TITLE, input)
-  },
-
-  // 附件管理
-  saveAttachment: (input: AttachmentSaveInput) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SAVE_ATTACHMENT, input)
-  },
-
+  // 通用文件读写
   readAttachment: (localPath: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.READ_ATTACHMENT, localPath)
+    return ipcRenderer.invoke(IPC_CHANNELS.READ_ATTACHMENT, localPath)
   },
 
   saveImageAs: (localPath: string, defaultFilename: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SAVE_IMAGE_AS, localPath, defaultFilename)
+    return ipcRenderer.invoke(IPC_CHANNELS.SAVE_IMAGE_AS, localPath, defaultFilename)
   },
 
   saveResourceFileAs: (resourceRelativePath: string, defaultFilename: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.SAVE_RESOURCE_FILE_AS, resourceRelativePath, defaultFilename)
-  },
-
-  deleteAttachment: (localPath: string) => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.DELETE_ATTACHMENT, localPath)
+    return ipcRenderer.invoke(IPC_CHANNELS.SAVE_RESOURCE_FILE_AS, resourceRelativePath, defaultFilename)
   },
 
   openFileDialog: () => {
-    return ipcRenderer.invoke(CHAT_IPC_CHANNELS.OPEN_FILE_DIALOG)
+    return ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE_DIALOG)
   },
 
   // 用户档案
@@ -1804,37 +1622,6 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(PROXY_IPC_CHANNELS.DETECT_SYSTEM)
   },
 
-  // 流式事件订阅
-  onStreamChunk: (callback: (event: StreamChunkEvent) => void) => {
-    const listener = (_: unknown, event: StreamChunkEvent): void => callback(event)
-    ipcRenderer.on(CHAT_IPC_CHANNELS.STREAM_CHUNK, listener)
-    return () => { ipcRenderer.removeListener(CHAT_IPC_CHANNELS.STREAM_CHUNK, listener) }
-  },
-
-  onStreamReasoning: (callback: (event: StreamReasoningEvent) => void) => {
-    const listener = (_: unknown, event: StreamReasoningEvent): void => callback(event)
-    ipcRenderer.on(CHAT_IPC_CHANNELS.STREAM_REASONING, listener)
-    return () => { ipcRenderer.removeListener(CHAT_IPC_CHANNELS.STREAM_REASONING, listener) }
-  },
-
-  onStreamComplete: (callback: (event: StreamCompleteEvent) => void) => {
-    const listener = (_: unknown, event: StreamCompleteEvent): void => callback(event)
-    ipcRenderer.on(CHAT_IPC_CHANNELS.STREAM_COMPLETE, listener)
-    return () => { ipcRenderer.removeListener(CHAT_IPC_CHANNELS.STREAM_COMPLETE, listener) }
-  },
-
-  onStreamError: (callback: (event: StreamErrorEvent) => void) => {
-    const listener = (_: unknown, event: StreamErrorEvent): void => callback(event)
-    ipcRenderer.on(CHAT_IPC_CHANNELS.STREAM_ERROR, listener)
-    return () => { ipcRenderer.removeListener(CHAT_IPC_CHANNELS.STREAM_ERROR, listener) }
-  },
-
-  onStreamToolActivity: (callback: (event: StreamToolActivityEvent) => void) => {
-    const listener = (_: unknown, event: StreamToolActivityEvent): void => callback(event)
-    ipcRenderer.on(CHAT_IPC_CHANNELS.STREAM_TOOL_ACTIVITY, listener)
-    return () => { ipcRenderer.removeListener(CHAT_IPC_CHANNELS.STREAM_TOOL_ACTIVITY, listener) }
-  },
-
   // Agent 会话管理
   listAgentSessions: () => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_SESSIONS)
@@ -1913,10 +1700,6 @@ const electronAPI: ElectronAPI = {
 
   deleteAgentSession: (id: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_SESSION, id)
-  },
-
-  migrateChatToAgent: (conversationId: string, agentSessionId: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MIGRATE_CHAT_TO_AGENT, conversationId, agentSessionId)
   },
 
   togglePinAgentSession: (id: string) => {
@@ -2255,21 +2038,6 @@ const electronAPI: ElectronAPI = {
     const listener = (_: unknown, session: AgentSessionMeta): void => callback(session)
     ipcRenderer.on(AGENT_IPC_CHANNELS.ACTIVE_WORKTREE_UPDATED, listener)
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.ACTIVE_WORKTREE_UPDATED, listener) }
-  },
-
-  // Chat 工具管理
-  getChatTools: () => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.GET_ALL_TOOLS)
-  },
-
-  updateChatToolState: (toolId: string, state: ChatToolState) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.UPDATE_TOOL_STATE, toolId, state)
-  },
-
-  onCustomToolChanged: (callback: () => void) => {
-    const listener = (): void => callback()
-    ipcRenderer.on(CHAT_TOOL_IPC_CHANNELS.CUSTOM_TOOL_CHANGED, listener)
-    return () => { ipcRenderer.removeListener(CHAT_TOOL_IPC_CHANNELS.CUSTOM_TOOL_CHANGED, listener) }
   },
 
   // AskUserQuestion 交互式问答

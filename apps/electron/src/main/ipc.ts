@@ -10,7 +10,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -38,15 +38,8 @@ import type {
   ChannelDirectTestInput,
   FetchModelsInput,
   FetchModelsResult,
-  ConversationMeta,
-  ChatMessage,
-  ChatSendInput,
-  GenerateTitleInput,
-  AttachmentSaveInput,
-  AttachmentSaveResult,
   FileDialogResult,
   FileOrFolderDialogResult,
-  RecentMessagesResult,
   AgentSessionMeta,
   AgentActiveSessionSnapshot,
   SetAgentSessionActiveWorktreeInput,
@@ -84,8 +77,6 @@ import type {
   PersonaUpdateInput,
   PersonaImportResult,
   PersonaExportResult,
-  ChatToolInfo,
-  ChatToolState,
   MoveSessionToWorkspaceInput,
   ForkSessionInput,
   RewindSessionInput,
@@ -202,23 +193,7 @@ import { serializeCodexCredentials, serializeGithubCopilotCredentials, serialize
 import type { ChangeRequestsActionInput } from '@proma/shared'
 import type { CodexOAuthLoginMethod, QianwenOAuthDeviceCode } from '@proma/shared'
 import {
-  listConversations,
-  createConversation,
-  getConversationMessages,
-  getConversationMessagesAround,
-  getRecentMessages,
-  updateConversationMeta,
-  deleteMessage,
-  truncateMessagesFrom,
-  updateContextDividers,
-  autoArchiveConversations,
-  searchConversationSessionMessages,
-} from './lib/conversation-manager'
-import { sendMessage, stopGeneration, generateTitle } from './lib/chat-service'
-import {
-  saveAttachment,
   readAttachmentAsBase64,
-  deleteAttachment,
   openFileDialog,
   openFileOrFolderDialog,
 } from './lib/attachment-service'
@@ -303,7 +278,6 @@ import {
   getAgentSessionSDKMessages,
   updateAgentSessionMeta,
   deleteAgentSession,
-  migrateChatToAgentSession,
   moveSessionToWorkspace,
   forkAgentSession,
   autoArchiveAgentSessions,
@@ -438,8 +412,6 @@ function stopWorkspaceMemoryWatch(webContentsId: number, workspaceSlug: string):
   if (subscriptions?.size === 0) workspaceMemoryWatchSubscriptions.delete(webContentsId)
 }
 
-import { getAllToolInfos } from './lib/chat-tool-registry'
-import { updateToolState } from './lib/chat-tool-config'
 import {
   getPersonaConfig,
   createPersona,
@@ -809,7 +781,7 @@ async function ensurePathAllowedWithWorktree(filePath: string, options?: FileAcc
  * - runtime:get-status: 获取运行时状态
  * - git:get-repo-status: 获取指定目录的 Git 仓库状态
  * - channel:*: 渠道管理相关
- * - chat:*: 对话管理 + 消息发送 + 流式事件
+ * - file:*: 通用文件读取、另存与文件选择对话框
  */
 /**
  * 打包内置资源目录
@@ -1855,160 +1827,11 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  // ===== 对话管理相关 =====
+  // ===== 通用文件读写相关 =====
 
-  // 获取对话列表
+  // 读取本机文件为 base64（Agent 图片附件与图片预览共用）
   ipcMain.handle(
-    CHAT_IPC_CHANNELS.LIST_CONVERSATIONS,
-    async (): Promise<ConversationMeta[]> => {
-      return listConversations()
-    }
-  )
-
-  // 创建对话
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.CREATE_CONVERSATION,
-    async (_, title?: string, modelId?: string, channelId?: string): Promise<ConversationMeta> => {
-      return createConversation(title, modelId, channelId)
-    }
-  )
-
-  // 获取对话消息
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.GET_MESSAGES,
-    async (_, id: string): Promise<ChatMessage[]> => {
-      return getConversationMessages(id)
-    }
-  )
-
-  // 获取对话最近 N 条消息（分页加载）
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.GET_RECENT_MESSAGES,
-    async (_, id: string, limit: number): Promise<RecentMessagesResult> => {
-      return getRecentMessages(id, limit)
-    }
-  )
-
-  // 获取搜索命中附近的有限消息窗口
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.GET_MESSAGES_AROUND,
-    async (_, id: string, messageId: string, radius?: number): Promise<ChatMessage[]> => {
-      return getConversationMessagesAround(id, messageId, radius)
-    }
-  )
-
-  // 更新对话标题
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.UPDATE_TITLE,
-    async (_, id: string, title: string): Promise<ConversationMeta> => {
-      return updateConversationMeta(id, { title })
-    }
-  )
-
-  // 更新对话使用的模型/渠道
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.UPDATE_MODEL,
-    async (_, id: string, modelId: string, channelId: string): Promise<ConversationMeta> => {
-      return updateConversationMeta(id, { modelId, channelId })
-    }
-  )
-
-  // 切换对话置顶状态
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.TOGGLE_PIN,
-    async (_, id: string): Promise<ConversationMeta> => {
-      const conversations = listConversations()
-      const current = conversations.find((c) => c.id === id)
-      if (!current) throw new Error(`对话不存在: ${id}`)
-      const newPinned = !current.pinned
-      // 置顶时自动取消归档
-      const updates: Partial<ConversationMeta> = { pinned: newPinned }
-      if (newPinned && current.archived) {
-        updates.archived = false
-      }
-      return updateConversationMeta(id, updates)
-    }
-  )
-
-  // 搜索当前对话的完整持久化历史（只返回命中元数据，避免传输整份 JSONL）
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.SEARCH_SESSION_MESSAGES,
-    async (_, conversationId: string, query: string) => {
-      return searchConversationSessionMessages(conversationId, query)
-    }
-  )
-
-  // 发送消息（触发 AI 流式响应）
-  // 注意：通过 event.sender 获取 webContents 用于推送流式事件
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.SEND_MESSAGE,
-    async (event, input: ChatSendInput): Promise<boolean> => {
-      return sendMessage(input, event.sender)
-    }
-  )
-
-  // 中止生成
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.STOP_GENERATION,
-    async (_, conversationId: string): Promise<void> => {
-      stopGeneration(conversationId)
-    }
-  )
-
-  // 删除消息
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.DELETE_MESSAGE,
-    async (_, conversationId: string, messageId: string): Promise<ChatMessage[]> => {
-      return deleteMessage(conversationId, messageId)
-    }
-  )
-
-  // 从指定消息开始截断（包含该消息）
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.TRUNCATE_MESSAGES_FROM,
-    async (
-      _,
-      conversationId: string,
-      messageId: string,
-      preserveFirstMessageAttachments?: boolean,
-    ): Promise<ChatMessage[]> => {
-      return truncateMessagesFrom(
-        conversationId,
-        messageId,
-        preserveFirstMessageAttachments ?? false,
-      )
-    }
-  )
-
-  // 更新上下文分隔线
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.UPDATE_CONTEXT_DIVIDERS,
-    async (_, conversationId: string, dividers: string[]): Promise<ConversationMeta> => {
-      return updateContextDividers(conversationId, dividers)
-    }
-  )
-
-  // 生成对话标题
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.GENERATE_TITLE,
-    async (_, input: GenerateTitleInput): Promise<string | null> => {
-      return generateTitle(input)
-    }
-  )
-
-  // ===== 附件管理相关 =====
-
-  // 保存附件到本地
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.SAVE_ATTACHMENT,
-    async (_, input: AttachmentSaveInput): Promise<AttachmentSaveResult> => {
-      return saveAttachment(input)
-    }
-  )
-
-  // 读取附件（返回 base64）
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.READ_ATTACHMENT,
+    IPC_CHANNELS.READ_ATTACHMENT,
     async (_, localPath: string): Promise<string> => {
       return readAttachmentAsBase64(localPath)
     }
@@ -2016,7 +1839,7 @@ export function registerIpcHandlers(): void {
 
   // 另存图片到用户选择的位置（原生 Save As 对话框）
   ipcMain.handle(
-    CHAT_IPC_CHANNELS.SAVE_IMAGE_AS,
+    IPC_CHANNELS.SAVE_IMAGE_AS,
     async (event, localPath: string, defaultFilename: string): Promise<boolean> => {
       const { dialog, BrowserWindow } = await import('electron')
       const { writeFileSync } = await import('node:fs')
@@ -2045,7 +1868,7 @@ export function registerIpcHandlers(): void {
 
   // 保存应用内置资源文件到用户选择的位置（原生 Save As 对话框）
   ipcMain.handle(
-    CHAT_IPC_CHANNELS.SAVE_RESOURCE_FILE_AS,
+    IPC_CHANNELS.SAVE_RESOURCE_FILE_AS,
     async (event, resourceRelativePath: string, defaultFilename: string): Promise<boolean> => {
       const { dialog, BrowserWindow } = await import('electron')
       const { writeFileSync, readFileSync, existsSync } = await import('node:fs')
@@ -2083,17 +1906,9 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 删除附件
+  // 打开文件选择对话框（Agent Composer 与文件浏览器共用）
   ipcMain.handle(
-    CHAT_IPC_CHANNELS.DELETE_ATTACHMENT,
-    async (_, localPath: string): Promise<void> => {
-      deleteAttachment(localPath)
-    }
-  )
-
-  // 打开文件选择对话框
-  ipcMain.handle(
-    CHAT_IPC_CHANNELS.OPEN_FILE_DIALOG,
+    IPC_CHANNELS.OPEN_FILE_DIALOG,
     async (): Promise<FileDialogResult> => {
       return openFileDialog()
     }
@@ -2720,14 +2535,6 @@ export function registerIpcHandlers(): void {
       closeTerminalsForSession(id)
       deleteAgentSession(id)
       releaseAttachedFileWatchers(attachedFiles)
-    }
-  )
-
-  // 迁移 Chat 对话记录到 Agent 会话
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.MIGRATE_CHAT_TO_AGENT,
-    async (_, conversationId: string, agentSessionId: string): Promise<void> => {
-      migrateChatToAgentSession(conversationId, agentSessionId)
     }
   )
 
@@ -3638,24 +3445,6 @@ export function registerIpcHandlers(): void {
   )
 
 
-
-  // ===== Chat 工具管理 =====
-
-  // 获取所有工具信息
-  ipcMain.handle(
-    CHAT_TOOL_IPC_CHANNELS.GET_ALL_TOOLS,
-    async (): Promise<ChatToolInfo[]> => {
-      return getAllToolInfos()
-    }
-  )
-
-  // 更新工具开关状态
-  ipcMain.handle(
-    CHAT_TOOL_IPC_CHANNELS.UPDATE_TOOL_STATE,
-    async (_, toolId: string, state: ChatToolState): Promise<void> => {
-      updateToolState(toolId, state)
-    }
-  )
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -5120,10 +4909,9 @@ export function registerIpcHandlers(): void {
       const settings = getSettings()
       const days = settings.archiveAfterDays ?? 7
       if (days > 0) {
-        const archivedChats = autoArchiveConversations(days)
         const archivedSessions = autoArchiveAgentSessions(days)
-        if (archivedChats + archivedSessions > 0) {
-          console.log(`[自动归档] 已归档 ${archivedChats} 个对话, ${archivedSessions} 个 Agent 会话`)
+        if (archivedSessions > 0) {
+          console.log(`[自动归档] 已归档 ${archivedSessions} 个 Agent 会话`)
         }
       }
     } catch (error) {

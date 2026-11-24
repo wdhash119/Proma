@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { useAtom, useStore } from 'jotai'
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultFocus, VaultReadResult, VaultSummary, VaultTreeEntry } from '@proma/shared'
@@ -20,22 +20,10 @@ import { useVaultScrollMemory } from './useVaultScrollMemory'
 import { getVaultScrollKey } from './vault-scroll-memory'
 import type { LiveMarkdownEditorHandle, LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
-import { focusChatInput } from '@/components/chat/focus-chat-input'
-import { getOrCreateSideChat } from '@/lib/side-chat'
+import { appendQuoteToSessionDraft } from '@/lib/agent-draft-quote'
 import { insertAgentInputQuote } from '@/lib/agent-input-quote'
 import { useFocusAgentSessionInput } from '@/hooks/useFocusAgentSessionInput'
-import {
-  agentDiffPanelTabAtom,
-  agentSidePanelOpenAtomFamily,
-} from '@/atoms/agent-atoms'
-import {
-  agentSideChatMapAtom,
-  conversationsAtom,
-  conversationDraftsAtom,
-  conversationQuotedSelectionMapAtom,
-  selectedModelAtom,
-} from '@/atoms/chat-atoms'
-import { quotedSelectionMapAtom } from '@/atoms/preview-atoms'
+import { useOpenSelectionAgent } from '@/hooks/useOpenSelectionAgent'
 import {
   focusedVaultFolderAtomFamily,
   getVaultSessionScope,
@@ -288,7 +276,7 @@ function VaultMarkdownEditor({
   readResult: VaultReadResult
   /** Stable renderer-safe identity of the currently authorized Vault. */
   vaultId: string
-  /** 嵌入 Agent 右侧工作区时，用于接入 Agent 引用与右侧问答。 */
+  /** 嵌入 Agent 右侧工作区时，用于接入 Agent 引用与右侧选区 Agent。 */
   sessionId?: string
   onSave: (request: VaultSaveRequest, options?: { silent?: boolean }) => Promise<VaultSaveResult>
   onRename: VaultRename
@@ -308,17 +296,9 @@ function VaultMarkdownEditor({
   const { draft, saving, conflict: saveConflict } = documentSnapshot
   const editorPageRef = React.useRef<HTMLDivElement>(null)
   const [selection, setSelection] = React.useState<VaultTextSelection | null>(null)
-  const openSelectionChatPendingRef = React.useRef(false)
-  const selectedChatModel = useAtomValue(selectedModelAtom)
-  const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
-  const conversations = useAtomValue(conversationsAtom)
-  const sideChatMap = useAtomValue(agentSideChatMapAtom)
-  const setConversations = useSetAtom(conversationsAtom)
-  const setConversationDrafts = useSetAtom(conversationDraftsAtom)
-  const setChatQuotedSelectionMap = useSetAtom(conversationQuotedSelectionMapAtom)
-  const setSideChatMap = useSetAtom(agentSideChatMapAtom)
-  const setSidePanelOpen = useSetAtom(agentSidePanelOpenAtomFamily(sessionId ?? 'standalone'))
-  const setSidePanelTabMap = useSetAtom(agentDiffPanelTabAtom)
+  const openSelectionAgentPendingRef = React.useRef(false)
+  const selectionStore = useStore()
+  const openSelectionAgent = useOpenSelectionAgent(sessionId ?? '')
   const focusAgentSessionInput = useFocusAgentSessionInput()
   // Keep the reading position per surface and per note, so switching the center
   // view, a right-workspace tab, or the open note does not jump back to the top.
@@ -370,66 +350,30 @@ function VaultMarkdownEditor({
     const quote = createQuote()
     if (!quote) return
     if (!insertAgentInputQuote(sessionId, quote)) {
-      setQuotedSelectionMap((previous) => new Map(previous).set(sessionId, quote))
+      appendQuoteToSessionDraft(selectionStore, sessionId, quote)
     }
     clearSelection()
     focusAgentSessionInput(sessionId)
-  }, [clearSelection, createQuote, focusAgentSessionInput, sessionId, setQuotedSelectionMap])
-  const openSelectionChat = React.useCallback(async (): Promise<void> => {
+  }, [clearSelection, createQuote, focusAgentSessionInput, selectionStore, sessionId])
+  const openSelectionAgentFromVault = React.useCallback(async (): Promise<void> => {
     if (!sessionId) {
-      toast.info('请从 Agent 会话右侧打开 Obsidian 后再发起右侧问答')
+      toast.info('请从 Agent 会话右侧打开 Obsidian 后再发起临时 Agent')
       return
     }
     const quote = createQuote()
-    if (!quote || openSelectionChatPendingRef.current) return
-
-    const activeConversationId = sideChatMap.get(sessionId) ?? null
-    // 右侧已绑定有效 Chat 时始终复用，避免因激活 Tab 状态短暂不同步而重复创建会话。
-    if (activeConversationId) {
-      setChatQuotedSelectionMap((previous) => new Map(previous).set(activeConversationId, quote))
-      setSidePanelOpen(true)
-      setSidePanelTabMap((previous) => new Map(previous).set(sessionId, 'chat'))
-      clearSelection()
-      focusChatInput(activeConversationId)
-      return
-    }
-
-    openSelectionChatPendingRef.current = true
+    if (!quote || openSelectionAgentPendingRef.current) return
+    openSelectionAgentPendingRef.current = true
     try {
-      const conversation = await getOrCreateSideChat(sessionId, () => window.electronAPI.createConversation(
-        'Obsidian 选区问答',
-        selectedChatModel?.modelId,
-        selectedChatModel?.channelId,
-      ))
-      setConversations((previous) => previous.some((item) => item.id === conversation.id) ? previous : [conversation, ...previous])
-      setConversationDrafts((previous) => new Map(previous).set(conversation.id, '我的问题：'))
-      setSideChatMap((previous) => new Map(previous).set(sessionId, conversation.id))
-      setSidePanelOpen(true)
-      setSidePanelTabMap((previous) => new Map(previous).set(sessionId, 'chat'))
-      setChatQuotedSelectionMap((previous) => new Map(previous).set(conversation.id, quote))
+      const created = await openSelectionAgent({ quote, title: `选区 · ${readResult.relativePath}` })
+      if (!created) {
+        toast.error('打开临时 Agent 失败')
+        return
+      }
       clearSelection()
-      focusChatInput(conversation.id)
-    } catch (error) {
-      console.error('[VaultView] 打开 Obsidian 选区聊天失败:', error)
-      toast.error('打开右侧问答失败')
     } finally {
-      openSelectionChatPendingRef.current = false
+      openSelectionAgentPendingRef.current = false
     }
-  }, [
-    clearSelection,
-    conversations,
-    createQuote,
-    selectedChatModel,
-    sessionId,
-    setConversationDrafts,
-    setConversations,
-    setChatQuotedSelectionMap,
-    setQuotedSelectionMap,
-    setSideChatMap,
-    setSidePanelOpen,
-    setSidePanelTabMap,
-    sideChatMap,
-  ])
+  }, [clearSelection, createQuote, openSelectionAgent, readResult.relativePath, sessionId])
 
   const updateDraft = React.useCallback((nextDraft: string): void => {
     documentController.setDraft(nextDraft)
@@ -545,7 +489,7 @@ function VaultMarkdownEditor({
           x={selection.x}
           y={selection.y}
           onAddToAgent={addSelectionToAgent}
-          onOpenChat={openSelectionChat}
+          onOpenSelectionAgent={openSelectionAgentFromVault}
         />
       )}
     </div>

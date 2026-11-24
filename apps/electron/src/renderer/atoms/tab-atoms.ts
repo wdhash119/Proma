@@ -9,9 +9,6 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import {
-  streamingConversationIdsAtom,
-} from './chat-atoms'
-import {
   agentSessionIndicatorMapAtom,
   unviewedCompletedSessionIdsAtom,
 } from './agent-atoms'
@@ -21,7 +18,7 @@ import type { PreviewFile } from './preview-atoms'
 // ===== 类型定义 =====
 
 /** 标签页类型（Settings 不作为 Tab，保留独立视图） */
-export type TabType = 'chat' | 'agent' | 'preview'
+export type TabType = 'agent' | 'preview'
 
 /** 会话预览 Tab 的 ID 前缀：运行时临时入口，不参与持久化 */
 const PREVIEW_TAB_PREFIX = '__preview__:'
@@ -32,7 +29,7 @@ export interface TabItem {
   id: string
   /** 标签页类型 */
   type: TabType
-  /** Chat conversationId 或 Agent sessionId */
+  /** Agent sessionId（预览 Tab 复用其所属会话的 sessionId） */
   sessionId: string
   /** 标签页显示标题 */
   title: string
@@ -121,17 +118,14 @@ export const activeSessionIdAtom = atom<string | null>((get) => {
   return activeTab?.sessionId ?? null
 })
 
-/** 标签页指示点状态（chat 用 running/idle，agent 用完整 SessionIndicatorStatus） */
+/** 标签页指示点状态（使用完整 SessionIndicatorStatus） */
 export const tabIndicatorMapAtom = atom<Map<string, SessionIndicatorStatus>>((get) => {
   const tabs = get(tabsAtom)
-  const chatStreaming = get(streamingConversationIdsAtom)
   const agentIndicator = get(agentSessionIndicatorMapAtom)
   const unviewedCompletedIds = get(unviewedCompletedSessionIdsAtom)
   const map = new Map<string, SessionIndicatorStatus>()
   for (const tab of tabs) {
-    if (tab.type === 'chat') {
-      map.set(tab.id, chatStreaming.has(tab.sessionId) ? 'running' : 'idle')
-    } else if (tab.type === 'agent') {
+    if (tab.type === 'agent') {
       const status = agentIndicator.get(tab.sessionId)
         ?? (unviewedCompletedIds.has(tab.sessionId) ? 'completed' : 'idle')
       map.set(tab.id, status)
@@ -164,7 +158,7 @@ export function isAgentContextTab(tab: TabItem | undefined): boolean {
 }
 
 function isSessionTab(tab: TabItem): boolean {
-  return tab.type === 'chat' || tab.type === 'agent'
+  return tab.type === 'agent'
 }
 
 function getPersistentTabs(tabs: TabItem[]): TabItem[] {

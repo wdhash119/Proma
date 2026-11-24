@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
-import type { AgentSessionMeta, ConversationMeta } from '@proma/shared'
+import type { AgentSessionMeta } from '@proma/shared'
 import { cn } from '@/lib/utils'
 import {
   activeTabIdAtom,
@@ -20,14 +20,8 @@ import {
 } from '@/atoms/tab-atoms'
 import { previewFileMapAtom } from '@/atoms/preview-atoms'
 import { getInitialTabSwitchIndex, promoteTabMru } from '@/lib/tab-switching'
-import { appModeAtom } from '@/atoms/app-mode'
 import { activeViewAtom } from '@/atoms/active-view'
 import { automationFormAtom } from '@/atoms/automation-atoms'
-import {
-  conversationsAtom,
-  currentConversationIdAtom,
-  streamingConversationIdsAtom,
-} from '@/atoms/chat-atoms'
 import {
   agentSessionIndicatorMapAtom,
   agentSessionsAtom,
@@ -38,10 +32,10 @@ import {
 } from '@/atoms/agent-atoms'
 import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
-import { Bot, GitBranch, MessageSquare } from 'lucide-react'
+import { Bot, GitBranch } from 'lucide-react'
 
 type SwitchSectionId = 'collaboration' | 'recent'
-type SwitchCandidateType = 'chat' | 'agent'
+type SwitchCandidateType = 'agent'
 
 interface SwitchCandidate {
   id: string
@@ -77,19 +71,14 @@ export function TabSwitcher(): ReactElement | null {
   const tabMru = useAtomValue(tabMruAtom)
   const setTabMru = useSetAtom(tabMruAtom)
 
-  const conversations = useAtomValue(conversationsAtom)
-  const streamingConversationIds = useAtomValue(streamingConversationIdsAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
   const agentIndicatorMap = useAtomValue(agentSessionIndicatorMapAtom)
   const unviewedCompletedIds = useAtomValue(unviewedCompletedSessionIdsAtom)
   const draftSessionIds = useAtomValue(draftSessionIdsAtom)
 
-  const appMode = useAtomValue(appModeAtom)
-  const setAppMode = useSetAtom(appModeAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setAutomationForm = useSetAtom(automationFormAtom)
-  const setCurrentConversationId = useSetAtom(currentConversationIdAtom)
   const currentAgentSessionId = useAtomValue(currentAgentSessionIdAtom)
   const setCurrentAgentSessionId = useSetAtom(currentAgentSessionIdAtom)
   const setCurrentAgentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
@@ -119,21 +108,9 @@ export function TabSwitcher(): ReactElement | null {
       }
     }
 
-    const chatCandidates = conversations
-      .filter((conversation) => !conversation.archived && !draftSessionIds.has(conversation.id))
-      .map((conversation: ConversationMeta): SwitchCandidate => ({
-        id: conversation.id,
-        type: 'chat',
-        title: conversation.title || '新对话',
-        updatedAt: conversation.updatedAt,
-        status: streamingConversationIds.has(conversation.id) ? 'running' : 'idle',
-      }))
-
-    const agentCandidates = agentSessions
+    const allCandidates = agentSessions
       .filter((session) => !session.archived && !session.isDraft && !draftSessionIds.has(session.id))
       .map(buildAgentCandidate)
-
-    const allCandidates = [...chatCandidates, ...agentCandidates]
 
     const candidateById = new Map(allCandidates.map((candidate) => [candidate.id, candidate]))
     const activeAgentSession = activeSessionId
@@ -204,9 +181,7 @@ export function TabSwitcher(): ReactElement | null {
     agentIndicatorMap,
     agentSessions,
     agentWorkspaces,
-    conversations,
     draftSessionIds,
-    streamingConversationIds,
     tabMru,
     unviewedCompletedIds,
   ])
@@ -250,13 +225,11 @@ export function TabSwitcher(): ReactElement | null {
       setActiveView('conversations')
 
       // 切回 agent 会话时，若该会话上次开着预览 Tab 则一并重建并回到上次视图
-      const restore = candidate.type === 'agent'
-        ? buildOpenTabRestore(
-            candidate.id,
-            store.get(sessionViewStateMapAtom),
-            store.get(previewFileMapAtom),
-          )
-        : undefined
+      const restore = buildOpenTabRestore(
+        candidate.id,
+        store.get(sessionViewStateMapAtom),
+        store.get(previewFileMapAtom),
+      )
       const nextTab = openTab(tabsRef.current, {
         type: candidate.type,
         sessionId: candidate.id,
@@ -273,16 +246,7 @@ export function TabSwitcher(): ReactElement | null {
         return next
       })
 
-      if (candidate.type === 'chat') {
-        setAppMode('chat')
-        setCurrentConversationId(candidate.id)
-        setCurrentAgentSessionId(null)
-        return
-      }
-
-      setAppMode('agent')
       setCurrentAgentSessionId(candidate.id)
-      setCurrentConversationId(null)
 
       setUnviewedCompleted((prev) => {
         if (!prev.has(candidate.id)) return prev
@@ -299,15 +263,12 @@ export function TabSwitcher(): ReactElement | null {
       }
     },
     [
-      appMode,
       currentAgentSessionId,
       setActiveTabId,
       setActiveView,
-      setAppMode,
       setAutomationForm,
       setCurrentAgentSessionId,
       setCurrentAgentWorkspaceId,
-      setCurrentConversationId,
       setTabMru,
       setTabs,
       setUnviewedCompleted,
@@ -532,15 +493,10 @@ function SwitcherCandidateRow({
             <GitBranch className="size-2.5" />
             子会话
           </>
-        ) : candidate.type === 'agent' ? (
+        ) : (
           <>
             <Bot className="size-2.5" />
             Agent
-          </>
-        ) : (
-          <>
-            <MessageSquare className="size-2.5" />
-            Chat
           </>
         )}
       </span>

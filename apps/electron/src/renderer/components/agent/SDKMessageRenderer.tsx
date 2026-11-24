@@ -43,14 +43,14 @@ import {
   UserMessageContent,
   TurnFileMapProvider,
 } from '@/components/ai-elements/message'
-import { UserAvatar } from '@/components/chat/UserAvatar'
-import { CopyButton } from '@/components/chat/CopyButton'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { CopyButton } from '@/components/ui/copy-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { formatMessageTime } from '@/components/chat/ChatMessageItem'
+import { formatMessageTime } from '@/lib/format-message-time'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
-import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/chat-atoms'
+import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/channel-atoms'
 import { agentSessionPendingFilesAtom, agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { automationsAtom, automationFormAtom, automationToDraft } from '@/atoms/automation-atoms'

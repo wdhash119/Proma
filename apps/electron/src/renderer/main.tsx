@@ -62,15 +62,12 @@ import {
   initializeMarkdownFontSize,
 } from './atoms/markdown-font-size'
 import { useGlobalAgentListeners } from './hooks/useGlobalAgentListeners'
-import { useGlobalChatListeners } from './hooks/useGlobalChatListeners'
 import { tabsAtom, activeTabIdAtom, getPersistableTabState } from './atoms/tab-atoms'
 import type { TabItem } from './atoms/tab-atoms'
-import { chatToolsAtom } from './atoms/chat-tool-atoms'
 import { feishuBotStatesAtom } from './atoms/feishu-atoms'
 import { dingtalkBotStatesAtom } from './atoms/dingtalk-atoms'
 import { slackBotStatesAtom } from './atoms/slack-atoms'
-import { currentConversationIdAtom, channelsAtom, channelsLoadedAtom, selectedModelAtom } from './atoms/chat-atoms'
-import { appModeAtom } from './atoms/app-mode'
+import { channelsAtom, channelsLoadedAtom } from './atoms/channel-atoms'
 import type { FeishuBotBridgeState, FeishuBridgeState, DingTalkBotBridgeState, DingTalkBridgeState } from '@proma/shared'
 import { Toaster } from './components/ui/sonner'
 import { toast } from 'sonner'
@@ -180,7 +177,6 @@ function AgentSettingsInitializer(): null {
   const setAgentSettingsReady = useSetAtom(agentSettingsReadyAtom)
   const setChannels = useSetAtom(channelsAtom)
   const setChannelsLoaded = useSetAtom(channelsLoadedAtom)
-  const store = useStore()
 
   // 读取当前工作区信息（用于能力变化 diff）
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
@@ -200,15 +196,6 @@ function AgentSettingsInitializer(): null {
       // 缓存渠道列表
       setChannels(channels)
       setChannelsLoaded(true)
-
-      const channelIds = new Set(channels.map((c) => c.id))
-
-      // 验证 Chat 模式的全局默认模型（localStorage 持久化的可能指向已删除渠道）
-      const chatModel = store.get(selectedModelAtom)
-      if (chatModel && !channelIds.has(chatModel.channelId)) {
-        console.warn('[AgentSettings] Chat selectedModel 指向已删除的渠道，清除')
-        store.set(selectedModelAtom, null)
-      }
 
       const selectedChannel = settings.agentChannelId
         ? channels.find((channel) => channel.id === settings.agentChannelId)
@@ -663,17 +650,6 @@ function MarkdownFontSizeInitializer(): null {
 }
 
 /**
- * Chat IPC 监听器初始化组件
- *
- * 全局挂载，永不销毁。确保 Chat 流式事件
- * 在页面切换时不丢失。
- */
-function ChatListenersInitializer(): null {
-  useGlobalChatListeners()
-  return null
-}
-
-/**
  * Agent IPC 监听器初始化组件
  *
  * 全局挂载，永不销毁。确保 Agent 流式事件、权限请求
@@ -681,35 +657,6 @@ function ChatListenersInitializer(): null {
  */
 function AgentListenersInitializer(): null {
   useGlobalAgentListeners()
-  return null
-}
-
-/**
- * Chat 工具初始化组件
- *
- * 启动时从主进程加载所有工具信息到 atom。
- * 订阅 chat-tools.json 文件变更通知，自动刷新工具列表。
- */
-function ChatToolInitializer(): null {
-  const setChatTools = useSetAtom(chatToolsAtom)
-
-  useEffect(() => {
-    window.electronAPI.getChatTools()
-      .then(setChatTools)
-      .catch((err: unknown) => console.error('[ChatToolInitializer] 加载工具列表失败:', err))
-  }, [setChatTools])
-
-  // 订阅自定义工具配置变更并静默刷新工具列表。
-  // 用户主动操作的反馈由各设置入口提供，避免文件监听产生重复 Toast。
-  useEffect(() => {
-    const cleanup = window.electronAPI.onCustomToolChanged(() => {
-      window.electronAPI.getChatTools()
-        .then(setChatTools)
-        .catch((err: unknown) => console.error('[ChatToolInitializer] 刷新工具列表失败:', err))
-    })
-    return cleanup
-  }, [setChatTools])
-
   return null
 }
 
@@ -752,7 +699,7 @@ function FeishuInitializer(): null {
 
     // 定期上报在场状态（5 秒间隔 + 焦点变化时即时上报）
     const reportPresence = (): void => {
-      const activeSessionId = store.get(currentAgentSessionIdAtom) ?? store.get(currentConversationIdAtom)
+      const activeSessionId = store.get(currentAgentSessionIdAtom)
       window.electronAPI.reportFeishuPresence({
         activeSessionId,
         lastInteractionAt: Date.now(),
@@ -868,9 +815,8 @@ function TabStatePersistenceInitializer(): null {
   // 启动恢复：读取 settings.tabState + 校验会话有效性
   useEffect(() => {
     const restore = async (): Promise<void> => {
-      const [settings, conversations, activeAgentSessions] = await Promise.all([
+      const [settings, activeAgentSessions] = await Promise.all([
         window.electronAPI.getSettings(),
-        window.electronAPI.listConversations(),
         window.electronAPI.listActiveAgentSessions(),
       ])
       const tabState = settings.tabState
@@ -886,11 +832,8 @@ function TabStatePersistenceInitializer(): null {
         : []
       const agentSessions = [...activeAgentSessions, ...archivedAgentSessions]
 
-      // 构建有效 sessionId 集合
-      const validSessionIds = new Set([
-        ...conversations.map((c) => c.id),
-        ...agentSessions.map((s) => s.id),
-      ])
+      // 只恢复 agent 标签；历史 Chat 标签与已删除会话都会在下面被静默过滤。
+      const validSessionIds = new Set(agentSessions.map((session) => session.id))
 
       // 过滤 diff 类型 Tab（不持久化），同时过滤掉已被删除的会话
       const validTabs = tabState.tabs.filter(
@@ -901,7 +844,7 @@ function TabStatePersistenceInitializer(): null {
           'sessionId' in t &&
           'type' in t &&
           'title' in t &&
-          (t.type === 'chat' || t.type === 'agent') &&
+          t.type === 'agent' &&
           validSessionIds.has(t.sessionId),
       )
       if (validTabs.length === 0) return
@@ -926,15 +869,9 @@ function TabStatePersistenceInitializer(): null {
       store.set(tabsAtom, activeTab ? [activeTab] : [])
       store.set(activeTabIdAtom, restoredActiveTabId)
 
-      // 同步 appMode 和 currentSessionId
+      // 同步 activeTab 对应的会话
       if (activeTab) {
-        if (activeTab.type === 'chat') {
-          store.set(appModeAtom, 'chat')
-          store.set(currentConversationIdAtom, activeTab.sessionId)
-        } else {
-          store.set(appModeAtom, 'agent')
-          store.set(currentAgentSessionIdAtom, activeTab.sessionId)
-        }
+        store.set(currentAgentSessionIdAtom, activeTab.sessionId)
       }
 
       console.log(`[TabRestore] 已恢复当前会话入口，历史标签 ${validTabs.length} 个已收敛到左侧列表`)
@@ -1046,9 +983,7 @@ if (isQuickTaskWindow) {
       <DockBadgeInitializer />
       <UiPreferencesInitializer />
       <MarkdownFontSizeInitializer />
-      <ChatListenersInitializer />
       <AgentListenersInitializer />
-      <ChatToolInitializer />
       <UpdaterInitializer />
       <AutomationInitializer />
       <PlanningInitializer />

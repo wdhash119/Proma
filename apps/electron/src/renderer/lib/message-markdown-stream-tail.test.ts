@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { parseChatMarkdownBlocks } from './chat-markdown-blocks'
-import { isChatMarkdownTailSettled, stabilizeChatMarkdownStreamTail } from './chat-markdown-stream-tail'
+import { parseMessageMarkdownBlocks } from './message-markdown-blocks'
+import { isMessageMarkdownTailSettled, stabilizeMessageMarkdownStreamTail } from './message-markdown-stream-tail'
 
 /** 解析后再做流式尾块稳定化，返回 [类型序列, 尾块类型]。 */
 function streamTypes(source: string): { types: string[]; tailType: string } {
-  const blocks = stabilizeChatMarkdownStreamTail(parseChatMarkdownBlocks(source))
+  const blocks = stabilizeMessageMarkdownStreamTail(parseMessageMarkdownBlocks(source))
   const types = blocks.map((block) => block.type)
   return { types, tailType: types[types.length - 1] ?? '' }
 }
@@ -32,8 +32,8 @@ describe('流式尾块降级', () => {
 
   test('Given 标题已有后续行 When 稳定化 Then 标题保持 heading', () => {
     // 尾块是「标题 + 换行」时标题本身已冻结
-    expect(isChatMarkdownTailSettled('# 会话标题\n正文起步', 'heading')).toBe(true)
-    expect(isChatMarkdownTailSettled('# 会话标题', 'heading')).toBe(false)
+    expect(isMessageMarkdownTailSettled('# 会话标题\n正文起步', 'heading')).toBe(true)
+    expect(isMessageMarkdownTailSettled('# 会话标题', 'heading')).toBe(false)
   })
 
   test('Given 围栏未闭合 When 稳定化 Then 代码块不降级，仍即时渲染 code', () => {
@@ -47,21 +47,21 @@ describe('流式尾块降级', () => {
   })
 
   test('Given 波浪号围栏 When 判定闭合 Then 长度与字符都要匹配', () => {
-    expect(isChatMarkdownTailSettled('~~~\ncode\n~~~', 'code')).toBe(true)
-    expect(isChatMarkdownTailSettled('~~~~\ncode\n~~~', 'code')).toBe(false)
-    expect(isChatMarkdownTailSettled('```js\ncode\n``` ', 'code')).toBe(true)
+    expect(isMessageMarkdownTailSettled('~~~\ncode\n~~~', 'code')).toBe(true)
+    expect(isMessageMarkdownTailSettled('~~~~\ncode\n~~~', 'code')).toBe(false)
+    expect(isMessageMarkdownTailSettled('```js\ncode\n``` ', 'code')).toBe(true)
   })
 
   test('Given 数学块 When 判定闭合 Then 同行与独立闭合都算已定型', () => {
-    expect(isChatMarkdownTailSettled('$$\n\\frac{a}{b}\n$$', 'math')).toBe(true)
-    expect(isChatMarkdownTailSettled('$$E = mc^2$$', 'math')).toBe(true)
-    expect(isChatMarkdownTailSettled('$$\n\\frac{a}{b}', 'math')).toBe(false)
+    expect(isMessageMarkdownTailSettled('$$\n\\frac{a}{b}\n$$', 'math')).toBe(true)
+    expect(isMessageMarkdownTailSettled('$$E = mc^2$$', 'math')).toBe(true)
+    expect(isMessageMarkdownTailSettled('$$\n\\frac{a}{b}', 'math')).toBe(false)
   })
 
   test('Given 开启行带内容的数学块 When 判定闭合 Then 独立闭合行也算已定型', () => {
     // remark-math 把 `$$ x` 解析成 math 块的开启行；随后独立一行 `$$` 即闭合。
-    expect(isChatMarkdownTailSettled('$$ x\n$$', 'math')).toBe(true)
-    expect(isChatMarkdownTailSettled('$$ x\ny', 'math')).toBe(false)
+    expect(isMessageMarkdownTailSettled('$$ x\n$$', 'math')).toBe(true)
+    expect(isMessageMarkdownTailSettled('$$ x\ny', 'math')).toBe(false)
   })
 
   test('Given 表格尾块 When 稳定化 Then 先按纯文本渲染', () => {
@@ -75,26 +75,26 @@ describe('流式尾块降级', () => {
 
   test('Given 整篇文档兜底 When 稳定化 Then 不降级，保留引用式链接语义', () => {
     const source = '结论见 [文档][docs]。\n\n[docs]: https://proma.cool/docs'
-    const parsed = parseChatMarkdownBlocks(source)
+    const parsed = parseMessageMarkdownBlocks(source)
     expect(parsed.map((b) => b.type)).toEqual(['document'])
-    expect(stabilizeChatMarkdownStreamTail(parsed).map((b) => b.type)).toEqual(['document'])
+    expect(stabilizeMessageMarkdownStreamTail(parsed).map((b) => b.type)).toEqual(['document'])
   })
 
   test('Given 分隔线尾块 When 稳定化 Then 保持原类型（已是终态）', () => {
-    expect(isChatMarkdownTailSettled('---', 'thematicBreak')).toBe(true)
+    expect(isMessageMarkdownTailSettled('---', 'thematicBreak')).toBe(true)
     expect(streamTypes('段落\n\n---').types).toEqual(['paragraph', 'thematicBreak'])
   })
 })
 
 describe('流式尾块稳定化的边界', () => {
   test('Given 空块序列 When 稳定化 Then 返回同一引用', () => {
-    const empty = parseChatMarkdownBlocks('')
-    expect(stabilizeChatMarkdownStreamTail(empty)).toBe(empty)
+    const empty = parseMessageMarkdownBlocks('')
+    expect(stabilizeMessageMarkdownStreamTail(empty)).toBe(empty)
   })
 
   test('Given 多个块 When 稳定化 Then 只改最后一个块，前面块引用不变', () => {
-    const parsed = parseChatMarkdownBlocks('第一段\n\n- 列表项')
-    const stabilized = stabilizeChatMarkdownStreamTail(parsed)
+    const parsed = parseMessageMarkdownBlocks('第一段\n\n- 列表项')
+    const stabilized = stabilizeMessageMarkdownStreamTail(parsed)
     expect(stabilized[0]).toBe(parsed[0])
     expect(stabilized[1]).not.toBe(parsed[1])
     expect(stabilized[1]?.type).toBe('text')

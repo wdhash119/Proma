@@ -5,7 +5,7 @@
  * - 手动触发搜索（点击搜索按钮 / 在输入框按 Enter）
  * - 标题匹配 + 消息内容匹配统一渲染，匹配文字高亮
  * - 键盘导航（上下箭头选择 + Enter 打开结果 + Esc 关闭）
- * - 同时搜索 Chat 和 Agent 模式
+ * - 只搜索 Agent 会话与工作区文件
  *
  * 为什么手动触发：随着用户历史对话变多，自动搜索每次按键都会扫描全量 JSONL，
  * 主进程被 IO 阻塞导致整体卡顿。改成手动触发后只在用户确认意图时执行一次。
@@ -21,7 +21,7 @@ import { Search, X, Bot, Archive, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { searchDialogOpenAtom } from '@/atoms/search-atoms'
-import { channelsAtom } from '@/atoms/chat-atoms'
+import { channelsAtom } from '@/atoms/channel-atoms'
 import {
   agentSessionsAtom,
   agentWorkspacesAtom,
@@ -282,7 +282,7 @@ export function SearchDialog(): React.ReactElement {
     setSelectedIndex(0)
 
     const matchesTitle = (title: string): boolean => findBestSearchMatch(title, q) !== null
-    // Chat 已退役：主搜索只覆盖 Agent 会话；历史 Chat 数据保留在本地，不在主搜索范围内。
+    // 主搜索只覆盖 Agent 会话；历史 Chat 已退役，不再有独立的对话索引可检索。
     const titles: TitleResult[] = agentSessions
       .filter((s) => matchesTitle(s.title))
       .map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt }))
@@ -333,7 +333,6 @@ export function SearchDialog(): React.ReactElement {
 "${q}"
 
 搜索范围：
-- Chat 会话消息文件：~/${configDir}/conversations/ 目录下所有 .jsonl 文件
 - Agent 会话消息文件：~/${configDir}/agent-sessions/ 目录下所有 .jsonl 文件
 
 要求：
@@ -360,7 +359,7 @@ export function SearchDialog(): React.ReactElement {
     setOpen(false)
     setActiveView('conversations')
 
-    // Chat 已退役：结果只可能是 Agent 会话。
+    // 结果只可能是 Agent 会话。
     const session = agentSessions.find((s) => s.id === result.id)
     openSession('agent', result.id, session?.title ?? result.title)
   }, [setOpen, setActiveView, openSession, agentSessions])

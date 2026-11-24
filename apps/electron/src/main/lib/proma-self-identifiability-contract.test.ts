@@ -19,7 +19,7 @@ describe('自操作可辨识性契约', () => {
 
   test('Given 其它纯图标按钮 When 检查 Then 都带 aria-label', () => {
     const automation = readAppFile('src/renderer/components/automation/AutomationFormView.tsx')
-    const attachment = readAppFile('src/renderer/components/chat/AttachmentPreviewItem.tsx')
+    const attachment = readAppFile('src/renderer/components/ai-elements/AttachmentPreviewItem.tsx')
 
     expect(automation).toContain('aria-label="关闭定时任务编辑"')
     expect(attachment).toContain('移除附件')

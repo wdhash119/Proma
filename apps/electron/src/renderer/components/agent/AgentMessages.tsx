@@ -1,7 +1,7 @@
 /**
  * AgentMessages — Agent 消息列表
  *
- * 复用 Chat 的 Conversation/Message 原语组件，
+ * 复用 ai-elements 的 Conversation/Message 原语组件，
  * 流式输出通过 SDK 渲染路径（MessageGroupRenderer）展示工具活动。
  */
 
@@ -25,11 +25,11 @@ import type { MinimapItem } from '@/components/ai-elements/scroll-minimap'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { useAgentRunStats } from '@/hooks/use-agent-run-stats'
 import type { RunStatMessage } from '@/lib/agent-run-stats'
-import { formatMessageTime } from '@/components/chat/ChatMessageItem'
+import { formatMessageTime } from '@/lib/format-message-time'
 import { resolveModelDisplayName } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
-import { channelsAtom } from '@/atoms/chat-atoms'
+import { channelsAtom } from '@/atoms/channel-atoms'
 import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
 import { cn } from '@/lib/utils'
 import {

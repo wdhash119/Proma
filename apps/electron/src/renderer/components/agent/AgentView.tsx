@@ -24,9 +24,9 @@ import { AgentMessageQueue } from './AgentMessageQueue'
 import { SkillMentionNamesProvider } from './SkillMentionNamesProvider'
 import { ContextUsageBadge } from './ContextUsageBadge'
 import { AskUserBanner } from './AskUserBanner'
-import { ModelSelector } from '@/components/chat/ModelSelector'
-import { ChannelPlanQuotaBadge } from '@/components/chat/ChannelPlanQuotaBadge'
-import { AttachmentPreviewItem } from '@/components/chat/AttachmentPreviewItem'
+import { ModelSelector } from '@/components/models/ModelSelector'
+import { ChannelPlanQuotaBadge } from '@/components/models/ChannelPlanQuotaBadge'
+import { AttachmentPreviewItem } from '@/components/ai-elements/AttachmentPreviewItem'
 import { QuotedSelectionChip } from '@/components/diff/QuotedSelectionChip'
 import { RichTextInput, type RichTextInputHandle } from '@/components/ai-elements/rich-text-input'
 import { SpeechButton } from '@/components/ai-elements/speech-button'
@@ -65,7 +65,7 @@ import {
   getStopGenerationTarget,
   rememberStopGenerationTarget,
 } from '@/lib/stop-generation-target'
-import { previewFileMapAtom, previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
+import { previewFileMapAtom, previewPanelOpenMapAtom, quotedSelectionMapAtom } from '@/atoms/preview-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 import {
   agentStreamingStatesAtom,
@@ -76,6 +76,7 @@ import {
   agentSessionChannelMapAtom,
   agentSessionModelMapAtom,
   currentAgentWorkspaceIdAtom,
+  currentAgentSessionIdAtom,
   agentPendingPromptAtom,
   agentPendingFilesAtomFamily,
   agentMessageQueueAtomFamily,
@@ -111,7 +112,7 @@ import {
 } from '@/atoms/agent-atoms'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { longTextPasteAsAttachmentEnabledAtom } from '@/atoms/ui-preferences'
-import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/chat-atoms'
+import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/channel-atoms'
 import { todoPlanningGroupsAtom } from '@/atoms/planning-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
@@ -560,7 +561,8 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   }, [sessionId, sessionMetaChannelId, sessionMetaModelId, hasSessionMeta, defaultChannelId, defaultModelId, setSessionChannelMap, setSessionModelMap])
 
   const setAgentStreamErrors = useSetAtom(agentStreamErrorsAtom)
-  const currentQuotedSelection = useAtomValue(currentQuotedSelectionAtom)
+  const quotedSelections = useAtomValue(quotedSelectionMapAtom)
+  const currentQuotedSelection = quotedSelections.get(sessionId) ?? null
   const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
   const openPreview = useOpenPreview()
 
@@ -707,6 +709,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const pendingFilesRef = React.useRef(pendingFiles)
   // RichTextInput 命令接口 ref（右侧文件面板拖入时插入 @file 引用）
   const richTextInputRef = React.useRef<RichTextInputHandle>(null)
+  const inputContainerRef = React.useRef<HTMLDivElement>(null)
   const historyQuoteNavigationRequestIdRef = React.useRef(0)
   const [historyQuoteNavigation, setHistoryQuoteNavigation] = React.useState<AgentHistoryQuoteNavigationRequest | null>(null)
   const handleAddHistoryQuote = React.useCallback((quote: QuotedSelection): boolean => {
@@ -2646,15 +2649,17 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     return () => window.removeEventListener('proma:stop-generation', handler)
   }, [sessionId, streaming, handleStop])
 
-  // 监听快捷键系统分发的 focus-input 事件（Cmd+L）
+  // 主会话与右侧嵌入会话可同时挂载；只响应目标 session 的聚焦请求。
   React.useEffect(() => {
-    const handler = (): void => {
-      const proseMirror = document.querySelector('[data-input-mode="agent"] .ProseMirror') as HTMLElement | null
+    const handler = (event: Event): void => {
+      const targetSessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId
+      if (targetSessionId ? targetSessionId !== sessionId : store.get(currentAgentSessionIdAtom) !== sessionId) return
+      const proseMirror = inputContainerRef.current?.querySelector<HTMLElement>('.ProseMirror')
       proseMirror?.focus()
     }
     window.addEventListener('proma:focus-input', handler)
     return () => window.removeEventListener('proma:focus-input', handler)
-  }, [])
+  }, [sessionId, store])
 
   // 监听文件面板三点菜单「引用到 Agent」事件：在输入框插入 @file 引用
   React.useEffect(() => {
@@ -3072,7 +3077,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
 
         {/* 输入区域 — 交互横幅显示时隐藏，由横幅替代 */}
         {!hasBannerOverlay && (
-        <div className="px-2.5 pb-2.5 md:px-[18px] md:pb-[18px]" data-input-mode="agent">
+        <div ref={inputContainerRef} className="px-2.5 pb-2.5 md:px-[18px] md:pb-[18px]" data-input-mode="agent" data-agent-session-id={sessionId}>
           <div
             className={cn(
               'rounded-[17px] border-[0.5px] border-border bg-background/70 backdrop-blur-sm transition-all duration-200',

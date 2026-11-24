@@ -11,7 +11,7 @@ import { MAX_ATTACHMENT_SIZE } from '@proma/shared'
 import { toast } from 'sonner'
 
 /** 任务模式 */
-// Chat 模式已退役：快速任务只创建 Agent 会话。
+// 快速任务只创建 Agent 会话。
 type TaskMode = 'agent'
 
 /** 待上传附件（仅在快速任务窗口内使用） */
@@ -279,7 +279,7 @@ export function QuickTaskApp(): React.ReactElement {
         {/* 顶栏：模式切换 + 模型信息 */}
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <div className="flex items-center gap-2">
-            {/* 模式标识（Chat 已退役） */}
+            {/* 模式标识：快速任务只创建 Agent 会话 */}
             <div className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5">
               <span className="rounded-md bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm">
                 Agent

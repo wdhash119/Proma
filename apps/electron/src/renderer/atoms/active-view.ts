@@ -2,10 +2,10 @@
  * Active View Atom - 主内容区视图状态
  *
  * 控制 MainArea 显示的内容：
- * - conversations: 对话视图（Chat/Agent 模式内容）
+ * - conversations: 会话视图（Agent 会话与其右侧工作区）
  * - planning: 任务、日程与定时任务统一视图
  * - agent-skills: Agent 技能（Skills/MCP）全屏管理视图
- * - vault: Chat 模式下独立显示的 Obsidian Vault 视图
+ * - vault: 没有活跃 Agent 会话时独立显示的 Obsidian Vault 视图
  */
 
 import { atom } from 'jotai'

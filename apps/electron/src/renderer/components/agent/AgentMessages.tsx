@@ -19,6 +19,7 @@ import {
   Conversation,
   ConversationContent,
 } from '@/components/ai-elements/conversation'
+import { ConversationFollowButton, ConversationFollowProvider } from '@/components/ai-elements/conversation-follow'
 import { ScrollMinimap } from '@/components/ai-elements/scroll-minimap'
 import type { MinimapItem } from '@/components/ai-elements/scroll-minimap'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
@@ -1181,6 +1182,7 @@ export const AgentMessages = React.memo(function AgentMessages({
               若与浮窗同处根容器，总高会超出根容器，overflow-y-hidden 裁掉底部消息。 */}
           <AgentArtifactsBar sessionId={sessionId} streaming={streaming} basePaths={messageBasePaths} />
           <Conversation resize="instant" className={ready ? 'opacity-100' : 'opacity-0'}>
+            <ConversationFollowProvider>
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
           {!hasContent && !streaming ? (
@@ -1240,8 +1242,13 @@ export const AgentMessages = React.memo(function AgentMessages({
 
             </>
           )}
+          {/* 脱离跟随时给一个明确的「回到底部」入口（Agent 原先没有）。
+              放在 ConversationContent 末尾，用零高度 sticky 盒子贴在视口底边，
+              不依赖 fixed，也不会被输入框盖住。 */}
+          <ConversationFollowButton />
         </ConversationContent>
         <ScrollMinimap items={minimapItems} searchMessages={searchMessages} />
+            </ConversationFollowProvider>
           </Conversation>
           <AgentHistorySelectionLayer
             sessionId={sessionId}

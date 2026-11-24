@@ -1,28 +1,18 @@
 /**
- * 附件存储服务
+ * 附件读取与文件选择服务
  *
- * 负责文件附件的本地存储、读取和删除。
- * 存储路径：~/.proma/attachments/{conversationId}/{uuid}.ext
- *
- * - 保存：base64 解码 → 写入文件
- * - 读取：文件 → base64 编码（用于 API 发送）
- * - 删除：单个文件或整个对话附件目录
+ * 只保留通用能力：
+ * - 读取：本机文件 → base64 编码（Agent 图片回传模型、附件打开）
  * - 文件选择对话框：Electron dialog → 小文件读取为 base64，大文件返回本地路径引用
+ *
+ * Agent 附件由会话目录授权管理，这里不再保存或删除任何文件。
  */
 
-import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from 'node:fs'
-import { extname, basename, join, isAbsolute, normalize } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { readFileSync, existsSync, statSync } from 'node:fs'
+import { extname, basename, join, isAbsolute, normalize, relative } from 'node:path'
 import { dialog, BrowserWindow } from 'electron'
-import {
-  getConfigDir,
-  getConversationAttachmentsDir,
-  resolveAttachmentPath,
-} from './config-paths'
+import { getConfigDir } from './config-paths'
 import type {
-  FileAttachment,
-  AttachmentSaveInput,
-  AttachmentSaveResult,
   FileDialogResult,
   FileDialogFile,
   FileDialogLargeFile,
@@ -31,6 +21,13 @@ import type {
   FileOrFolderDialogResult,
 } from '@proma/shared'
 import { MAX_ATTACHMENT_SIZE } from '@proma/shared'
+
+/**
+ * 历史 Chat 附件相对路径的解析前缀。
+ *
+ * 仅做纯路径计算：不创建目录、不写入文件，二进制文件缺失时按「附件不存在」报错。
+ */
+const LEGACY_CHAT_ATTACHMENTS_DIRNAME = 'attachments'
 
 /** 支持的图片 MIME 类型 */
 const IMAGE_MIME_TYPES = new Set([
@@ -126,55 +123,12 @@ function getMimeType(ext: string): string {
 }
 
 /**
- * 保存附件到本地
- *
- * 将 base64 编码的文件数据解码后写入
- * ~/.proma/attachments/{conversationId}/{uuid}.ext
- *
- * @param input 保存附件参数
- * @returns 保存结果，包含附件元信息
- */
-export function saveAttachment(input: AttachmentSaveInput): AttachmentSaveResult {
-  const { conversationId, filename, mediaType, data } = input
-
-  // 防御性检查：base64 数据量不应超过 100MB 限制
-  // base64 字符串长度 × 0.75 ≈ 原始字节数
-  if (data.length * 0.75 > MAX_ATTACHMENT_SIZE) {
-    throw new Error(`文件 ${filename} 超过 100MB 大小限制，无法保存`)
-  }
-
-  // 确保目录存在
-  const dir = getConversationAttachmentsDir(conversationId)
-
-  // 生成唯一文件名
-  const ext = extname(filename) || '.bin'
-  const id = randomUUID()
-  const storedFilename = `${id}${ext}`
-  const localPath = `${conversationId}/${storedFilename}`
-  const fullPath = join(dir, storedFilename)
-
-  // base64 解码并写入
-  const buffer = Buffer.from(data, 'base64')
-  writeFileSync(fullPath, buffer)
-
-  const attachment: FileAttachment = {
-    id,
-    filename,
-    mediaType,
-    localPath,
-    size: buffer.length,
-  }
-
-  console.log(`[附件服务] 已保存附件: ${filename} → ${localPath} (${buffer.length} 字节)`)
-  return { attachment }
-}
-
-/**
  * 读取附件并返回 base64 编码
  *
  * 支持两种路径格式：
- * 1. 相对路径 {conversationId}/{uuid}.ext → 解析到 ~/.proma/attachments/
- * 2. 绝对路径（Agent 工作区附件）→ 需在 ~/.proma/ 目录下，直接读取
+ * 1. 绝对路径（Agent 会话附件）→ 需在 ~/.proma/ 目录下，直接读取
+ * 2. 历史 Chat 相对路径 {conversationId}/{uuid}.ext → 按 ~/.proma/attachments/ 只读推算，
+ *    不创建目录也不写入；文件已不存在时按缺失处理
  *
  * @param localPath 相对路径或绝对路径
  * @returns base64 编码的文件数据
@@ -191,7 +145,13 @@ export function readAttachmentAsBase64(localPath: string): string {
     }
     fullPath = normalized
   } else {
-    fullPath = resolveAttachmentPath(localPath)
+    // 历史相对路径仅做纯路径推算：不建目录、不写文件，并保证不越出历史附件根。
+    const legacyRoot = join(getConfigDir(), LEGACY_CHAT_ATTACHMENTS_DIRNAME)
+    const candidate = normalize(join(legacyRoot, localPath))
+    if (relative(legacyRoot, candidate).startsWith('..')) {
+      throw new Error(`附件路径不在安全目录内: ${localPath}`)
+    }
+    fullPath = candidate
   }
 
   if (!existsSync(fullPath)) {
@@ -200,24 +160,6 @@ export function readAttachmentAsBase64(localPath: string): string {
 
   const buffer = readFileSync(fullPath)
   return buffer.toString('base64')
-}
-
-/**
- * 删除单个附件
- *
- * @param localPath 相对路径 {conversationId}/{uuid}.ext
- */
-export function deleteAttachment(localPath: string): void {
-  const fullPath = resolveAttachmentPath(localPath)
-
-  if (existsSync(fullPath)) {
-    try {
-      unlinkSync(fullPath)
-      console.log(`[附件服务] 已删除附件: ${localPath}`)
-    } catch (error) {
-      console.warn(`[附件服务] 删除附件失败: ${localPath}`, error)
-    }
-  }
 }
 
 function readDialogFiles(

@@ -2,8 +2,7 @@
  * 人设（Persona）类型与工具
  *
  * 人设是会话级的角色/风格覆盖层：一段 Markdown 正文（body）+ 可选的静态示范对话
- * （primerTurns）。Agent 把人设正文注入系统提示词、示范轮注入请求上下文；
- * 侧栏「问答」把人设正文作为 systemMessage。
+ * （primerTurns）。Agent 把人设正文注入系统提示词、示范轮注入请求上下文。
  *
  * 设计参考 pi-app 的人设管理（master-detail 库 + 会话选择器 + Markdown 导入导出），
  * 但剥离其抗拦截机制（历史清洗、同音词替换、虚拟工具中继等），只保留干净的人设骨架。
@@ -17,18 +16,6 @@ export interface PersonaPrimerTurn {
   content: string
 }
 
-/**
- * 问答注入模式。
- *
- * - append：内置基线 + 人设段（与 Agent 侧一致，人设定义角色与风格）；新建人设默认。
- * - replace：仅人设正文作为完整 systemMessage（替换基线，正文需自带完整角色与协作约束）；
- *   从旧系统提示词迁移来的人设默认，保留原作者的整体替换意图。
- */
-export type PersonaQaInjection = 'append' | 'replace'
-
-/** 问答注入模式的缺省值（新建人设与非法值回退都用它） */
-export const DEFAULT_QA_INJECTION: PersonaQaInjection = 'append'
-
 /** 人设 */
 export interface Persona {
   /** 唯一标识（小写字母数字与 -_，≤64 字符） */
@@ -41,8 +28,6 @@ export interface Persona {
   body: string
   /** 静态示范对话（可选，≤8 轮） */
   primerTurns?: PersonaPrimerTurn[]
-  /** 问答注入模式（缺省按 append 处理；仅侧栏问答使用，不影响 Agent） */
-  qaInjection?: PersonaQaInjection
   /** 是否内置（只读，不可编辑/删除） */
   builtin?: boolean
   /** 排序权重（小在前） */
@@ -69,8 +54,6 @@ export interface PersonaCreateInput {
   description?: string
   body: string
   primerTurns?: PersonaPrimerTurn[]
-  /** 问答注入模式（缺省 append） */
-  qaInjection?: PersonaQaInjection
 }
 
 /** 更新人设输入（内置人设不可更新） */
@@ -79,8 +62,6 @@ export interface PersonaUpdateInput {
   description?: string
   body?: string
   primerTurns?: PersonaPrimerTurn[]
-  /** 问答注入模式（仅接受 'append' / 'replace'） */
-  qaInjection?: PersonaQaInjection
 }
 
 /** Markdown 导入结果 */
@@ -96,90 +77,11 @@ export interface PersonaExportResult {
   message?: string
 }
 
-/** 默认助手人设 ID：Agent 不注入该人设；侧栏问答使用 QA_BASELINE_SYSTEM_PROMPT 作为基线 */
+/** 默认助手人设 ID：Agent 不注入该人设，仅代表人设列表中的默认选项 */
 export const BUILTIN_DEFAULT_PERSONA_ID = 'builtin-default'
 
 /** 示范对话上限 */
 export const MAX_PRIMER_TURNS = 8
-
-/**
- * 规范化问答注入模式。
- *
- * 仅 'replace' 与 'append' 是合法值；缺失时按 backfillReplace 决定是否回补 'replace'
- * （存量迁移人设保留旧的整体替换语义），其余非法值一律回退 append。
- */
-export function normalizeQaInjection(
-  value: unknown,
-  options: { backfillReplace?: boolean } = {},
-): PersonaQaInjection {
-  if (value === 'replace') return 'replace'
-  if (value === 'append') return 'append'
-  if (value === undefined || value === null) {
-    return options.backfillReplace ? 'replace' : DEFAULT_QA_INJECTION
-  }
-  return DEFAULT_QA_INJECTION
-}
-
-/**
- * 侧栏问答的内置基线 systemMessage；不是人设内容，不出现在人设编辑器。
- * 沿用旧版内置系统提示词，保证问答迁移后行为不变。
- */
-export const QA_BASELINE_SYSTEM_PROMPT = `你首先是某个大模型，这我们当然知道，你现在的任务是作为 Proma AI 助手，来帮助我解决实际问题。 
-
-你需要在以下一些方面上保持关注：
-
-**1.直接解决问题，但先确保信息完整**
-
-- 优先调用记忆工具（如果有），了解我的偏好或背景信息
-- 优先给出简洁的解决方案
-- 如果方案依赖前置信息或关键决策，先向我提问
-- 如果我的需求可能忽略了重要的知识点（如安全性、性能、最佳实践），主动提醒我，但保持简洁
-
-**2.渐进式引导，降低认知压力**
-
-- 多步骤复杂教程：先给出结构和选项，让我选择后再展开
-- 多种方法：先对比各方案的适用场景和权衡，让我决定后再详细说明
-- 复杂概念：先给核心要点，我需要时再深入
-
-**3.根据上下文推测我的水平**
-
-- 从我的提问方式、使用的术语判断我的能力水平
-- 调整解释的深度：新手多解释概念，熟手直接给方案
-- 不确定时可以直接问我："你对 [概念] 熟悉吗？"
-
-**4.遇到不确定时主动询问，避免主观决断**
-
-- 技术选型、架构决策、配置参数等关键选择，先问我的场景和需求
-- 如果有多个合理方案，列出对比让我选择，而不是替我决定
-- 避免使用过多默认值，除非是行业标准
-
-**5.识别学习场景，提供适当支持**
-
-- 当我在学习新概念时，避免引入超出当前范围认知的复杂内容
-- 多鼓励，少批评
-- 可以主动提示："这个涉及到 [高级概念]，我们可以先跳过，等基础掌握后再回来"
-
-**6.保持耐心、人性化、简洁**
-
-- 保持对我的关心和真实富有人性的理解
-- 用自然的语言，不要过于正式或机械
-- 直接回答问题，不要过度铺垫
-- 承认不确定性，而不是强行给出模糊答案
-
-**7.主动识别并提示知识内核**
-
-- 当你发现有多种概念混杂或者逻辑混乱时，请主动点明并纠正
-- 当我的问题可能触及某个重要概念但我可能并没能意识到时，主动提醒，帮我完成这种关联
-- 格式："💡 你可能还需要考虑 [概念]，因为 [原因]"
-- 如果忽略这些知识点可能导致问题，明确指出风险
-- 但注意：只提示真正重要的，不要过度提醒造成信息过载
-
-**8.关于工具**
-
-- 我希望你能更主动积极地使用工具来获取信息和解决问题，而不是仅仅依赖于你内置的知识
-- 当你觉得需要使用工具时，不要犹豫，直接使用
-- 如果你不确定是否需要使用工具，可以先问我："我觉得这个问题可能需要使用 [工具] 来更好地解决，你觉得呢？"
-- 尤其需要注意的是主动使用记忆工具来获取我的偏好和背景信息，这样可以更好地定制化你的回答`
 
 const BUILTIN_ENGINEER_BODY = `你是一名严谨的工程协作者，以证据和可验证性为先。
 
@@ -212,7 +114,7 @@ export const BUILTIN_PERSONAS: readonly Persona[] = [
   {
     id: BUILTIN_DEFAULT_PERSONA_ID,
     name: 'Proma 默认助手',
-    description: '默认人设：不注入额外提示词。Agent 使用产品系统提示词，侧栏问答使用内置基线。',
+    description: '默认人设：不注入额外提示词，Agent 使用产品系统提示词。',
     body: '',
     builtin: true,
     order: 0,
@@ -277,23 +179,16 @@ export function normalizePrimerTurns(turns: PersonaPrimerTurn[] | undefined): Pe
  * 排序按 order 再按创建时间；defaultPersonaId 失效时回退默认助手。
  */
 export function normalizePersonaConfig(raw: Partial<PersonaConfig> | undefined): PersonaConfig {
-  const migratedFromSystemPrompts = raw?.migratedFromSystemPrompts === true
   const userPersonas = (raw?.personas ?? []).filter((persona) =>
     persona && typeof persona.id === 'string' && !persona.builtin && !BUILTIN_PERSONAS.some((seed) => seed.id === persona.id))
   const personas: Persona[] = [
-    // 内置种子没有注入模式字段：统一按缺省 append 补齐，保证读取后字段完整
-    ...BUILTIN_PERSONAS.map((seed) => ({ ...seed, qaInjection: DEFAULT_QA_INJECTION })),
+    ...BUILTIN_PERSONAS,
     ...userPersonas.map((persona) => ({
       ...persona,
       name: persona.name?.trim() || persona.id,
       description: persona.description ?? '',
       body: persona.body ?? '',
       primerTurns: normalizePrimerTurns(persona.primerTurns),
-      // 存量迁移人设（migrated- 前缀 + 已写入迁移标记）当时整体替换了 systemMessage，
-      // 读取时补 'replace'，不重跑迁移
-      qaInjection: normalizeQaInjection(persona.qaInjection, {
-        backfillReplace: migratedFromSystemPrompts && persona.id.startsWith('migrated-'),
-      }),
       createdAt: persona.createdAt ?? 0,
       updatedAt: persona.updatedAt ?? 0,
     })),
@@ -331,23 +226,6 @@ export function buildPersonaPromptSection(persona: Persona | undefined): string 
 以下人设定义本次会话的角色、语气与协作风格；与工具使用和安全契约冲突时，以后者为准。
 
 ${body}`
-}
-
-/**
- * 构建侧栏问答的 systemMessage。
- *
- * - 人设不存在 → undefined（调用方回到服务端默认）；
- * - 默认助手 → 问答内置基线；
- * - append（缺省）→ 基线 + 人设段，空正文回落基线；
- * - replace → 仅人设正文，空正文返回 undefined。
- */
-export function buildQaSystemMessage(persona: Persona | undefined): string | undefined {
-  if (!persona) return undefined
-  if (persona.id === BUILTIN_DEFAULT_PERSONA_ID) return QA_BASELINE_SYSTEM_PROMPT
-  const body = persona.body.trim()
-  if (persona.qaInjection === 'replace') return body || undefined
-  const section = buildPersonaPromptSection(persona)
-  return section ? `${QA_BASELINE_SYSTEM_PROMPT}\n\n${section}` : QA_BASELINE_SYSTEM_PROMPT
 }
 
 // ===== Markdown 导入导出（与 pi-app 人设文件格式兼容） =====

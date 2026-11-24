@@ -5,7 +5,7 @@
  * - 会话索引：~/.proma/agent-sessions.json（轻量元数据）
  * - 消息存储：~/.proma/agent-sessions/{id}.jsonl（JSONL 格式，逐行追加）
  *
- * 照搬 conversation-manager.ts 的模式。
+ * 沿用旧的 JSONL 追加写入模式。
  */
 
 import { readFileSync, appendFileSync, existsSync, unlinkSync, readdirSync, createReadStream, createWriteStream, statSync, type WriteStream } from 'node:fs'
@@ -47,7 +47,6 @@ import type {
   SessionCheckoutEntry,
 } from '@proma/shared'
 import { migratePermissionMode, mergeSkillActivations, findBestSearchMatch, insertTopSearchResult } from '@proma/shared'
-import { getConversationMessages } from './conversation-manager'
 // 旧格式 → SDKMessage 的转换逻辑下沉到 @proma/session-core 作为唯一真源，避免主进程与渲染层各存一份。
 import { convertLegacyMessage } from '@proma/session-core'
 import { assertEnabledModelForChannel } from './agent-model-selection'
@@ -514,33 +513,6 @@ export function getAgentSessionMessages(id: string): AgentMessage[] {
   }
 }
 
-/**
- * 追加一条消息到会话的 JSONL 文件
- */
-function appendAgentMessage(id: string, message: AgentMessage): void {
-  // Late output from a stopped/deleted runtime must never recreate its JSONL file.
-  if (isAgentSessionDeleting(id) || !getAgentSessionMeta(id)) return
-
-  const filePath = getAgentSessionMessagesPath(id)
-
-  try {
-    const line = JSON.stringify(message) + '\n'
-    appendFileSync(filePath, line, 'utf-8')
-
-    // 追加消息时更新 updatedAt，若已归档则自动恢复活跃
-    const index = readIndex()
-    const idx = index.sessions.findIndex((s) => s.id === id)
-    if (idx !== -1) {
-      const session = index.sessions[idx]!
-      session.updatedAt = Date.now()
-      if (session.archived) session.archived = false
-      writeIndex(index)
-    }
-  } catch (error) {
-    console.error(`[Agent 会话] 追加消息失败 (${id}):`, error)
-    throw new Error('追加 Agent 消息失败')
-  }
-}
 
 /** 单条 SDKMessage 序列化后最大长度（UTF-16 code units，超出则截断内容） */
 const MAX_SDK_MESSAGE_LENGTH = 256 * 1024 // ~256K chars
@@ -882,44 +854,6 @@ export function moveSessionToWorkspace(sessionId: string, targetWorkspaceId: str
 
   console.log(`[Agent 会话] 已迁移会话及子会话到工作区: ${updatedRoot.title}（${movedCount} 个）→ ${targetWs.name}`)
   return updatedRoot
-}
-
-/**
- * 迁移 Chat 对话记录到 Agent 会话
- *
- * 读取 Chat 对话的消息，转换为 AgentMessage 格式，
- * 追加到目标 Agent 会话的 JSONL 文件中。
- *
- * 仅迁移 user 和 assistant 角色的消息文本内容，
- * 工具活动、推理、附件等 Chat 特有字段不迁移。
- */
-export function migrateChatToAgentSession(conversationId: string, agentSessionId: string): void {
-  const chatMessages = getConversationMessages(conversationId)
-
-  if (chatMessages.length === 0) {
-    console.log(`[Agent 会话] Chat 对话无消息，跳过迁移 (${conversationId})`)
-    return
-  }
-
-  let count = 0
-  for (const cm of chatMessages) {
-    // 仅迁移 user 和 assistant 消息
-    if (cm.role !== 'user' && cm.role !== 'assistant') continue
-    if (!cm.content.trim()) continue
-
-    const agentMsg: AgentMessage = {
-      id: randomUUID(),
-      role: cm.role,
-      content: cm.content,
-      createdAt: cm.createdAt,
-      model: cm.role === 'assistant' ? cm.model : undefined,
-    }
-
-    appendAgentMessage(agentSessionId, agentMsg)
-    count++
-  }
-
-  console.log(`[Agent 会话] 已迁移 ${count} 条消息到 Agent 会话 (${conversationId} → ${agentSessionId})`)
 }
 
 /**

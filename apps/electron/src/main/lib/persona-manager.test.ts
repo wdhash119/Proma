@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from '
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BUILTIN_DEFAULT_PERSONA_ID, BUILTIN_PERSONAS, type PersonaUpdateInput } from '@proma/shared'
+import { BUILTIN_DEFAULT_PERSONA_ID, BUILTIN_PERSONAS } from '@proma/shared'
 
 // 人设服务只依赖 electron dialog 与配置路径；重定向到临时目录，避免触碰真实 ~/.proma。
 let openDialogResult: { canceled: boolean; filePaths: string[] } = { canceled: true, filePaths: [] }
@@ -70,40 +70,6 @@ describe('人设配置与 CRUD', () => {
     expect(config.defaultPersonaId).toBe(BUILTIN_DEFAULT_PERSONA_ID)
   })
 
-  test('Given 新建人设 When 读取存储 Then 缺省注入模式为 append', () => {
-    const created = manager.createPersona({ name: '缺省注入', body: '正文' })
-    expect(created.qaInjection).toBe('append')
-    const persisted = manager.getPersonaConfig().personas.find((p) => p.id === created.id)
-    expect(persisted?.qaInjection).toBe('append')
-  })
-
-  test('Given 新建人设显式声明 replace When 创建 Then 保留 replace', () => {
-    const created = manager.createPersona({ name: '整体替换', body: '正文', qaInjection: 'replace' })
-    expect(created.qaInjection).toBe('replace')
-  })
-
-  test('Given 自定义人设 When 更新注入模式 Then 白名单字段生效', () => {
-    const created = manager.createPersona({ name: '注入模式', body: '正文' })
-    expect(created.qaInjection).toBe('append')
-
-    const replaced = manager.updatePersona(created.id, { qaInjection: 'replace' })
-    expect(replaced.qaInjection).toBe('replace')
-    expect(manager.getPersonaConfig().personas.find((p) => p.id === created.id)?.qaInjection).toBe('replace')
-
-    const appended = manager.updatePersona(created.id, { qaInjection: 'append' })
-    expect(appended.qaInjection).toBe('append')
-
-    // 非法值（绕过类型检查的旧调用）回退 append，不写入脏数据
-    const illegal = manager.updatePersona(created.id, { qaInjection: 'bogus' as unknown as PersonaUpdateInput['qaInjection'] })
-    expect(illegal.qaInjection).toBe('append')
-  })
-
-  test('Given 仅改正文 When 更新 Then 注入模式保持不变', () => {
-    const created = manager.createPersona({ name: '保持', body: '正文', qaInjection: 'replace' })
-    const updated = manager.updatePersona(created.id, { body: '新正文' })
-    expect(updated.qaInjection).toBe('replace')
-  })
-
   test('Given 内置人设 When 更新或删除 Then 拒绝（只读）', () => {
     expect(() => manager.updatePersona(BUILTIN_DEFAULT_PERSONA_ID, { body: 'x' })).toThrow('内置人设不可编辑')
     expect(() => manager.deletePersona('builtin-engineer')).toThrow('内置人设不可删除')
@@ -132,15 +98,13 @@ describe('旧系统提示词一次性迁移', () => {
     const migrated = config.personas.find((p) => p.id === 'migrated-p1')
     expect(migrated?.name).toBe('我的提示词')
     expect(migrated?.body).toBe('自定义正文')
-    // 旧版自定义提示词整体替换 systemMessage：迁移产物默认 replace
-    expect(migrated?.qaInjection).toBe('replace')
     expect(config.defaultPersonaId).toBe('migrated-p1')
     // 旧内置不重复迁移，内置种子来自源码
     expect(config.personas.filter((p) => p.id === BUILTIN_DEFAULT_PERSONA_ID).length).toBe(1)
   })
 
-  test('Given 迁移已写入但人设缺 qaInjection（存量文件） When 读取 Then 回补 replace 而不重跑迁移', () => {
-    // 模拟升级前已迁移的配置文件：有 migrated- 人设但没有 qaInjection 字段
+  test('Given 迁移已写入但人设缺可选字段（存量文件） When 读取 Then 正常读取且不重跑迁移', () => {
+    // 模拟升级前已迁移的配置文件：有 migrated- 人设但没有后续新增的可选字段
     writeFileSync(personasPath, JSON.stringify({
       personas: [{
         id: 'migrated-old',
@@ -161,7 +125,7 @@ describe('旧系统提示词一次性迁移', () => {
 
     const config = manager.getPersonaConfig()
     const backfilled = config.personas.find((p) => p.id === 'migrated-old')
-    expect(backfilled?.qaInjection).toBe('replace')
+    expect(backfilled?.body).toBe('旧正文')
     expect(config.personas.some((p) => p.id === 'migrated-p2')).toBe(false)
     expect(config.defaultPersonaId).toBe('migrated-old')
   })

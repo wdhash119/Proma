@@ -17,8 +17,6 @@ import {
   getAgentSessionsDir,
   getSdkConfigDir,
   getAgentWorkspacesDir,
-  getAttachmentsDir,
-  getConversationsDir,
 } from './config-paths'
 import { listAgentSessions } from './agent-session-manager'
 import { listAgentWorkspaces } from './agent-workspace-manager'
@@ -29,8 +27,6 @@ type StorageCategoryKey =
   | 'agent-sessions'
   | 'sdk-config'
   | 'workspaces'
-  | 'conversations'
-  | 'attachments'
   | 'temp-files'
 
 interface StorageCategory {
@@ -371,32 +367,6 @@ async function calcWorkspacesCategory(): Promise<StorageCategory> {
   }
 }
 
-async function calcConversationsCategory(): Promise<StorageCategory> {
-  const dir = getConversationsDir()
-  const { bytes, count } = await getDirSize(dir)
-  return {
-    label: '对话记录',
-    key: 'conversations',
-    bytes, count,
-    hasOrphans: false,
-    orphanBytes: 0, orphanCount: 0,
-    orphanItems: [], orphanItemsTruncated: false,
-  }
-}
-
-async function calcAttachmentsCategory(): Promise<StorageCategory> {
-  const dir = getAttachmentsDir()
-  const { bytes, count } = await getDirSize(dir)
-  return {
-    label: '附件文件',
-    key: 'attachments',
-    bytes, count,
-    hasOrphans: false,
-    orphanBytes: 0, orphanCount: 0,
-    orphanItems: [], orphanItemsTruncated: false,
-  }
-}
-
 async function calcTempFilesCategory(): Promise<StorageCategory> {
   const previewDir = join(tmpdir(), 'proma-preview')
   const installerDir = join(app.getPath('temp'), 'proma-installers')
@@ -420,8 +390,6 @@ export async function calculateStorageStats(): Promise<StorageStats> {
     calcAgentSessionsCategory(),
     calcSdkConfigCategory(),
     calcWorkspacesCategory(),
-    calcConversationsCategory(),
-    calcAttachmentsCategory(),
     calcTempFilesCategory(),
   ])
   return {

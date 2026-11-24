@@ -4,10 +4,8 @@
  * 负责人设库的 CRUD、默认人设、Markdown 导入导出，以及从旧系统提示词配置的一次性迁移。
  * 存储在 ~/.proma/personas.json（原子写）；内置人设只读，每次读取时与源码种子合并。
  *
- * 人设供两条链路消费：
- * - Agent：编排层按会话 personaId（回退默认）解析人设，正文注入系统提示词、示范轮注入请求上下文。
- * - 侧栏问答：渲染层按人设 qaInjection（append 叠加基线 / replace 整体替换）构建 systemMessage、
- *   示范轮作为历史前缀随发送参数传入。
+ * 人设供 Agent 链路消费：编排层按会话 personaId（回退默认）解析人设，
+ * 正文注入系统提示词、示范轮注入请求上下文。
  */
 
 import { randomUUID } from 'node:crypto'
@@ -18,10 +16,8 @@ import { getPersonasPath, getSystemPromptsPath } from './config-paths'
 import { writeJsonFileAtomic } from './safe-file'
 import {
   BUILTIN_DEFAULT_PERSONA_ID,
-  DEFAULT_QA_INJECTION,
   normalizePersonaConfig,
   normalizePrimerTurns,
-  normalizeQaInjection,
   parsePersonaMarkdown,
   sanitizePersonaId,
   serializePersonaMarkdown,
@@ -80,8 +76,8 @@ function writeConfig(config: PersonaConfig): void {
  * 一次性迁移旧系统提示词（~/.proma/system-prompts.json）。
  *
  * 自定义提示词保留为用户人设（内容不丢失）；默认提示词映射为默认人设。
- * 旧版自定义提示词整体替换了问答 systemMessage，因此迁移人设的注入模式写 'replace'，
- * 保留原作者意图。旧文件保留不动，迁移标记写入新配置，避免重复导入用户已删除的条目。
+ * 旧版自定义提示词整体替换了当时的 systemMessage，迁移后正文原样保留。
+ * 旧文件保留不动，迁移标记写入新配置，避免重复导入用户已删除的条目。
  */
 function migrateFromSystemPrompts(config: PersonaConfig): PersonaConfig {
   const legacyPath = getSystemPromptsPath()
@@ -114,8 +110,6 @@ function migrateFromSystemPrompts(config: PersonaConfig): PersonaConfig {
       name: prompt.name?.trim() || '迁移的提示词',
       description: '从旧版系统提示词迁移',
       body: prompt.content ?? '',
-      // 旧版自定义提示词直接作为 systemMessage 使用，迁移后保持整体替换语义
-      qaInjection: 'replace',
       createdAt: prompt.createdAt || Date.now(),
       updatedAt: prompt.updatedAt || Date.now(),
     })
@@ -157,10 +151,6 @@ export function createPersona(input: PersonaCreateInput): Persona {
     description: input.description?.trim() ?? '',
     body: input.body ?? '',
     primerTurns: normalizePrimerTurns(input.primerTurns),
-    // 新建人设缺省叠加在内置基线之上（与 Agent 侧一致）
-    qaInjection: input.qaInjection === undefined
-      ? DEFAULT_QA_INJECTION
-      : normalizeQaInjection(input.qaInjection),
     createdAt: now,
     updatedAt: now,
   }
@@ -181,8 +171,6 @@ export function updatePersona(id: string, input: PersonaUpdateInput): Persona {
   if (input.description !== undefined) persona.description = input.description.trim()
   if (input.body !== undefined) persona.body = input.body
   if (input.primerTurns !== undefined) persona.primerTurns = normalizePrimerTurns(input.primerTurns)
-  // 白名单：仅接受 'append' / 'replace'，非法值回退 append（与读取时的规范化一致）
-  if (input.qaInjection !== undefined) persona.qaInjection = normalizeQaInjection(input.qaInjection)
   persona.updatedAt = Date.now()
 
   writeConfig(config)

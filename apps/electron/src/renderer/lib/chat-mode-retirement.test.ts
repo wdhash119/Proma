@@ -172,3 +172,191 @@ describe('人设管理取代系统提示词管理', () => {
     expect(source).toContain('updateAgentSessionPersona')
   })
 })
+
+// ===== 后端 / 共享层防回流 =====
+
+/** 收集任意目录下的 TS 源码（跳过测试文件，避免断言文本命中自己）。 */
+function collectTypeScriptSources(directory: string): Array<{ path: string; source: string }> {
+  const collected: Array<{ path: string; source: string }> = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      collected.push(...collectTypeScriptSources(fullPath))
+      continue
+    }
+    if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue
+    if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) continue
+    collected.push({ path: fullPath, source: readFileSync(fullPath, 'utf8') })
+  }
+  return collected
+}
+
+const appRoot = join(rendererRoot, '../..')
+const repoRoot = join(appRoot, '../..')
+const backendSources = [
+  ...collectTypeScriptSources(join(appRoot, 'src/main')),
+  ...collectTypeScriptSources(join(appRoot, 'src/preload')),
+]
+const sharedSources = [
+  ...collectTypeScriptSources(join(repoRoot, 'packages/shared/src')),
+  ...collectTypeScriptSources(join(repoRoot, 'packages/core/src')),
+]
+
+function relativeToRepo(path: string): string {
+  return path.slice(repoRoot.length + 1)
+}
+
+/** 按整词匹配源码，避免 WECHAT_IPC_CHANNELS 之类的前缀误命中。 */
+function sourcesContaining(sources: Array<{ path: string; source: string }>, pattern: string): string[] {
+  const escaped = pattern.replace(/[^A-Za-z0-9_]/g, (char) => `\\${char}`)
+  const matcher = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`)
+  return sources.filter((file) => matcher.test(file.source)).map((file) => relativeToRepo(file.path))
+}
+
+describe('Chat 后端专属代码已全部删除', () => {
+  test('Given Chat 主进程服务与工具运行时 When 检查 Then 文件均已不存在', () => {
+    for (const removed of [
+      'apps/electron/src/main/lib/chat-service.ts',
+      'apps/electron/src/main/lib/conversation-manager.ts',
+      'apps/electron/src/main/lib/document-parser.ts',
+      'apps/electron/src/main/lib/document-parser.test.ts',
+      'apps/electron/src/main/lib/chat-tool-config.ts',
+      'apps/electron/src/main/lib/chat-tool-registry.ts',
+      'apps/electron/src/main/lib/chat-tool-executor.ts',
+      'apps/electron/src/main/lib/chat-tools-watcher.ts',
+      'apps/electron/src/main/lib/chat-tools/agent-recommend-tool.ts',
+      'apps/electron/src/main/lib/chat-tools/http-tool-executor.ts',
+      'packages/shared/src/types/chat.ts',
+      'packages/shared/src/types/chat-tool.ts',
+    ]) {
+      expect(existsSync(join(repoRoot, removed)), removed).toBe(false)
+    }
+  })
+
+  test('Given 主进程与 preload When 检查 Then 不再引用 Chat 服务、通道与工具 IPC', () => {
+    expect(sourcesContaining(backendSources, 'CHAT_IPC_CHANNELS')).toEqual([])
+    expect(sourcesContaining(backendSources, 'CHAT_TOOL_IPC_CHANNELS')).toEqual([])
+    expect(sourcesContaining(backendSources, 'MIGRATE_CHAT_TO_AGENT')).toEqual([])
+    expect(sourcesContaining(backendSources, 'migrateChatToAgentSession')).toEqual([])
+    expect(sourcesContaining(backendSources, 'chat-service')).toEqual([])
+    expect(sourcesContaining(backendSources, 'conversation-manager')).toEqual([])
+    expect(sourcesContaining(backendSources, 'chat-tool-registry')).toEqual([])
+    expect(sourcesContaining(backendSources, 'chat-tool-config')).toEqual([])
+    expect(sourcesContaining(backendSources, 'chat-tool-executor')).toEqual([])
+    expect(sourcesContaining(backendSources, 'chat-tools-watcher')).toEqual([])
+    expect(sourcesContaining(backendSources, 'document-parser')).toEqual([])
+    expect(sourcesContaining(backendSources, 'stopAllGenerations')).toEqual([])
+  })
+
+  test('Given 通用文件 IPC When 检查 Then 通道中性且四层同步', () => {
+    const sharedRuntime = readFileSync(join(repoRoot, 'packages/shared/src/types/runtime.ts'), 'utf8')
+    for (const channel of [
+      "READ_ATTACHMENT: 'file:read-attachment'",
+      "SAVE_IMAGE_AS: 'file:save-image-as'",
+      "SAVE_RESOURCE_FILE_AS: 'file:save-resource-file-as'",
+      "OPEN_FILE_DIALOG: 'file:open-dialog'",
+    ]) {
+      expect(sharedRuntime).toContain(channel)
+    }
+    expect(sharedRuntime).not.toContain("'chat:")
+
+    const mainIpc = readFileSync(join(appRoot, 'src/main/ipc.ts'), 'utf8')
+    const preload = readFileSync(join(appRoot, 'src/preload/index.ts'), 'utf8')
+    for (const name of ['IPC_CHANNELS.READ_ATTACHMENT', 'IPC_CHANNELS.SAVE_IMAGE_AS', 'IPC_CHANNELS.SAVE_RESOURCE_FILE_AS', 'IPC_CHANNELS.OPEN_FILE_DIALOG']) {
+      expect(mainIpc).toContain(name)
+      expect(preload).toContain(name)
+    }
+    // 通用文件能力必须保留：读取附件、另存图片/资源、打开文件对话框
+    expect(preload).toContain('readAttachment:')
+    expect(preload).toContain('saveImageAs:')
+    expect(preload).toContain('saveResourceFileAs:')
+    expect(preload).toContain('openFileDialog:')
+  })
+
+  test('Given Agent 会话与设置 When 检查 Then 自动归档保留而 Chat 归档已移除', () => {
+    const mainIpc = readFileSync(join(appRoot, 'src/main/ipc.ts'), 'utf8')
+
+    expect(mainIpc).not.toContain('autoArchiveConversations')
+    expect(mainIpc).toContain('autoArchiveAgentSessions')
+    expect(mainIpc).not.toContain('archivedChats')
+  })
+
+  test('Given 附件与存储服务 When 检查 Then Chat 保存/删除附件与 chat-tools 路径已移除', () => {
+    const attachmentService = readFileSync(join(appRoot, 'src/main/lib/attachment-service.ts'), 'utf8')
+    const configPaths = readFileSync(join(appRoot, 'src/main/lib/config-paths.ts'), 'utf8')
+    const storageService = readFileSync(join(appRoot, 'src/main/lib/storage-service.ts'), 'utf8')
+
+    expect(attachmentService).not.toContain('saveAttachment')
+    expect(attachmentService).not.toContain('deleteAttachment')
+    expect(attachmentService).toContain('readAttachmentAsBase64')
+    expect(attachmentService).toContain('openFileDialog')
+
+    for (const getter of ['getConversationsDir', 'getConversationAttachmentsDir', 'getAttachmentsDir', 'resolveAttachmentPath', 'getChatToolsConfigPath']) {
+      expect(configPaths).not.toContain(getter)
+    }
+
+    expect(storageService).not.toContain("'conversations'")
+    expect(storageService).not.toContain("'attachments'")
+  })
+})
+
+describe('共享层类型中性化', () => {
+  test('Given 共享类型 When 检查 Then Chat 历史类型与问答注入契约已删除', () => {
+    expect(sourcesContaining(sharedSources, 'CHAT_IPC_CHANNELS')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'CHAT_TOOL_IPC_CHANNELS')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'MIGRATE_CHAT_TO_AGENT')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'qaInjection')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'QA_BASELINE_SYSTEM_PROMPT')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'buildQaSystemMessage')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'PersonaQaInjection')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'ChatMessage')).toEqual([])
+    expect(sourcesContaining(sharedSources, 'ChatToolActivity')).toEqual([])
+  })
+
+  test('Given 供应商协议 When 检查 Then 使用中性 ProviderMessage 与附件类型', () => {
+    const coreTypes = readFileSync(join(repoRoot, 'packages/core/src/providers/types.ts'), 'utf8')
+    const providerTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/provider.ts'), 'utf8')
+
+    expect(coreTypes).toContain('ProviderMessage')
+    expect(coreTypes).toContain("from '@proma/shared'")
+    expect(providerTypes).toContain('export interface ProviderMessage')
+    expect(providerTypes).not.toContain('toolActivities')
+  })
+
+  test('Given 人设契约 When 检查 Then Agent 人设构建与示范轮保留', () => {
+    const personaTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/persona.ts'), 'utf8')
+
+    expect(personaTypes).toContain('export function buildPersonaPromptSection')
+    expect(personaTypes).toContain('primerTurns')
+    expect(personaTypes).toContain('BUILTIN_DEFAULT_PERSONA_ID')
+  })
+})
+
+describe('Chat 退役不误伤正常命名', () => {
+  test('Given 飞书与企业 IM When 检查 Then Chat 消息类型与 /chat/completions 协议保留', () => {
+    const feishuTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/feishu.ts'), 'utf8')
+    const openaiUrlUtils = readFileSync(join(repoRoot, 'packages/core/src/providers/url-utils.ts'), 'utf8')
+
+    expect(feishuTypes).toContain('FeishuChatMessage')
+    // OpenAI 兼容协议路径属于供应商协议，不随 Chat 退役删除。
+    expect(openaiUrlUtils).toContain('/chat/completions')
+  })
+
+  test('Given Agent 会话命名与附件类型 When 检查 Then 保留 Agent 语义与中性附件契约', () => {
+    const attachmentTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/attachment.ts'), 'utf8')
+    const providerTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/provider.ts'), 'utf8')
+    const sessionSearchTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/session-search.ts'), 'utf8')
+    const channelTypes = readFileSync(join(repoRoot, 'packages/shared/src/types/channel.ts'), 'utf8')
+
+    expect(attachmentTypes).toContain('export const MAX_ATTACHMENT_SIZE')
+    expect(attachmentTypes).toContain('export interface FileAttachment')
+    expect(attachmentTypes).toContain('export interface FileOrFolderDialogResult')
+    expect(providerTypes).toContain('export interface ProviderMessage')
+    expect(sessionSearchTypes).toContain('export interface SessionMessageSearchResult')
+    expect(sessionSearchTypes).toContain('export interface SessionMessageSearchResponse')
+    expect(channelTypes).toContain('export interface ModelOption')
+
+    // Agent 会话的 conversation 命名属于资产模型，不得被误判为 Chat 残留。
+    expect(sourcesContaining(backendSources, 'AgentSession')).not.toEqual([])
+  })
+})

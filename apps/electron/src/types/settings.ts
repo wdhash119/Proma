@@ -621,7 +621,7 @@ export const VOICE_DICTATION_IPC_CHANNELS = {
 export interface QuickTaskSubmitInput {
   /** 任务文本内容 */
   text: string
-  /** 目标模式（Chat 主入口已退役，固定 agent） */
+  /** 目标模式（仅 Agent 一种入口） */
   mode: 'agent'
   /** 附件列表（base64 编码或本地路径引用） */
   files?: QuickTaskFile[]
@@ -653,7 +653,7 @@ export interface TrayOpenAgentSessionData {
 
 /** 菜单栏创建会话事件 */
 export interface TrayCreateSessionData {
-  /** 目标模式（Chat 主入口已退役，固定 agent） */
+  /** 目标模式（仅 Agent 一种入口） */
   mode: 'agent'
 }
 

@@ -43,7 +43,7 @@ export type ProviderType =
   /**
    * OpenAI Chat Completions 的自定义请求地址。
    *
-   * Chat 会原样请求 `baseUrl`；`openai` 则将其视为协议根地址并自动补
+   * 该协议会原样请求 `baseUrl`；`openai` 则将其视为协议根地址并自动补
    * `/chat/completions`。这保留了接入自定义网关的能力。
    */
   | 'custom'
@@ -774,4 +774,24 @@ export interface QianwenOAuthLoginResult {
   accountId?: string
   /** 失败或取消时的用户可读原因 */
   message?: string
+}
+
+// ===== 模型选项 =====
+
+/**
+ * 模型选项（扁平化的渠道 + 模型组合）
+ *
+ * 用于渲染进程的模型选择器下拉列表与 Agent 输入栏模型切换。
+ */
+export interface ModelOption {
+  /** 渠道 ID */
+  channelId: string
+  /** 渠道名称 */
+  channelName: string
+  /** 模型 ID */
+  modelId: string
+  /** 模型显示名称 */
+  modelName: string
+  /** AI 供应商类型 */
+  provider: ProviderType
 }

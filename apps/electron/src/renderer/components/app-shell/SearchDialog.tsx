@@ -282,7 +282,7 @@ export function SearchDialog(): React.ReactElement {
     setSelectedIndex(0)
 
     const matchesTitle = (title: string): boolean => findBestSearchMatch(title, q) !== null
-    // 主搜索只覆盖 Agent 会话；历史 Chat 数据保留在本地，不在主搜索范围内。
+    // 主搜索只覆盖 Agent 会话；历史 Chat 已退役，不再有独立的对话索引可检索。
     const titles: TitleResult[] = agentSessions
       .filter((s) => matchesTitle(s.title))
       .map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt }))

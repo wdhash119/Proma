@@ -2,8 +2,8 @@
  * OpenAI Responses API 适配器。
  *
  * 用于支持 `/v1/responses` 协议的渠道：
- * - Chat 模式直接按 Responses API 构建 input / tools / SSE 解析
- * - Pi-Agent 模式通过 pi-model-registry 注册为 `openai-responses` 协议
+ * - Pi Agent 运行时通过 pi-model-registry 注册为 `openai-responses` 协议
+ * - 标题生成、视觉中继等直连调用也按 Responses API 构建 input / tools / SSE 解析
  */
 
 import type { ProviderType } from '@proma/shared'
@@ -218,7 +218,7 @@ function collectOutputText(items: ResponsesStreamItem[] | undefined): string | n
 function mapResponsesStatusToStopReason(status: string | undefined): string | undefined {
   switch (status) {
     // completed 不主动设置 stopReason：如果本轮产生了工具调用，sse-reader 会根据
-    // toolCalls 自动推断为 tool_use；没有工具调用时 Chat 流程也无需依赖 end_turn。
+    // toolCalls 自动推断为 tool_use；没有工具调用的普通回复也无需依赖 end_turn。
     case 'completed':
       return undefined
     case 'incomplete':

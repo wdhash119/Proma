@@ -1,7 +1,7 @@
 /**
  * ChatMessages - 消息区域
  *
- * 使用 Conversation / ConversationContent / ConversationScrollButton 原语
+ * 使用 Conversation / ConversationContent 原语 + 应用层跟随状态（conversation-follow）
  * 替代手动 scroll。支持上下文分隔线和并排模式切换。
  *
  * 功能：
@@ -31,8 +31,8 @@ import {
 import {
   Conversation,
   ConversationContent,
-  ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
+import { ConversationFollowButton, ConversationFollowProvider } from '@/components/ai-elements/conversation-follow'
 import { ScrollMinimap } from '@/components/ai-elements/scroll-minimap'
 import type { MinimapItem } from '@/components/ai-elements/scroll-minimap'
 import type { SessionMessageSearch } from '@/lib/session-message-search'
@@ -401,6 +401,7 @@ export function ChatMessages({
 
   return (
     <Conversation resize={ready && !transitioning ? 'smooth' : 'instant'} className={ready ? (skipFadeIn ? 'opacity-100' : 'opacity-100 transition-opacity duration-200') : 'opacity-0'}>
+      <ConversationFollowProvider>
       <ScrollPositionManager id={conversationId} ready={ready} />
       {/* 滚动到顶部时自动加载更多历史 */}
       <ScrollTopLoader
@@ -482,13 +483,16 @@ export function ChatMessages({
             )}
           </>
         )}
+        {/* 回到底部入口用跟随态判定，而不是库的 isAtBottom：
+            近底 70px 带内一旦停止跟随，也必须仍有入口。 */}
+        <ConversationFollowButton />
       </ConversationContent>
       <ScrollMinimap
         items={minimapItems}
         searchMessages={searchMessages}
         onRevealSearchResult={revealSearchResult}
       />
-      <ConversationScrollButton />
+      </ConversationFollowProvider>
     </Conversation>
   )
 }

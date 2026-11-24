@@ -19,9 +19,12 @@ import {
   Conversation,
   ConversationContent,
 } from '@/components/ai-elements/conversation'
+import { ConversationFollowButton, ConversationFollowProvider } from '@/components/ai-elements/conversation-follow'
 import { ScrollMinimap } from '@/components/ai-elements/scroll-minimap'
 import type { MinimapItem } from '@/components/ai-elements/scroll-minimap'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
+import { useAgentRunStats } from '@/hooks/use-agent-run-stats'
+import type { RunStatMessage } from '@/lib/agent-run-stats'
 import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { resolveModelDisplayName } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
@@ -565,29 +568,33 @@ export function DurationBadge({ durationMs, usage }: { durationMs: number; usage
   )
 }
 
-/** Agent 运行指示器 — Shimmer Spinner + 无括号的运行时间 */
-function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.ReactElement {
-  const [elapsed, setElapsed] = React.useState(0)
-
-  React.useEffect(() => {
-    const start = startedAt ?? Date.now()
-    const update = (): void => setElapsed((Date.now() - start) / 1000)
-    update()
-    const timer = setInterval(update, 100)
-    return () => clearInterval(timer)
-  }, [startedAt])
-
-  const formatTime = (seconds: number): string => {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return `${m}m ${s.toFixed(1)}s`
-  }
+/**
+ * Agent 运行指示器 — Spinner + 当前事项、耗时、缓存命中率、输出速率。
+ *
+ * 未知项直接省略而不是显示 0%：OpenAI 兼容渠道缺 prompt_tokens_details 时缓存字段是 0，
+ * 与「真的没命中」数值上无法区分；速率也要等窗口跨满 1s 才有意义。
+ */
+function AgentRunningIndicator({
+  startedAt,
+  messages,
+}: {
+  startedAt?: number
+  messages: RunStatMessage[]
+}): React.ReactElement {
+  const stats = useAgentRunStats(messages, startedAt)
+  const label = [
+    `运行中${stats.activity ? ` [${stats.activity}]` : ''}`,
+    stats.elapsedText,
+    stats.cacheHitRateText ? `缓存命中率 ${stats.cacheHitRateText}` : null,
+    stats.tokenRateText ? `输出 ${stats.tokenRateText}` : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="flex items-center gap-2 min-h-[28px]">
       <Spinner size="sm" className="text-primary/75" />
-      <span className="text-[13px] font-light text-muted-foreground/75 tabular-nums">运行中 {formatTime(elapsed)}</span>
+      <span className="text-[13px] font-light text-muted-foreground/75 tabular-nums">{label}</span>
     </div>
   )
 }
@@ -1181,6 +1188,7 @@ export const AgentMessages = React.memo(function AgentMessages({
               若与浮窗同处根容器，总高会超出根容器，overflow-y-hidden 裁掉底部消息。 */}
           <AgentArtifactsBar sessionId={sessionId} streaming={streaming} basePaths={messageBasePaths} />
           <Conversation resize="instant" className={ready ? 'opacity-100' : 'opacity-0'}>
+            <ConversationFollowProvider>
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
           {!hasContent && !streaming ? (
@@ -1219,7 +1227,7 @@ export const AgentMessages = React.memo(function AgentMessages({
               {hasLiveAssistantContent && !suppressAgentRunning && (
                 <div className="pl-[56px] min-h-[28px]">
                   {retrying && <RetryingNotice retrying={retrying} />}
-                  {streaming && <AgentRunningIndicator startedAt={startedAt} />}
+                  {streaming && <AgentRunningIndicator startedAt={startedAt} messages={liveMessages ?? []} />}
                 </div>
               )}
 
@@ -1233,15 +1241,20 @@ export const AgentMessages = React.memo(function AgentMessages({
                   />
                   <MessageContent>
                     {retrying && <RetryingNotice retrying={retrying} />}
-                    {streaming && <AgentRunningIndicator startedAt={startedAt} />}
+                    {streaming && <AgentRunningIndicator startedAt={startedAt} messages={liveMessages ?? []} />}
                   </MessageContent>
                 </Message>
               )}
 
             </>
           )}
+          {/* 脱离跟随时给一个明确的「回到底部」入口（Agent 原先没有）。
+              放在 ConversationContent 末尾，用零高度 sticky 盒子贴在视口底边，
+              不依赖 fixed，也不会被输入框盖住。 */}
+          <ConversationFollowButton />
         </ConversationContent>
         <ScrollMinimap items={minimapItems} searchMessages={searchMessages} />
+            </ConversationFollowProvider>
           </Conversation>
           <AgentHistorySelectionLayer
             sessionId={sessionId}

@@ -9,7 +9,7 @@
  */
 import {
   getSDKCompactStatus,
-  isPersistableSDKSystemMessage,
+  isStandaloneSDKSystemMessage,
   type SDKMessage,
   type SDKAssistantMessage,
   type SDKUserMessage,
@@ -96,7 +96,7 @@ export type MessageGroup =
  * 规则：
  * 1. user（真正用户输入）→ 单独的 user group
  * 2. assistant + user(tool_result) + assistant... → 合并为一个 assistant-turn
- * 3. system（压缩状态 / permission_denied）→ 独立渲染，其他归入当前 turn
+ * 3. system（压缩状态 / permission_denied）→ 独立渲染；其他（含 spine_cut 切割事件）归入当前 turn
  * 4. 其他类型（result, tool_progress 等）→ 归入当前 assistant-turn；被 system 状态分隔的 terminal result 回挂到刚关闭的 turn
  * 5. 后处理：合并相邻同模型的 assistant-turn（处理子代理切换模型导致的碎片化）
  */
@@ -164,8 +164,9 @@ export function groupIntoTurns(messages: SDKMessage[], sessionModelId?: string):
     } else if (msg.type === 'system') {
       const sysMsg = msg as SDKSystemMessage
       // 仅需要独立渲染的 system 消息才中断 turn（压缩状态 / permission_denied）
-      // 其他 system 消息（如 init、task_started、task_progress）归入当前 turn，不中断分组
-      if (isPersistableSDKSystemMessage(sysMsg)) {
+      // 其他 system 消息（如 init、task_started、task_progress、spine_cut）归入当前 turn，不中断分组。
+      // spine_cut 是 turn_end 的执行过程事件，需要留在 turn 内作为过程行渲染。
+      if (isStandaloneSDKSystemMessage(sysMsg)) {
         flushTurn()
         const previousGroup = groups.at(-1)
         const compactStatus = getSDKCompactStatus(sysMsg)
@@ -198,6 +199,10 @@ export function groupIntoTurns(messages: SDKMessage[], sessionModelId?: string):
         }
       } else if (currentTurn) {
         currentTurn.turnMessages.push(msg)
+      } else if (sysMsg.subtype === 'spine_cut' && trailingResultTarget.turn) {
+        // cut 在 turn_end 发射：即使该 turn 已被压缩状态 flush，也回挂到刚结束的 turn，
+        // 避免压缩边界之后的切割事件在界面上丢失。
+        trailingResultTarget.turn.turnMessages.push(msg)
       }
     } else {
       // result, tool_progress 等 → 归入当前 turn
@@ -247,7 +252,7 @@ function mergeAdjacentSameModelTurns(groups: MessageGroup[]): MessageGroup[] {
     for (let i = result.length - 1; i >= 0; i--) {
       const prev = result[i]!
       if (prev.type === 'user') break // 真正的用户输入阻断合并
-      if (prev.type === 'system' && isPersistableSDKSystemMessage(prev.message as SDKSystemMessage)) break
+      if (prev.type === 'system' && isStandaloneSDKSystemMessage(prev.message as SDKSystemMessage)) break
       if (prev.type === 'assistant-turn') {
         if (prev.model === group.model) {
           mergeTargetIdx = i

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   USER_DRIVE_WINDOW_MS,
@@ -12,8 +12,10 @@ import {
   type FollowScrollMetrics,
 } from '@/lib/conversation-follow'
 import { getToolDisplayName, getToolIcon } from './tool-utils'
+import { SpineCutProcessRow } from './SpineCutNotice'
 import type {
   SDKContentBlock,
+  SDKSystemMessage,
   SDKToolUseBlock,
   SDKTextBlock,
   SDKThinkingBlock,
@@ -37,6 +39,11 @@ export function filterVisibleTopLevelBlocks(
 
 interface ProcessBlockGroupProps {
   blocks: SDKContentBlock[]
+  /**
+   * 归属本轮的 Live Compact 切割事件（已按「显示压缩事件」开关过滤）。
+   * 与工具行同级渲染在过程流末尾：cut 在 turn_end 发射，是这一轮过程的收尾事件。
+   */
+  events?: SDKSystemMessage[]
   isStreaming?: boolean
   /** 惰性生成过程项；流式与历史态均渲染完整内容。 */
   renderChildren: () => React.ReactNode
@@ -67,10 +74,14 @@ type AssistantTurnRenderItem =
   | {
       type: 'process-group'
       items: IndexedContentBlock[]
+      /** 随该过程组一起展示的切割事件（时间上位于过程末尾）。 */
+      events: SDKSystemMessage[]
     }
 
 interface BuildAssistantTurnRenderItemsOptions {
   isStreaming?: boolean
+  /** 本轮切割事件；调用方在「显示压缩事件」关闭时传空数组。 */
+  events?: SDKSystemMessage[]
 }
 
 function getTrailingTextStartIndex(blocks: SDKContentBlock[]): number | null {
@@ -88,7 +99,11 @@ export function buildAssistantTurnRenderItems(
   blocks: SDKContentBlock[],
   options: BuildAssistantTurnRenderItemsOptions = {},
 ): AssistantTurnRenderItem[] {
-  if (blocks.length === 0) return []
+  const events = options.events ?? []
+  if (blocks.length === 0) {
+    // 少数轮次只有切割事件没有内容块（例如自动唤醒后立刻 turn_end）：仍要在过程流里留痕。
+    return events.length > 0 ? [buildProcessGroupItem([], events)] : []
+  }
 
   // 只要流式末尾出现 text，就按常规消息布局直接展示。若 Agent 之后继续调用工具，
   // text 不再位于末尾，会自动回归过程组，避免把中间状态误认为最终答案。
@@ -100,11 +115,11 @@ export function buildAssistantTurnRenderItems(
     && trailingTextStartIndex > 0
 
   if (options.isStreaming && hasProcessBlock && !canSplitStreamingFinalOutput) {
-    return buildProcessGroupItems(blocks)
+    return buildProcessGroupItems(blocks, events)
   }
 
   if (trailingTextStartIndex === null) {
-    return buildProcessGroupItems(blocks)
+    return buildProcessGroupItems(blocks, events)
   }
 
   const finalBlocks: AssistantTurnRenderItem[] = []
@@ -114,9 +129,14 @@ export function buildAssistantTurnRenderItems(
     finalBlocks.push({ type: 'block', item: { block, index } })
   }
 
-  if (trailingTextStartIndex === 0) return finalBlocks
+  if (trailingTextStartIndex === 0) {
+    // 整轮只有最终回答块：切割事件仍需一个过程组承载，否则事件在界面上丢失。
+    if (events.length === 0) return finalBlocks
+    const eventItems = buildProcessGroupItems([], events)
+    return options.isStreaming ? [...eventItems, ...finalBlocks] : [...finalBlocks, ...eventItems]
+  }
 
-  const processItems = buildProcessGroupItems(blocks.slice(0, trailingTextStartIndex))
+  const processItems = buildProcessGroupItems(blocks.slice(0, trailingTextStartIndex), events)
 
   // 终态：最终回复独立在前，一行过程摘要收尾；流式中仍保留「过程在上、实时回答在下」的阅读顺序。
   if (!options.isStreaming) return [...finalBlocks, ...processItems]
@@ -124,11 +144,22 @@ export function buildAssistantTurnRenderItems(
   return [...processItems, ...finalBlocks]
 }
 
-function buildProcessGroupItems(blocks: SDKContentBlock[]): AssistantTurnRenderItem[] {
-  return [{
+function buildProcessGroupItem(
+  blocks: SDKContentBlock[],
+  events: SDKSystemMessage[],
+): AssistantTurnRenderItem {
+  return {
     type: 'process-group',
     items: blocks.map((block, index) => ({ block, index })),
-  }]
+    events,
+  }
+}
+
+function buildProcessGroupItems(
+  blocks: SDKContentBlock[],
+  events: SDKSystemMessage[] = [],
+): AssistantTurnRenderItem[] {
+  return [buildProcessGroupItem(blocks, events)]
 }
 
 /**
@@ -147,7 +178,7 @@ function stabilizeProcessBlockReferences(
   return previous
 }
 
-function buildProcessGroupSummary(blocks: SDKContentBlock[]): string {
+function buildProcessGroupSummary(blocks: SDKContentBlock[], events: SDKSystemMessage[] = []): string {
   let toolCount = 0
   let messageCount = 0
 
@@ -162,6 +193,7 @@ function buildProcessGroupSummary(blocks: SDKContentBlock[]): string {
   const parts: string[] = []
   if (toolCount > 0) parts.push(`${toolCount} 次工具调用`)
   if (messageCount > 0) parts.push(`${messageCount} 条消息`)
+  if (events.length > 0) parts.push(`${events.length} 次压缩`)
   const summary = parts.join('，') || '过程'
   return `执行过程：${summary}`
 }
@@ -214,7 +246,7 @@ const StableProcessChild = React.memo(
   (previous, next) => previous.child === next.child,
 )
 
-export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessageTail = false, statusLabel, isTurnTerminal = false }: ProcessBlockGroupProps): React.ReactElement {
+export function ProcessBlockGroup({ blocks, events = [], isStreaming, renderChildren, isMessageTail = false, statusLabel, isTurnTerminal = false }: ProcessBlockGroupProps): React.ReactElement {
   // 中断或失败的轮次保持展开：用户需要看到停下之前做了什么。
   const keepExpanded = !!statusLabel && isTurnTerminal && !isStreaming
   const initialDisplayMode: ProcessGroupDisplayMode = keepExpanded || isStreaming
@@ -406,8 +438,8 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
   }, [isContentExpanded])
 
   const summary = React.useMemo(
-    () => buildProcessGroupSummary(blocks),
-    [blocks],
+    () => buildProcessGroupSummary(blocks, events),
+    [blocks, events],
   )
   const toolNames = React.useMemo(() => buildProcessGroupToolNames(blocks), [blocks])
   const visibleToolNames = toolNames.slice(0, MAX_PROCESS_GROUP_ICONS)
@@ -499,6 +531,12 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
             )}
           </span>
         )}
+        {events.length > 0 && (
+          <Scissors
+            className="size-3.5 shrink-0 text-muted-foreground/60"
+            aria-label="上下文压缩"
+          />
+        )}
       </button>
 
       {shouldRenderContent && (
@@ -526,6 +564,11 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
         >
           <div ref={contentInnerRef} className="space-y-2">
             {renderContentChildren()}
+            {events.map((event, index) => (
+              <div key={`spine-cut-${index}`} className={cn(isStreaming && 'opacity-80')}>
+                <SpineCutProcessRow message={event} />
+              </div>
+            ))}
           </div>
         </div>
       )}

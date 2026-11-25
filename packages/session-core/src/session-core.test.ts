@@ -211,3 +211,46 @@ describe('容错与渐进式读取原语', () => {
     expect(md).toContain('答案含关键词 needle')
   })
 })
+
+describe('Live Compact 切割事件归属', () => {
+  test('Given 一轮内含 spine_cut When 分组 Then 事件留在该 assistant turn 内而不是独立成组', () => {
+    const raw = jsonl([
+      { type: 'user', message: { content: [{ type: 'text', text: '继续' }] }, parent_tool_use_id: null },
+      { type: 'assistant', message: { id: 'a1', content: [{ type: 'text', text: '已完成' }] }, parent_tool_use_id: null },
+      { type: 'system', subtype: 'spine_cut', spineCutCount: 2, spineSavedTokens: 900 },
+      { type: 'result', subtype: 'success' },
+    ])
+
+    const groups = groupIntoTurns(readSessionMessagesFromString(raw))
+
+    expect(groups.map((group) => group.type)).toEqual(['user', 'assistant-turn'])
+    const turn = groups[1]!
+    expect(turn.type).toBe('assistant-turn')
+    if (turn.type !== 'assistant-turn') throw new Error('unreachable')
+    const systemMessages = turn.turnMessages.filter((message) => message.type === 'system')
+    expect(systemMessages).toHaveLength(1)
+    expect((systemMessages[0] as { subtype?: string }).subtype).toBe('spine_cut')
+    // 顺序：assistant 之后、result 之前
+    const order = turn.turnMessages.map((message) => message.type)
+    expect(order).toEqual(['assistant', 'system', 'result'])
+  })
+
+  test('Given 压缩状态与 spine_cut 同时存在 When 分组 Then 只有压缩状态独立成组', () => {
+    const raw = jsonl([
+      { type: 'user', message: { content: [{ type: 'text', text: '压缩' }] }, parent_tool_use_id: null },
+      { type: 'assistant', message: { id: 'a1', content: [{ type: 'text', text: '完成' }] }, parent_tool_use_id: null },
+      { type: 'system', subtype: 'compact_boundary' },
+      { type: 'system', subtype: 'spine_cut', spineCutCount: 1 },
+    ])
+
+    const groups = groupIntoTurns(readSessionMessagesFromString(raw))
+
+    // compact_boundary 会 flush 掉 assistant turn，其后的 spine_cut 回挂到刚结束的 turn，
+    // 因此不会新增独立 group，也不会丢失。
+    expect(groups.map((group) => group.type)).toEqual(['user', 'assistant-turn', 'system'])
+    const turn = groups[1]!
+    if (turn.type !== 'assistant-turn') throw new Error('unreachable')
+    expect(turn.turnMessages.filter((message) => message.type === 'system')
+      .map((message) => (message as { subtype?: string }).subtype)).toEqual(['spine_cut'])
+  })
+})

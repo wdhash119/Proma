@@ -73,6 +73,7 @@ export type {
 export {
   getSDKCompactStatus,
   isPersistableSDKSystemMessage,
+  isStandaloneSDKSystemMessage,
 } from './agent-system-message'
 export {
   createSkillActivationFromPath,

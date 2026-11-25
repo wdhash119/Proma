@@ -20,7 +20,7 @@ import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
 import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
 import { ProcessBlockGroup, buildAssistantTurnRenderItems, filterVisibleTopLevelBlocks } from './ProcessBlockGroup'
-import { SpineCutNotice } from './SpineCutNotice'
+import { collectSpineCutEvents } from './SpineCutNotice'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @proma/session-core 作为唯一真源。
 // 这里 import 供本文件内部使用，并 re-export 以保持既有 `from './SDKMessageRenderer'` 导入方零改动。
@@ -349,13 +349,18 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
   )
 
   // 「显示压缩事件」关闭时，从顶层块里排除 spine_recall（原文召回）工具行，
-  // 与切割通知一并隐藏；在选段渲染前过滤，保证单独块与过程组聚合一致。
+  // 与切割事件一并隐藏；在选段渲染前过滤，保证单独块与过程组聚合一致。
   const showEvents = useAtomValue(liveCompactShowEventsAtom)
+  const spineCutEvents = React.useMemo(
+    () => collectSpineCutEvents(turn.turnMessages, showEvents),
+    [turn.turnMessages, showEvents],
+  )
   const renderItems = React.useMemo(() => {
     return buildAssistantTurnRenderItems(filterVisibleTopLevelBlocks(topLevelBlocks, showEvents), {
       isStreaming,
+      events: spineCutEvents,
     })
-  }, [topLevelBlocks, showEvents, isStreaming])
+  }, [topLevelBlocks, showEvents, isStreaming, spineCutEvents])
 
   // 本轮「文件名 → 绝对路径」映射：与 footer chips 同源，供正文内联文件引用补全裸文件名
   const turnFileMap = React.useMemo(
@@ -377,8 +382,8 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
     )
   }
 
-  // 如果没有任何内容
-  if (enrichedBlocks.length === 0 && !hasError) return null
+  // 如果没有任何内容（切割事件是唯一可见痕迹时仍需渲染过程行）
+  if (enrichedBlocks.length === 0 && spineCutEvents.length === 0 && !hasError) return null
 
   const renderTopLevelBlock = (block: SDKContentBlock, i: number): React.ReactNode => {
     const isAgentTool = block.type === 'tool_use'
@@ -428,6 +433,7 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
               <ProcessBlockGroup
                 key={groupKey}
                 blocks={groupBlocks}
+                events={item.events}
                 isStreaming={isStreaming}
                 renderChildren={() => item.items.map((groupItem) => (
                   <React.Fragment key={groupItem.index}>
@@ -1248,8 +1254,8 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
     }
     if (getSDKCompactStatus(group.message)) return <div {...historySelectionAttributes}><CompactStatusNotice message={group.message} /></div>
     if (subtype === 'permission_denied') return <div {...historySelectionAttributes}><PermissionDeniedNotice message={group.message} /></div>
-    // Live Compact 切割事件：常驻通知行，显示受「显示压缩事件」开关控制（组件内读 atom）。
-    if (subtype === 'spine_cut') return <div {...historySelectionAttributes}><SpineCutNotice message={group.message} /></div>
+    // Live Compact 切割事件不再单独成行：它随所属 assistant turn 进入执行过程信息流
+    // （见 buildAssistantTurnRenderItems 的 events 参数），这里只兜底未知 system。
     return null
   }
 

@@ -5,6 +5,7 @@
  */
 
 import {
+  DEFAULT_DELEGATION_WAIT_SECONDS,
   PROMA_DEFAULT_PERMISSION_MODE,
   type AgentDelegationRole,
   type AgentDelegationStatus,
@@ -13,10 +14,59 @@ import {
 } from '@proma/shared'
 
 export const MAX_RUNNING_DELEGATIONS_PER_PARENT = 50
-/** 未显式指定时，父会话等待子会话完成的时长。 */
-export const DEFAULT_DELEGATION_WAIT_SECONDS = 60 * 60
+/**
+ * 未显式指定时，父会话等待子会话完成的时长。
+ *
+ * 定义在 @proma/shared，因为 utility 进程的请求超时策略也要用同一个值；
+ * 这里保持导出，既有 import 方无需改动。
+ */
+export { DEFAULT_DELEGATION_WAIT_SECONDS }
 /** 显式指定 timeoutSeconds 时允许的最大等待时长。 */
 export const MAX_DELEGATION_WAIT_SECONDS = 2 * 60 * 60
+
+/**
+ * 等待子会话结束的原因。
+ *
+ * - `settled`：子会话完成/失败/取消，记录状态已确定。
+ * - `timeout`：达到等待上限，子会话仍在运行。
+ * - `aborted`：调用方取消（桥接超时或用户停止），子会话仍在运行。
+ */
+export type DelegationWaitOutcome = 'settled' | 'timeout' | 'aborted'
+
+/**
+ * 等待子会话完成，带超时与外部取消。
+ *
+ * 不抛错也不判定成败：超时与取消都只返回原因，调用方按记录状态决定返回内容
+ * （running 时提示改用 wait_for_delegations 收敛）。无论哪条路径结束都会清理
+ * timer 与 abort 监听器，避免长驻会话里泄漏监听器或悬挂定时器。
+ */
+export async function waitForDelegationCompletion(
+  completion: Promise<void>,
+  options: { timeoutMs: number; signal?: AbortSignal },
+): Promise<DelegationWaitOutcome> {
+  const { timeoutMs, signal } = options
+  if (signal?.aborted) return 'aborted'
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let abortListener: (() => void) | undefined
+
+  const timeout = new Promise<DelegationWaitOutcome>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs)
+  })
+  const aborted = new Promise<DelegationWaitOutcome>((resolve) => {
+    if (!signal) return
+    abortListener = () => resolve('aborted')
+    signal.addEventListener('abort', abortListener, { once: true })
+  })
+  const settled = completion.then<DelegationWaitOutcome>(() => 'settled')
+
+  try {
+    return await Promise.race([settled, timeout, aborted])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    if (signal && abortListener) signal.removeEventListener('abort', abortListener)
+  }
+}
 
 /**
  * 为具有副作用的工具调用提供进程内幂等保护。

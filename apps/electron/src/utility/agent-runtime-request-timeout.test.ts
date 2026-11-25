@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { AGENT_RUNTIME_METHODS } from '@proma/shared'
+import { AGENT_RUNTIME_METHODS, DEFAULT_DELEGATION_WAIT_SECONDS } from '@proma/shared'
 import { ASK_USER_QUESTION_TIMEOUT_MS, getParentRequestTimeoutMs } from './agent-runtime-request-timeout'
 
 const DEFAULT_TIMEOUT_MS = 120_000
@@ -16,6 +16,24 @@ function waitPayload(input: Record<string, unknown>): Record<string, unknown> {
 }
 
 describe('跨进程请求超时推导', () => {
+  test('Given continue_delegation When 推导超时 Then 与 handler 上限一致并留 60 秒余量', () => {
+    const timeout = getParentRequestTimeoutMs(AGENT_RUNTIME_METHODS.CAPABILITY_CUSTOM_TOOL, {
+      toolName: 'mcp__collaboration__continue_delegation',
+      input: { delegationId: 'delegation-1', message: '继续' },
+    })
+
+    expect(timeout).toBe((DEFAULT_DELEGATION_WAIT_SECONDS + 60) * 1000)
+    expect(timeout).toBe(3660 * 1000)
+  })
+
+  test('Given continue_delegation When 载荷缺少参数 Then 仍按固定预算放宽而不回退 120 秒', () => {
+    const timeout = getParentRequestTimeoutMs(AGENT_RUNTIME_METHODS.CAPABILITY_CUSTOM_TOOL, {
+      toolName: 'mcp__collaboration__continue_delegation',
+    })
+
+    expect(timeout).toBe((DEFAULT_DELEGATION_WAIT_SECONDS + 60) * 1000)
+  })
+
   test('Given 普通能力调用 When 未声明特殊语义 Then 保持 120 秒故障检测', () => {
     const timeout = getParentRequestTimeoutMs(AGENT_RUNTIME_METHODS.CAPABILITY_CUSTOM_TOOL, {
       toolName: 'mcp__collaboration__delegate_agent',

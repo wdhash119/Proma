@@ -38,6 +38,7 @@ import {
   buildDelegationPrompt,
   createToolCallIdempotencyCache,
   hasAbnormalDelegation,
+  waitForDelegationCompletion,
   normalizeDelegationStatus,
   resolveDelegationPermissionMode,
 } from './agent-collaboration-utils'
@@ -1125,12 +1126,12 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__continue_delegation',
       label: '追加后续指令',
-      description: '向已完成、已失败、已取消或已中断的协作子会话追加后续指令。子会话保留完整上下文继续执行。',
+      description: '向已完成、已失败、已取消或已中断的协作子会话追加后续指令。子会话保留完整上下文继续执行。本工具会等待子会话完成（最长 1 小时）；超时或等待被取消时返回 running 状态，父会话应改用 wait_for_delegations 收敛结果。',
       parameters: Type.Object({
         delegationId: Type.String({ description: '要继续操作的委派 ID' }),
         message: Type.String({ description: '追加给子 Agent 的后续指令' }),
       }),
-      async execute(_toolCallId: string, params: unknown) {
+      async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
         const args = params as { delegationId: string; message: string }
         const record = getDelegationRecordForContinuation(ctx, args.delegationId)
         if (!record) throw new Error(`未找到当前会话下的委派: ${args.delegationId}`)
@@ -1178,15 +1179,19 @@ export function buildPiCollaborationTools(
           })
         })
 
-        const timeout = new Promise<'timeout'>((resolve) => setTimeout(
-          () => resolve('timeout'),
-          DEFAULT_DELEGATION_WAIT_SECONDS * 1000,
-        ))
-        await Promise.race([record.completion, timeout])
+        // 等待上限与 utility 侧请求预算（DEFAULT_DELEGATION_WAIT_SECONDS + 余量）一致；
+        // 桥接超时或用户取消会 abort signal，此时不再阻塞，按 running 状态交还控制权。
+        await waitForDelegationCompletion(record.completion, {
+          timeoutMs: DEFAULT_DELEGATION_WAIT_SECONDS * 1000,
+          signal,
+        })
 
+        const stillRunning = record.status === 'running'
         return piJsonResult({
           delegation: getDelegationSummary(record),
-          note: record.status === 'running' ? '子会话仍在运行中（等待超时），可稍后用 wait_for_delegations 等待结果。' : undefined,
+          note: stillRunning
+            ? '等待被取消或超时，子会话仍在运行；请用 wait_for_delegations 收敛结果。'
+            : undefined,
         })
       },
     }),

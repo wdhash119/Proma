@@ -6,6 +6,15 @@
 export const AGENT_RUNTIME_PROTOCOL_VERSION = 1 as const
 export const AGENT_RUNTIME_BOOTSTRAP_ID = 'bootstrap'
 
+/**
+ * 协作委派 continue_delegation 的默认等待上限（秒）。
+ *
+ * 主进程 handler 用它作为阻塞上限，utility 进程用它推导 CAPABILITY_CUSTOM_TOOL
+ * 的请求超时预算；两侧必须用同一个值，否则桥接会先于 handler 超时并发出
+ * CAPABILITY_CANCEL，把一次正常的长等待误判为失败。
+ */
+export const DEFAULT_DELEGATION_WAIT_SECONDS = 60 * 60
+
 type AgentRuntimeMessageKind = 'request' | 'response' | 'event'
 
 export interface AgentRuntimeContext {

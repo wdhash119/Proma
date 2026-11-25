@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getWorkspaceMemoryGuidance } from './agent-workspace-manager'
-import { getAgentWorkspacePath } from './config-paths'
+import { getAgentWorkspacePath, resetConfigDirCacheForTests } from './config-paths'
 
 /**
  * 这些用例把 HOME/USERPROFILE 指向临时目录，从而让 config-paths 把工作区建在测试夹具里，
@@ -26,6 +26,8 @@ beforeEach(() => {
   process.env.HOME = home
   process.env.USERPROFILE = home
   process.env.PROMA_DEV = '1'
+  // 每例换了 home：清空目录名与数据根缓存，避免沿用上一例（或更早文件）的解析结果。
+  resetConfigDirCacheForTests()
   // 先落地工作区与 memory 目录，避免 getAgentWorkspacePath 之外的副作用
   mkdirSync(memoryDir(), { recursive: true })
 })
@@ -38,6 +40,7 @@ afterEach(() => {
   else process.env.USERPROFILE = originalUserProfile
   if (originalPromaDev === undefined) delete process.env.PROMA_DEV
   else process.env.PROMA_DEV = originalPromaDev
+  resetConfigDirCacheForTests()
 })
 
 describe('工作区记忆引导的协作画像判定', () => {

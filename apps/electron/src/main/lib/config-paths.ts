@@ -164,8 +164,15 @@ export function getConfigDir(): string {
   return configDir
 }
 
-/** 仅供测试：清空数据根解析缓存，让下一次 getConfigDir() 重新解析指针。 */
+/**
+ * 仅供测试：完整重置数据根相关缓存。
+ *
+ * 同时清空目录名缓存与数据根解析缓存：测试会把 homedir 切到临时目录，
+ * 只清其中一层会让另一层残留（目录名按 PROMA_DEV 缓存、解析结果按默认根键控），
+ * 导致 fixture 落到真实数据根。导出名保持不变，兼容既有调用方。
+ */
 export function resetConfigDirCacheForTests(): void {
+  _configDirName = undefined
   _resolvedConfigDirCache = undefined
 }
 

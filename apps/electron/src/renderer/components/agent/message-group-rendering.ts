@@ -9,6 +9,20 @@ interface MessageGroupRenderCache {
   previousGroups: MessageGroup[]
 }
 
+/**
+ * 「显示压缩事件」关闭时，同时从正文、迷你地图与历史导航中排除独立切割组。
+ * 已归属 assistant turn 的事件由 AssistantTurnRenderer 自行过滤，不能在这里丢弃整个回复。
+ */
+export function filterVisibleMessageGroups(
+  groups: MessageGroup[],
+  showEvents: boolean,
+): MessageGroup[] {
+  if (showEvents) return groups
+  return groups.filter((group) => (
+    group.type !== 'system' || group.message.subtype !== 'spine_cut'
+  ))
+}
+
 export function createMessageGroupRenderCache(): MessageGroupRenderCache {
   return {
     prefixLength: 0,

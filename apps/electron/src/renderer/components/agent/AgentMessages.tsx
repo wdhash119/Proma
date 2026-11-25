@@ -48,10 +48,10 @@ import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkP
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { CompactionNotice, type ContextCompactionProgress } from './CompactionNotice'
 import { AgentArtifactsBar } from './AgentArtifactsBar'
-import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
+import { createMessageGroupRenderCache, filterVisibleMessageGroups, groupMessagesForRendering } from './message-group-rendering'
 import type { AgentEventUsage, RetryAttempt, SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKTextBlock, SDKThinkingBlock } from '@proma/shared'
 import { getSDKCompactStatus } from '@proma/shared'
-import { agentLiveMessagesAtomFamily, agentSessionStreamingStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
+import { agentLiveMessagesAtomFamily, agentSessionStreamingStateAtomFamily, liveCompactShowEventsAtom, type AgentStreamState } from '@/atoms/agent-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 
 const EMPTY_SDK_MESSAGES: SDKMessage[] = []
@@ -901,6 +901,7 @@ export const AgentMessages = React.memo(function AgentMessages({
   // 高频 token/live message 状态在历史区内闭环，避免唤醒 AgentView 输入框和工具栏。
   const streamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
   const liveMessages = useAtomValue(agentLiveMessagesAtomFamily(sessionId))
+  const showEvents = useAtomValue(liveCompactShowEventsAtom)
   const streaming = streamState?.running ?? false
   const userProfile = useAtomValue(userProfileAtom)
   const channels = useAtomValue(channelsAtom)
@@ -1081,11 +1082,11 @@ export const AgentMessages = React.memo(function AgentMessages({
   // Pi 的 text_start/thinking_start 会产生没有可见 DOM 的空内容块；过滤掉对应的 live turn，
   // 直到有实际内容时再交给 transcript 渲染，避免与乐观计时器壳重复显示 assistant header。
   const visibleGroups = React.useMemo(
-    () => allGroups.filter((group) => (
+    () => filterVisibleMessageGroups(allGroups.filter((group) => (
       !isCompactionControlHistoryGroup(group)
       && shouldRenderLiveAssistantTurn(group, liveGroupSet.has(group))
-    )),
-    [allGroups, liveGroupSet],
+    )), showEvents),
+    [allGroups, liveGroupSet, showEvents],
   )
   visibleGroupsRef.current = visibleGroups
 

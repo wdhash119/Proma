@@ -253,4 +253,37 @@ describe('Live Compact 切割事件归属', () => {
     expect(turn.turnMessages.filter((message) => message.type === 'system')
       .map((message) => (message as { subtype?: string }).subtype)).toEqual(['spine_cut'])
   })
+
+  test('Given 迟到的 spine_cut 没有可承载的 turn When 分组 Then 独立成组不静默丢失', () => {
+    const raw = jsonl([
+      { type: 'user', message: { content: [{ type: 'text', text: 'q1' }] }, parent_tool_use_id: null },
+      { type: 'assistant', message: { id: 'a1', content: [{ type: 'text', text: 'done1' }] }, parent_tool_use_id: null },
+      { type: 'system', subtype: 'compact_boundary', summary: '摘要' },
+      { type: 'user', message: { content: [{ type: 'text', text: 'q2' }] }, parent_tool_use_id: null },
+      { type: 'system', subtype: 'spine_cut', spineCutCount: 9 },
+      { type: 'assistant', message: { id: 'a2', content: [{ type: 'text', text: 'done2' }] }, parent_tool_use_id: null },
+      { type: 'result', subtype: 'success' },
+    ])
+
+    const groups = groupIntoTurns(readSessionMessagesFromString(raw))
+
+    // 跨轮补发的 cut：既没有进行中的 turn，回挂目标也已被新用户输入清空。
+    // 必须独立成组留给渲染层兜底，否则事件会静默消失，「显示压缩事件」开关对它永远无效。
+    const systemSubtypes = groups
+      .filter((group): group is Extract<(typeof groups)[number], { type: 'system' }> => group.type === 'system')
+      .map((group) => (group.message as { subtype?: string }).subtype)
+    expect(systemSubtypes).toEqual(['compact_boundary', 'spine_cut'])
+  })
+
+  test('Given 独立 spine_cut When 生成预览与 Markdown Then 保留可读摘要', () => {
+    const raw = jsonl([
+      { type: 'system', subtype: 'spine_cut', spineCutCount: 9 },
+    ])
+
+    const groups = groupIntoTurns(readSessionMessagesFromString(raw))
+
+    expect(groups).toHaveLength(1)
+    expect(getGroupPreview(groups[0]!)).toBe('Spine 压缩：切下 9 段')
+    expect(renderTranscriptMarkdown(toTranscript(groups))).toContain('Spine 压缩：切下 9 段')
+  })
 })

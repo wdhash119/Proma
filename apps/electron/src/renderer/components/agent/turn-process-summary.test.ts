@@ -29,7 +29,10 @@ describe('轮次布局：最终回复在前，过程摘要收尾', () => {
     expect(last?.type).toBe('process-group')
     // 过程组只包含最终回复之前的内容，最终答案不会被折叠进去。
     if (last?.type === 'process-group') {
-      expect(last.items.map((entry) => entry.block.type)).toEqual(['thinking', 'tool_use'])
+      const blockTypes = last.entries.flatMap((entry) =>
+        entry.kind === 'block' ? [entry.item.block.type] : [],
+      )
+      expect(blockTypes).toEqual(['thinking', 'tool_use'])
     }
   })
 

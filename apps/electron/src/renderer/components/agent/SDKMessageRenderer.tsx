@@ -20,7 +20,7 @@ import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
 import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
 import { ProcessBlockGroup, buildAssistantTurnRenderItems, filterVisibleTopLevelBlocks } from './ProcessBlockGroup'
-import { collectSpineCutEvents } from './SpineCutNotice'
+import { locateSpineCutEvents, SpineCutProcessRow } from './SpineCutNotice'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @proma/session-core 作为唯一真源。
 // 这里 import 供本文件内部使用，并 re-export 以保持既有 `from './SDKMessageRenderer'` 导入方零改动。
@@ -280,13 +280,15 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
   interface EnrichedBlock {
     block: SDKContentBlock
     parentToolUseId?: string | null
+    /** 该块来自第几条 assistant 消息，用于把切割事件定位到顶层块锚点 */
+    assistantIndex: number
   }
 
   const enrichedBlocks: EnrichedBlock[] = []
   let hasError = false
   let errorContent: SDKAssistantMessage | null = null
 
-  for (const aMsg of turn.assistantMessages) {
+  for (const [assistantIndex, aMsg] of turn.assistantMessages.entries()) {
     const msgAny = aMsg as unknown as Record<string, unknown>
     // 区分两种错误消息：
     // 1. Orchestrator 造的纯错误消息（带 _errorCode）：content 里的 text 就是错误摘要，不当正文渲染
@@ -303,7 +305,11 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
     if (Array.isArray(blocks)) {
       for (const block of blocks) {
         for (const normalizedBlock of normalizeThinkTagsInContentBlocks([block])) {
-          enrichedBlocks.push({ block: normalizedBlock, parentToolUseId: aMsg.parent_tool_use_id })
+          enrichedBlocks.push({
+            block: normalizedBlock,
+            parentToolUseId: aMsg.parent_tool_use_id,
+            assistantIndex,
+          })
         }
       }
     }
@@ -332,15 +338,27 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
 
   const childBlocksMap = new Map<string, SDKContentBlock[]>()
   const topLevelBlocks: SDKContentBlock[] = []
+  // 每条 assistant 消息贡献的顶层块数（按 assistantMessages 顺序）。
+  // groupIntoTurns 里 turnMessages 的 assistant 序列与 assistantMessages 同源同序（isReplay 两边都被跳过），
+  // 累加它就得到切割事件在顶层块序列里的插入锚点，不必去比对时间戳。
+  const topLevelBlockCountsByAssistant: number[] = []
 
   for (const eb of enrichedBlocks) {
+    while (topLevelBlockCountsByAssistant.length <= eb.assistantIndex) {
+      topLevelBlockCountsByAssistant.push(0)
+    }
     if (eb.parentToolUseId && agentToolIds.has(eb.parentToolUseId)) {
       const children = childBlocksMap.get(eb.parentToolUseId) ?? []
       children.push(eb.block)
       childBlocksMap.set(eb.parentToolUseId, children)
     } else {
       topLevelBlocks.push(eb.block)
+      topLevelBlockCountsByAssistant[eb.assistantIndex] = (topLevelBlockCountsByAssistant[eb.assistantIndex] ?? 0) + 1
     }
+  }
+  // 没有产出任何块的 assistant 消息（如纯错误摘要）也要占位，保证下标与 assistantMessages 对齐。
+  while (topLevelBlockCountsByAssistant.length < turn.assistantMessages.length) {
+    topLevelBlockCountsByAssistant.push(0)
   }
 
   // 检测是否有主要内容（text 块），用于决定 tool/thinking 是否 dimmed
@@ -348,12 +366,13 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
     (b) => b.type === 'text' && 'text' in b && !!(b as { text: string }).text
   )
 
-  // 「显示压缩事件」关闭时，从顶层块里排除 spine_recall（原文召回）工具行，
-  // 与切割事件一并隐藏；在选段渲染前过滤，保证单独块与过程组聚合一致。
+  // 「显示压缩事件」关闭时，从顶层块里排除 spine_recall（原文召回）工具行，与切割通知一并隐藏；
+  // 在选段渲染前过滤，保证单独块与过程组聚合一致。
   const showEvents = useAtomValue(liveCompactShowEventsAtom)
+  // 切割事件带锚点：渲染时插回它实际发生的工具行之间，而不是堆在过程流末尾。
   const spineCutEvents = React.useMemo(
-    () => collectSpineCutEvents(turn.turnMessages, showEvents),
-    [turn.turnMessages, showEvents],
+    () => locateSpineCutEvents(turn.turnMessages, topLevelBlockCountsByAssistant, showEvents),
+    [turn.turnMessages, topLevelBlockCountsByAssistant, showEvents],
   )
   const renderItems = React.useMemo(() => {
     return buildAssistantTurnRenderItems(filterVisibleTopLevelBlocks(topLevelBlocks, showEvents), {
@@ -426,19 +445,25 @@ function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, 
               return renderTopLevelBlock(item.item.block, item.item.index)
             }
 
-            const groupBlocks = item.items.map((groupItem) => groupItem.block)
-            const firstIndex = item.items[0]?.index ?? 0
-            const groupKey = `process-${firstIndex}`
+            const groupBlocks = item.entries.flatMap((entry) => (entry.kind === 'block' ? [entry.item.block] : []))
             return (
               <ProcessBlockGroup
-                key={groupKey}
+                key={item.groupKey}
                 blocks={groupBlocks}
                 events={item.events}
                 isStreaming={isStreaming}
-                renderChildren={() => item.items.map((groupItem) => (
-                  <React.Fragment key={groupItem.index}>
-                    {renderProcessGroupBlock(groupItem.block, groupItem.index)}
-                  </React.Fragment>
+                renderChildren={() => item.entries.map((entry, entryIndex) => (
+                  entry.kind === 'spine_cut'
+                    ? (
+                      <React.Fragment key={`spine-cut-${entry.event.blockIndex}-${entryIndex}`}>
+                        <SpineCutProcessRow message={entry.event.message} />
+                      </React.Fragment>
+                    )
+                    : (
+                      <React.Fragment key={entry.item.index}>
+                        {renderProcessGroupBlock(entry.item.block, entry.item.index)}
+                      </React.Fragment>
+                    )
                 ))}
                 isMessageTail={itemIndex === renderItems.length - 1}
                 statusLabel={turnStatusLabel}
@@ -1254,8 +1279,13 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
     }
     if (getSDKCompactStatus(group.message)) return <div {...historySelectionAttributes}><CompactStatusNotice message={group.message} /></div>
     if (subtype === 'permission_denied') return <div {...historySelectionAttributes}><PermissionDeniedNotice message={group.message} /></div>
-    // Live Compact 切割事件不再单独成行：它随所属 assistant turn 进入执行过程信息流
-    // （见 buildAssistantTurnRenderItems 的 events 参数），这里只兜底未知 system。
+    // 正常路径下 Live Compact 切割事件随所属 assistant turn 渲染在工具行之间
+    // （见 buildAssistantTurnRenderItems 的 events 参数）。只有跨轮补发、找不到所属 turn 的
+    // 事件才会被 groupIntoTurns 独立成组，这里兜底一行，保证压缩痕迹不会静默消失。
+    if (subtype === 'spine_cut') {
+      return <div {...historySelectionAttributes} className="pl-[56px]"><SpineCutProcessRow message={group.message} /></div>
+    }
+    // 其余未知 system 消息不渲染
     return null
   }
 

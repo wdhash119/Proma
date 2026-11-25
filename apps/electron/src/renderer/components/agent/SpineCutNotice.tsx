@@ -5,12 +5,12 @@
  * 消息（见 pi-agent-adapter 的 emitCutNotice）。它既进入实时流，也随会话转录持久化
  * （`isPersistableSDKSystemMessage`），因此在历史记录里同样可见。
  *
- * 展示位置：所属 assistant turn 的执行过程信息流内，与工具调用行同级、排在过程末尾
- * （cut 在 turn_end 发射，语义上就是这一轮过程收尾时发生的事）。外形沿用弱化工具行
- * 风格：Scissors 图标 + 单行 muted 文案。
+ * 展示位置：所属 assistant turn 的执行过程信息流内，与工具调用行同级，**按事件实际发生
+ * 的时间位置穿插在工具行之间**（`locateSpineCutEvents` 把 turn 内消息顺序换算成顶层块
+ * 锚点）。外形沿用弱化工具行风格：Scissors 图标 + 单行 muted 文案。
  *
  * 显示受「显示压缩事件」开关（liveCompactShowEventsAtom）控制：关闭时
- * `collectSpineCutEvents` 返回空数组，实时与历史一并隐藏；开关不影响切割行为与事件发射。
+ * `locateSpineCutEvents` 返回空数组，实时与历史一并隐藏；开关不影响切割行为与事件发射。
  */
 
 import * as React from 'react'
@@ -36,20 +36,44 @@ export function buildSpineCutNoticeText(message: SDKSystemMessage): string {
   return `Spine 压缩：${detail}${drain}`
 }
 
+/** 切割事件加上它在顶层内容块序列里的插入锚点。 */
+export interface SpineCutEvent {
+  message: SDKSystemMessage
+  /** 该事件之前已经出现的顶层内容块数，即它应插入的下标。 */
+  blockIndex: number
+}
+
 /**
- * 从一轮消息里挑出切割事件，保持原始时间顺序（纯函数，便于单测）。
+ * 把 turn 内的切割事件换算成顶层块锚点，保持原始时间顺序（纯函数，便于单测）。
+ *
+ * `turnMessages` 里的 assistant 消息与 `turn.assistantMessages` 同源同序，因此按
+ * `topLevelBlockCounts`（每条 assistant 消息贡献的顶层块数）累加游标，游标即该 cut
+ * 之前已存在的顶层块数。cut 一律在某条 assistant 消息收尾之后发射，所以锚点天然落在
+ * 对应工具往返之间，不会把事件挤到整轮末尾。
  *
  * `showEvents` 为 false 时返回空数组：开关关闭即实时与历史都不渲染。
  */
-export function collectSpineCutEvents(messages: SDKMessage[], showEvents: boolean): SDKSystemMessage[] {
+export function locateSpineCutEvents(
+  turnMessages: SDKMessage[],
+  topLevelBlockCounts: readonly number[],
+  showEvents: boolean,
+): SpineCutEvent[] {
   if (!showEvents) return []
-  const events: SDKSystemMessage[] = []
-  for (const message of messages) {
+  const located: SpineCutEvent[] = []
+  let blockCursor = 0
+  let assistantSeen = 0
+  for (const message of turnMessages) {
+    if (message.type === 'assistant') {
+      blockCursor += topLevelBlockCounts[assistantSeen] ?? 0
+      assistantSeen += 1
+      continue
+    }
     if (message.type !== 'system') continue
     const systemMessage = message as SDKSystemMessage
-    if (systemMessage.subtype === 'spine_cut') events.push(systemMessage)
+    if (systemMessage.subtype !== 'spine_cut') continue
+    located.push({ message: systemMessage, blockIndex: blockCursor })
   }
-  return events
+  return located
 }
 
 /**

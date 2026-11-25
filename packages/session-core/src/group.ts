@@ -203,6 +203,11 @@ export function groupIntoTurns(messages: SDKMessage[], sessionModelId?: string):
         // cut 在 turn_end 发射：即使该 turn 已被压缩状态 flush，也回挂到刚结束的 turn，
         // 避免压缩边界之后的切割事件在界面上丢失。
         trailingResultTarget.turn.turnMessages.push(msg)
+      } else if (sysMsg.subtype === 'spine_cut') {
+        // 跨轮补发的 cut：所属 turn 已 flush，且回挂目标已被新的用户输入清空，
+        // 没有任何 turn 能承载它。此时独立成组交给渲染层兜底显示，
+        // 否则事件会静默消失，「显示压缩事件」开关对它就永远无效。
+        groups.push({ type: 'system', message: sysMsg, identityMessage: sysMsg })
       }
     } else {
       // result, tool_progress 等 → 归入当前 turn
@@ -301,6 +306,13 @@ export function getGroupPreview(group: MessageGroup): string {
     if (compactStatus === 'failed') return '上下文压缩失败'
     if (compactStatus === 'noop') return group.message.message ?? '当前上下文无需压缩'
     if (group.message.subtype === 'permission_denied') return '权限检查已拒绝操作'
+    if (group.message.subtype === 'spine_cut') {
+      const rawCount = group.message.spineCutCount
+      const count = typeof rawCount === 'number' && Number.isFinite(rawCount)
+        ? Math.floor(rawCount)
+        : 0
+      return count > 0 ? `Spine 压缩：切下 ${count} 段` : 'Spine 压缩：上下文已就地压缩'
+    }
     return ''
   }
   // assistant-turn：收集所有 text 块

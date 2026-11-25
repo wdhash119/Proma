@@ -12,20 +12,26 @@ import {
   type FollowScrollMetrics,
 } from '@/lib/conversation-follow'
 import { getToolDisplayName, getToolIcon } from './tool-utils'
-import { SpineCutProcessRow } from './SpineCutNotice'
+import type { SpineCutEvent } from './SpineCutNotice'
 import type {
   SDKContentBlock,
-  SDKSystemMessage,
   SDKToolUseBlock,
   SDKTextBlock,
   SDKThinkingBlock,
 } from '@proma/shared'
 
 /**
+ * 「显示压缩事件」关闭时从顶层序列里隐藏的内容块：原文召回（spine_recall）工具块。
+ * 它是 Live Compact 在转录里除切割通知外的唯一可见痕迹；切割通知本身不受开关影响。
+ */
+export function isHiddenTopLevelBlock(block: SDKContentBlock): boolean {
+  return block.type === 'tool_use' && block.name === 'spine_recall'
+}
+
+/**
  * 按「显示压缩事件」开关过滤顶层内容块（纯函数，便于单测）。
  *
- * showEvents 为 false 时隐藏 spine_recall（原文召回）工具块——它是 Live Compact
- * 在转录里除切割通知外的唯一可见痕迹，开关关闭时与通知一并隐藏。true 时原样返回。
+ * showEvents 为 false 时隐藏 spine_recall（原文召回）工具块。true 时原样返回。
  * 只作用于顶层块；子代理内部块不受影响（spine_recall 不会出现在子代理里）。
  * 在 buildAssistantTurnRenderItems 之前调用，保证单独渲染与过程组聚合一致排除。
  */
@@ -34,16 +40,16 @@ export function filterVisibleTopLevelBlocks(
   showEvents: boolean,
 ): SDKContentBlock[] {
   if (showEvents) return blocks
-  return blocks.filter((block) => !(block.type === 'tool_use' && block.name === 'spine_recall'))
+  return blocks.filter((block) => !isHiddenTopLevelBlock(block))
 }
 
 interface ProcessBlockGroupProps {
   blocks: SDKContentBlock[]
   /**
-   * 归属本轮的 Live Compact 切割事件（已按「显示压缩事件」开关过滤）。
-   * 与工具行同级渲染在过程流末尾：cut 在 turn_end 发射，是这一轮过程的收尾事件。
+   * 归属本轮的 Live Compact 切割事件（已按「显示压缩事件」开关过滤，并带顶层块锚点）。
+   * 渲染位置由调用方按锚点织入 renderChildren；本组件只用它决定摘要文案与折叠态图标。
    */
-  events?: SDKSystemMessage[]
+  events?: SpineCutEvent[]
   isStreaming?: boolean
   /** 惰性生成过程项；流式与历史态均渲染完整内容。 */
   renderChildren: () => React.ReactNode
@@ -69,19 +75,30 @@ interface IndexedContentBlock {
   index: number
 }
 
+/**
+ * 过程组内的一个条目：内容块或按时间位置织入的切割事件行。
+ * 两者共用同一条序列，切割行才不会脱离它实际发生的工具往返。
+ */
+type ProcessGroupEntry =
+  | { kind: 'block'; item: IndexedContentBlock }
+  | { kind: 'spine_cut'; event: SpineCutEvent }
+
 type AssistantTurnRenderItem =
   | { type: 'block'; item: IndexedContentBlock }
   | {
       type: 'process-group'
-      items: IndexedContentBlock[]
-      /** 随该过程组一起展示的切割事件（时间上位于过程末尾）。 */
-      events: SDKSystemMessage[]
+      /** 同一 assistant 兄弟列表内稳定且唯一的 React key。 */
+      groupKey: 'process-main' | 'process-tail'
+      /** 内容块与切割行按时间位置交织后的渲染序列。 */
+      entries: ProcessGroupEntry[]
+      /** 随该过程组一起展示的切割事件（锚点已限定在本组块区间内）。 */
+      events: SpineCutEvent[]
     }
 
 interface BuildAssistantTurnRenderItemsOptions {
   isStreaming?: boolean
-  /** 本轮切割事件；调用方在「显示压缩事件」关闭时传空数组。 */
-  events?: SDKSystemMessage[]
+  /** 本轮切割事件（带锚点）；调用方在「显示压缩事件」关闭时传空数组。 */
+  events?: SpineCutEvent[]
 }
 
 function getTrailingTextStartIndex(blocks: SDKContentBlock[]): number | null {
@@ -115,12 +132,17 @@ export function buildAssistantTurnRenderItems(
     && trailingTextStartIndex > 0
 
   if (options.isStreaming && hasProcessBlock && !canSplitStreamingFinalOutput) {
-    return buildProcessGroupItems(blocks, events)
+    return [buildProcessGroupItem(blocks, events)]
   }
 
   if (trailingTextStartIndex === null) {
-    return buildProcessGroupItems(blocks, events)
+    return [buildProcessGroupItem(blocks, events)]
   }
+
+  // 切割事件按锚点分侧：落在最终回答之前的留在过程组内、与工具行穿插；
+  // 落在最终回答之后的单独收尾，不会被撑到整轮最末尾。
+  const headEvents = events.filter((event) => event.blockIndex <= trailingTextStartIndex)
+  const tailEvents = events.filter((event) => event.blockIndex > trailingTextStartIndex)
 
   const finalBlocks: AssistantTurnRenderItem[] = []
   for (let index = trailingTextStartIndex; index < blocks.length; index++) {
@@ -129,37 +151,53 @@ export function buildAssistantTurnRenderItems(
     finalBlocks.push({ type: 'block', item: { block, index } })
   }
 
+  // 最终回答之后发生的切割：流式下阅读顺序是「过程在上、实时回答在下」，
+  // 此时单独收尾到回答下方，不让它出现在实时回答上方。
+  const tailItems: AssistantTurnRenderItem[] = tailEvents.length > 0
+    ? [buildProcessGroupItem([], tailEvents, 'process-tail')]
+    : []
+
   if (trailingTextStartIndex === 0) {
-    // 整轮只有最终回答块：切割事件仍需一个过程组承载，否则事件在界面上丢失。
-    if (events.length === 0) return finalBlocks
-    const eventItems = buildProcessGroupItems([], events)
-    return options.isStreaming ? [...eventItems, ...finalBlocks] : [...finalBlocks, ...eventItems]
+    // 整轮只有最终回答块：回答之前发生的切割仍需一个过程组承载，否则事件在界面上丢失。
+    // 这里不看流式/终态的常规顺序：该切割时间上就在回答之前，就排在回答之前。
+    const headItems = headEvents.length > 0 ? [buildProcessGroupItem([], headEvents)] : []
+    if (headItems.length === 0 && tailItems.length === 0) return finalBlocks
+    return [...headItems, ...finalBlocks, ...tailItems]
   }
 
-  const processItems = buildProcessGroupItems(blocks.slice(0, trailingTextStartIndex), events)
+  // 终态：最终回复独立在前，一行过程摘要收尾。过程组整体就在回答之后，
+  // 因此回答之后发生的切割并入组末尾即是正确位置，不必另起一个只装切割的过程组。
+  if (!options.isStreaming) {
+    return [...finalBlocks, buildProcessGroupItem(blocks.slice(0, trailingTextStartIndex), events)]
+  }
 
-  // 终态：最终回复独立在前，一行过程摘要收尾；流式中仍保留「过程在上、实时回答在下」的阅读顺序。
-  if (!options.isStreaming) return [...finalBlocks, ...processItems]
-
-  return [...processItems, ...finalBlocks]
+  // 流式中保留「过程在上、实时回答在下」的阅读顺序，回答之后的切割另起收尾。
+  const processItems = [buildProcessGroupItem(blocks.slice(0, trailingTextStartIndex), headEvents)]
+  return [...processItems, ...finalBlocks, ...tailItems]
 }
 
 function buildProcessGroupItem(
   blocks: SDKContentBlock[],
-  events: SDKSystemMessage[],
+  events: SpineCutEvent[],
+  groupKey: 'process-main' | 'process-tail' = 'process-main',
 ): AssistantTurnRenderItem {
-  return {
-    type: 'process-group',
-    items: blocks.map((block, index) => ({ block, index })),
-    events,
+  // 锚点是整轮顶层块下标；本组从 blocks 头部开始承载，因此可直接与组内下标比较。
+  // 超出本组范围的锚点（如工具行已收完）按边界收拢到末尾，保证事件不会丢。
+  const sorted = [...events].sort((left, right) => left.blockIndex - right.blockIndex)
+  const entries: ProcessGroupEntry[] = []
+  let eventCursor = 0
+  const flushEventsUpTo = (blockIndex: number): void => {
+    while (eventCursor < sorted.length && sorted[eventCursor]!.blockIndex <= blockIndex) {
+      entries.push({ kind: 'spine_cut', event: sorted[eventCursor]! })
+      eventCursor += 1
+    }
   }
-}
-
-function buildProcessGroupItems(
-  blocks: SDKContentBlock[],
-  events: SDKSystemMessage[] = [],
-): AssistantTurnRenderItem[] {
-  return [buildProcessGroupItem(blocks, events)]
+  blocks.forEach((block, index) => {
+    flushEventsUpTo(index)
+    entries.push({ kind: 'block', item: { block, index } })
+  })
+  flushEventsUpTo(Number.POSITIVE_INFINITY)
+  return { type: 'process-group', groupKey, entries, events: sorted }
 }
 
 /**
@@ -178,7 +216,7 @@ function stabilizeProcessBlockReferences(
   return previous
 }
 
-function buildProcessGroupSummary(blocks: SDKContentBlock[], events: SDKSystemMessage[] = []): string {
+function buildProcessGroupSummary(blocks: SDKContentBlock[], events: SpineCutEvent[] = []): string {
   let toolCount = 0
   let messageCount = 0
 
@@ -564,11 +602,6 @@ export function ProcessBlockGroup({ blocks, events = [], isStreaming, renderChil
         >
           <div ref={contentInnerRef} className="space-y-2">
             {renderContentChildren()}
-            {events.map((event, index) => (
-              <div key={`spine-cut-${index}`} className={cn(isStreaming && 'opacity-80')}>
-                <SpineCutProcessRow message={event} />
-              </div>
-            ))}
           </div>
         </div>
       )}

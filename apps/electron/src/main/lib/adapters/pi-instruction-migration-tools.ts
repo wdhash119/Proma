@@ -7,12 +7,11 @@
  * 顺序约束：Migrate 必须紧跟一次 Inspect，且两侧版本在此期间不得变化。
  */
 
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Type } from 'typebox'
 import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 import { normalizePathForCompare } from '@proma/shared'
-import { getConfigDirName } from '../config-paths'
+import { getAgentWorkspacesDir } from '../config-paths'
 import { getProjectFilesPath } from '../agent-workspace-manager'
 import { getSessionCheckoutHistory } from '../agent-session-manager'
 import {
@@ -100,7 +99,8 @@ export function resolveInstructionContext(input: InstructionToolContextInput): P
     projectRoot: worktree ?? canonicalProjectRoot,
     canonicalProjectRoot,
     workspaceSlug: input.workspaceSlug,
-    workspaceRoot: join(homedir(), getConfigDirName(), 'agent-workspaces', input.workspaceSlug),
+    // 数据根可能已迁移：统一走 config-paths，禁止按 home 目录直拼。
+    workspaceRoot: join(getAgentWorkspacesDir(), input.workspaceSlug),
     isWorktree: Boolean(worktree),
     allowInstructionMaintenance: writable,
     allowProfileMigration: writable,

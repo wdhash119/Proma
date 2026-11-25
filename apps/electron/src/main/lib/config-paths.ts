@@ -5,8 +5,8 @@
  * 所有用户配置存储在 ~/.proma/ 目录下。
  */
 
-import { join, basename } from 'node:path'
-import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync } from 'node:fs'
+import { join, basename, isAbsolute } from 'node:path'
+import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { rmSyncWithRetry } from './fs-retry'
 
@@ -41,13 +41,120 @@ export function getConfigDirName(): string {
 }
 
 /**
+ * 数据根指针文件
+ *
+ * 存放于默认数据根（~/.proma 或 ~/.proma-dev）之下，指向用户迁移后的实际数据目录。
+ * 缺失即表示使用默认位置；损坏或目标缺失时回退默认位置，不删除指针、不抛错。
+ */
+export const DATA_ROOT_POINTER_FILENAME = 'data-root.json'
+
+export interface DataRootPointer {
+  version: 1
+  /** 迁移后的数据根绝对路径 */
+  target: string
+  /** 迁移完成时间（ISO 8601） */
+  migratedAt: string
+}
+
+/**
+ * 默认数据根：不读取指针的原始位置。
+ *
+ * 迁移服务需要同时拿到“用户当前的根”和“默认根”才能判断是否已迁移，
+ * 因此这里只按目录名拼接，不做任何目录创建或指针解析。
+ */
+export function getDefaultConfigDir(): string {
+  return join(homedir(), getConfigDirName())
+}
+
+/** 默认数据根下的指针文件路径。 */
+export function getDataRootPointerPath(): string {
+  return join(getDefaultConfigDir(), DATA_ROOT_POINTER_FILENAME)
+}
+
+/**
+ * 读取并解析指针文件（纯读取，不创建目录、不缓存）。
+ *
+ * 返回 null 表示没有可用指针：文件缺失、JSON 损坏、版本不符或 target 非法。
+ * 指针损坏时不删除文件，便于用户排查；调用方自行决定是否 warning。
+ */
+export function readDataRootPointer(defaultRoot: string): DataRootPointer | null {
+  const pointerPath = join(defaultRoot, DATA_ROOT_POINTER_FILENAME)
+  if (!existsSync(pointerPath)) return null
+
+  try {
+    const raw = readFileSync(pointerPath, 'utf-8')
+    const data = JSON.parse(raw) as Partial<DataRootPointer> | null
+    if (!data || typeof data !== 'object') return null
+    if (data.version !== 1) return null
+    if (typeof data.target !== 'string' || !isAbsolute(data.target)) return null
+    if (typeof data.migratedAt !== 'string') return null
+    return { version: 1, target: data.target, migratedAt: data.migratedAt }
+  } catch (error) {
+    console.warn('[配置] 读取数据目录指针失败，回退默认目录:', error)
+    return null
+  }
+}
+
+/**
+ * 按指针解析出实际数据根（纯函数，不缓存、不创建目录）。
+ *
+ * 只有指针合法且目标目录存在时才返回目标；否则回退 defaultRoot。
+ * 目标目录必须是目录而不是同名文件，避免把文件当数据根。
+ */
+export function resolveConfigDirFromDefault(defaultRoot: string): string {
+  const pointer = readDataRootPointer(defaultRoot)
+  if (!pointer) return defaultRoot
+
+  try {
+    if (!statSync(pointer.target).isDirectory()) {
+      console.warn('[配置] 数据目录指针目标不是目录，回退默认目录:', pointer.target)
+      return defaultRoot
+    }
+  } catch {
+    console.warn('[配置] 数据目录指针目标不存在，回退默认目录:', pointer.target)
+    return defaultRoot
+  }
+
+  return pointer.target
+}
+
+/**
+ * 模块级缓存的数据根解析结果，按默认根键控。
+ *
+ * 迁移只写指针，不改变当前进程使用的根；重启后才会生效，因此同一默认根下解析结果保持稳定。
+ * 键控而非单值缓存：测试会 mock node:os 的 homedir 到临时目录，默认根变化时必须重新解析，
+ * 否则先加载的模块会把真实数据根钉死，导致后续测试的 fixture 路径全部错位。
+ */
+let _resolvedConfigDirCache: { defaultRoot: string; resolved: string } | undefined
+
+/**
+ * 解析当前生效的数据根，但不创建目录。
+ *
+ * 供只需要路径、不希望产生 mkdir 副作用的只读探测使用（如 computer-use 驱动探测）。
+ */
+export function resolveConfigDir(): string {
+  const defaultRoot = getDefaultConfigDir()
+  if (_resolvedConfigDirCache && _resolvedConfigDirCache.defaultRoot === defaultRoot) {
+    return _resolvedConfigDirCache.resolved
+  }
+  // 解析过程只做同步文件读取，不得回调 getConfigDir / resolveConfigDir 自身，避免递归。
+  const resolved = resolveConfigDirFromDefault(defaultRoot)
+  _resolvedConfigDirCache = { defaultRoot, resolved }
+  if (resolved !== defaultRoot) {
+    console.log(`[配置] 使用自定义数据目录: ${resolved}`)
+  }
+  return resolved
+}
+
+/**
  * 获取配置目录路径
  *
- * 开发模式返回 ~/.proma-dev/，正式版本返回 ~/.proma/。
+ * 优先使用 data-root.json 指向的自定义数据根，否则使用默认根
+ * （开发模式 ~/.proma-dev/，正式版本 ~/.proma/）。
  * 如果目录不存在则自动创建。
  */
 export function getConfigDir(): string {
-  const configDir = join(homedir(), getConfigDirName())
+  const configDir = resolveConfigDir()
 
   if (!existsSync(configDir)) {
     mkdirSync(configDir, { recursive: true })
@@ -55,6 +162,11 @@ export function getConfigDir(): string {
   }
 
   return configDir
+}
+
+/** 仅供测试：清空数据根解析缓存，让下一次 getConfigDir() 重新解析指针。 */
+export function resetConfigDirCacheForTests(): void {
+  _resolvedConfigDirCache = undefined
 }
 
 /**

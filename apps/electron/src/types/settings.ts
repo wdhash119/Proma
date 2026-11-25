@@ -498,6 +498,10 @@ export interface AppSettings {
   autoCleanupTempOnStart?: boolean
   /** 自动清理 N 天前已归档会话的 SDK 数据（0 = 禁用，默认 0） */
   autoCleanupArchivedDays?: number
+  /** 过期孤儿数据的天数阈值（7 / 30 / 90，缺省 30） */
+  orphanCleanupDays?: number
+  /** 启动时自动清理过期孤儿数据，默认关闭 */
+  autoCleanupOrphansOnStart?: boolean
   /**
    * Agent 代创建 git commit / PR 时是否附加 Proma 推广标识。
    * 默认 true：commit trailer `Made-with: Proma`，PR body 末尾含 https://proma.cool 与 https://github.com/proma-ai/Proma。
@@ -679,4 +683,138 @@ export const STORAGE_IPC_CHANNELS = {
   GET_STATS: 'storage:get-stats',
   /** 仅清理临时文件（启动时/快速清理） */
   CLEANUP_TEMP: 'storage:cleanup-temp',
+  /** 扫描过期孤儿数据（仅预览，不删除） */
+  SCAN_ORPHANS: 'storage:scan-orphans',
+  /** 删除已预览并确认的过期孤儿数据 */
+  CLEANUP_ORPHANS: 'storage:cleanup-orphans',
 } as const
+
+/** 数据目录管理 IPC 通道 */
+export const DATA_ROOT_IPC_CHANNELS = {
+  /** 读取当前/默认数据根与运行中会话数 */
+  GET_INFO: 'data-root:get-info',
+  /** 迁移前检查目标目录 */
+  PREFLIGHT: 'data-root:preflight',
+  /** 执行数据根迁移（复制 → 校验 → 写指针） */
+  MIGRATE: 'data-root:migrate',
+  /** 删除默认数据根下的旧数据（仅迁移后可用） */
+  DELETE_OLD: 'data-root:delete-old',
+  /** 删除指针文件，回滚到默认数据根 */
+  ROLLBACK: 'data-root:rollback',
+  /** 重启应用使迁移生效 */
+  RESTART: 'data-root:restart',
+  /** 选择目标目录 */
+  SELECT_DIR: 'data-root:select-dir',
+  /** 迁移进度事件（主进程 → 渲染进程） */
+  PROGRESS: 'data-root:progress',
+} as const
+
+/** 清理结果：临时文件、孤儿数据、归档数据共用 */
+export interface StorageCleanupResult {
+  freedBytes: number
+  deletedCount: number
+  errors: string[]
+}
+
+/** 兼容命名：孤儿/归档清理仍返回同一结构。 */
+export type CleanupResult = StorageCleanupResult
+
+/** 孤儿数据类目 */
+export type OrphanCategoryKey =
+  | 'agent-sessions'
+  | 'sdk-artifacts'
+  | 'spine-sidecars'
+  | 'session-attachments'
+  | 'orphan-workspaces'
+  | 'legacy-sdk'
+
+/** 单条孤儿数据明细 */
+export interface OrphanEntry {
+  /** 绝对路径 */
+  path: string
+  sizeBytes: number
+  /** 最后修改时间（目录取递归最大 mtime），Unix 毫秒 */
+  lastModified: number
+}
+
+/** 单个孤儿类目的预览 */
+export interface OrphanCategoryPreview {
+  key: OrphanCategoryKey
+  label: string
+  count: number
+  sizeBytes: number
+  /** 每类最多 200 条明细 */
+  entries: OrphanEntry[]
+  totalEntries: number
+}
+
+/** 孤儿扫描结果 */
+export interface OrphanScanResult {
+  days: number
+  categories: OrphanCategoryPreview[]
+  totalCount: number
+  totalSizeBytes: number
+  scannedAt: number
+}
+
+/** 数据根信息 */
+export interface DataRootInfo {
+  /** 当前生效的数据根 */
+  currentRoot: string
+  /** 默认数据根（~/.proma 或 ~/.proma-dev） */
+  defaultRoot: string
+  /** 是否已迁移到自定义位置 */
+  isCustom: boolean
+  /** 迁移时间（ISO 8601），仅 isCustom 时存在 */
+  migratedAt?: string
+  /** 默认数据根下是否仍有旧数据 */
+  oldDataPresent: boolean
+  /** 旧数据大小（字节，排除指针文件） */
+  oldDataSizeBytes?: number
+  /** 运行中 Agent 会话数；> 0 时禁止迁移/删除/回滚 */
+  runningSessions: number
+}
+
+/** 迁移前的目标目录检查结果 */
+export interface DataMigrationPreflightResult {
+  ok: boolean
+  /** 不可迁移的原因（ok=false 时给出） */
+  reason?: string
+  sourceSizeBytes: number
+  sourceFileCount: number
+  /** 目标所在磁盘剩余空间；无法探测时为 0 */
+  targetFreeBytes: number
+}
+
+/** 兼容命名 */
+export type PreflightResult = DataMigrationPreflightResult
+
+/** 迁移进度阶段 */
+export type DataMigrationPhase = 'scan' | 'copy' | 'verify' | 'done' | 'error'
+
+/** 迁移进度事件载荷 */
+export interface DataMigrationProgress {
+  phase: DataMigrationPhase
+  copiedFiles: number
+  totalFiles: number
+  copiedBytes: number
+  totalBytes: number
+  message?: string
+}
+
+/** 迁移结果 */
+export interface DataMigrationResult {
+  success: boolean
+  error?: string
+  copiedFiles: number
+  copiedBytes: number
+}
+
+/** 兼容命名 */
+export type MigrationResult = DataMigrationResult
+
+/** 回滚结果 */
+export interface DataRootRollbackResult {
+  success: boolean
+  error?: string
+}

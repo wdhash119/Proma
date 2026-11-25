@@ -16,4 +16,9 @@ describe('设置标签页运行时回退', () => {
     expect(normalizeSettingsTab('personas')).toBe('personas')
     expect(normalizeSettingsTab('general')).toBe('general')
   })
+
+  test('Given 已并入数据管理页的历史 migration 标签页 When 校验 Then 映射到 storage', () => {
+    expect(normalizeSettingsTab('migration')).toBe('storage')
+    expect(normalizeSettingsTab('storage')).toBe('storage')
+  })
 })

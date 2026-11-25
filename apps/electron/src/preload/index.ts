@@ -173,8 +173,15 @@ import type {
   MicPermissionResult,
   TrayCreateSessionData,
   TrayOpenAgentSessionData,
+  DataRootInfo,
+  DataMigrationPreflightResult,
+  DataMigrationProgress,
+  DataMigrationResult,
+  DataRootRollbackResult,
+  OrphanScanResult,
+  StorageCleanupResult,
 } from '../types'
-import { QUICK_TASK_IPC_CHANNELS, TRAY_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS } from '../types'
+import { QUICK_TASK_IPC_CHANNELS, TRAY_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DATA_ROOT_IPC_CHANNELS } from '../types'
 import type {
   SessionArtifact,
   ChangeRequestBinding,
@@ -1162,6 +1169,36 @@ export interface ElectronAPI {
   getStorageStats: () => Promise<unknown>
   /** 清理临时文件（快速） */
   cleanupTempStorage: () => Promise<unknown>
+
+  // ===== 孤儿数据清理 =====
+
+  storage: {
+    /** 扫描过期孤儿数据（只预览，不删除） */
+    scanOrphans: (days: number) => Promise<OrphanScanResult>
+    /** 删除最近一次预览中确认过的过期孤儿数据 */
+    cleanupOrphans: (days: number) => Promise<StorageCleanupResult>
+  }
+
+  // ===== 数据目录迁移 =====
+
+  dataRoot: {
+    /** 当前/默认数据根、旧数据与运行中会话信息 */
+    getInfo: () => Promise<DataRootInfo>
+    /** 迁移前检查目标目录 */
+    preflight: (target: string) => Promise<DataMigrationPreflightResult>
+    /** 复制 → 校验 → 写指针（重启后生效） */
+    migrate: (target: string) => Promise<DataMigrationResult>
+    /** 删除默认数据根下的旧数据 */
+    deleteOld: () => Promise<StorageCleanupResult>
+    /** 删除指针文件，回滚到默认数据根 */
+    rollback: () => Promise<DataRootRollbackResult>
+    /** 重启应用使迁移生效 */
+    restart: () => Promise<void>
+    /** 选择新的数据目录 */
+    selectDirectory: () => Promise<string | null>
+    /** 订阅迁移进度；返回取消订阅函数 */
+    onProgress: (callback: (progress: DataMigrationProgress) => void) => () => void
+  }
 
   // ===== 定时任务（Automation）=====
   /** 获取全部定时任务 */
@@ -2675,6 +2712,30 @@ const electronAPI: ElectronAPI = {
 
   cleanupTempStorage: () => {
     return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_TEMP)
+  },
+
+  // ===== 孤儿数据清理 =====
+
+  storage: {
+    scanOrphans: (days: number) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.SCAN_ORPHANS, days),
+    cleanupOrphans: (days: number) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_ORPHANS, days),
+  },
+
+  // ===== 数据目录迁移 =====
+
+  dataRoot: {
+    getInfo: () => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.GET_INFO),
+    preflight: (target: string) => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.PREFLIGHT, target),
+    migrate: (target: string) => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.MIGRATE, target),
+    deleteOld: () => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.DELETE_OLD),
+    rollback: () => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.ROLLBACK),
+    restart: () => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.RESTART),
+    selectDirectory: () => ipcRenderer.invoke(DATA_ROOT_IPC_CHANNELS.SELECT_DIR),
+    onProgress: (callback: (progress: DataMigrationProgress) => void) => {
+      const listener = (_: unknown, progress: DataMigrationProgress): void => callback(progress)
+      ipcRenderer.on(DATA_ROOT_IPC_CHANNELS.PROGRESS, listener)
+      return () => { ipcRenderer.removeListener(DATA_ROOT_IPC_CHANNELS.PROGRESS, listener) }
+    },
   },
 
   // ===== 定时任务（Automation）=====

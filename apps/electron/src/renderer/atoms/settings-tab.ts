@@ -27,7 +27,6 @@ const SETTINGS_TAB_IDS = [
   'bots',
   'shortcuts',
   'voice-input',
-  'migration',
   'storage',
   'about-you',
 ] as const
@@ -38,10 +37,25 @@ export type SettingsTab = (typeof SETTINGS_TAB_IDS)[number]
 export const DEFAULT_SETTINGS_TAB: SettingsTab = 'channels'
 
 /**
+ * 已移除标签页的历史值到现存标签页的映射。
+ * 'migration'（原「数据迁移」页）已并入 'storage'（现「数据管理」页）。
+ */
+const LEGACY_SETTINGS_TAB_ALIASES: Record<string, SettingsTab> = {
+  migration: 'storage',
+}
+
+/**
  * 校验运行时标签页值，未知值（例如已移除的 'chat-history' 或热更新残留状态）
  * 回退默认标签页，避免设置面板空白。
+ *
+ * 已并入其它页面的历史标签页在 whitelist 判断前先做显式映射，
+ * 避免把仍指向旧页面的状态回退成默认页。
  */
 export function normalizeSettingsTab(raw: unknown): SettingsTab {
+  if (typeof raw === 'string') {
+    const aliased = LEGACY_SETTINGS_TAB_ALIASES[raw]
+    if (aliased) return aliased
+  }
   return typeof raw === 'string' && (SETTINGS_TAB_IDS as readonly string[]).includes(raw)
     ? raw as SettingsTab
     : DEFAULT_SETTINGS_TAB

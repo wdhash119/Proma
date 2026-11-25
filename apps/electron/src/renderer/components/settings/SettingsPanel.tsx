@@ -22,8 +22,7 @@ import {
   ArrowLeft,
   Keyboard,
   Mic,
-  HardDriveDownload,
-  HardDrive,
+  Database,
   Sparkles,
   Monitor,
   Layers,
@@ -63,8 +62,7 @@ import { PersonaSettings } from "./PersonaSettings";
 import { BotHubSettings } from "./BotHubSettings";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { VoiceInputSettings } from "./VoiceInputSettings";
-import { MigrationSettings } from "./MigrationSettings";
-import { StorageSettings } from "./StorageSettings";
+import { DataManagementSettings } from "./DataManagementSettings";
 import { OnboardingSettings } from "./OnboardingSettings";
 import { AboutYouSettings } from "./AboutYouSettings";
 import { useOpenSession } from '@/hooks/useOpenSession'
@@ -125,8 +123,7 @@ const VOICE_INPUT_TAB: TabItem = {
 };
 /** 尾部 Tabs */
 const TAIL_TABS: TabItem[] = [
-  { id: "migration", label: "数据迁移", icon: <HardDriveDownload size={16} /> },
-  { id: "storage", label: "磁盘管理", icon: <HardDrive size={16} /> },
+  { id: "storage", label: "数据管理", icon: <Database size={16} /> },
   { id: "appearance", label: "外观设置", icon: <Palette size={16} /> },
   ONBOARDING_TAB,
   { id: "about", label: "关于/更新", icon: <Info size={16} /> },
@@ -161,10 +158,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <ShortcutSettings />;
     case "voice-input":
       return <VoiceInputSettings />;
-    case "migration":
-      return <MigrationSettings />;
     case "storage":
-      return <StorageSettings />;
+      return <DataManagementSettings />;
     case "onboarding":
       return <OnboardingSettings />;
     default:

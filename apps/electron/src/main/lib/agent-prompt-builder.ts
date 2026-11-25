@@ -6,11 +6,10 @@
 import type { PromaPermissionMode, SessionWorkbenchLayout } from '@proma/shared'
 import { buildPersonaPromptSection, type Persona } from '@proma/shared'
 import { lstatSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { getUserProfile } from './user-profile-service'
 import { getAgentWorkspaceBySlug, getProjectFilesPath, getWorkspaceMcpConfig, type WorkspaceMemoryGuidance } from './agent-workspace-manager'
-import { getConfigDirName } from './config-paths'
+import { getAgentWorkspacesDir } from './config-paths'
 import { buildGitAttributionPromptSection, isGitAttributionEnabled } from './agent-git-attribution'
 import { getSettings } from './settings-service'
 import { hasRootProjectAgentsInstruction, type ProjectInstructionManifest } from './project-instruction-resolver'
@@ -61,8 +60,8 @@ function buildWorkspacePaths(
   sessionWorkbenchLayout: SessionWorkbenchLayout = 'legacy-context',
   projectAgentsExists = false,
 ) {
-  const configDirName = getConfigDirName()
-  const workspaceRoot = join(homedir(), configDirName, 'agent-workspaces', workspaceSlug)
+  // 数据根可能已迁移：统一走 config-paths，禁止按 home 目录直拼。
+  const workspaceRoot = join(getAgentWorkspacesDir(), workspaceSlug)
   const sessionDir = join(workspaceRoot, sessionId)
   const projectRoot = getProjectFilesPath(workspaceSlug)
   const effectiveAgentCwd = agentCwd ?? projectRoot

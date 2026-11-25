@@ -11,7 +11,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
-import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
+import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, DATA_ROOT_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
   VoiceDictationAudioChunkInput,
@@ -27,6 +27,7 @@ import type {
   VoiceDictationTextDeliveryInput,
   VoiceDictationToggleInput,
   MicPermissionResult,
+  DataMigrationProgress,
 } from '../types'
 import type {
   RuntimeStatus,
@@ -294,7 +295,14 @@ import { askUserService } from './lib/agent-ask-user-service'
 import { exitPlanService } from './lib/agent-exit-plan-service'
 import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
-import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/storage-service'
+import { calculateStorageStats, cleanupStorage, cleanupTempFiles, scanOrphanData, cleanupOrphanData } from './lib/storage-service'
+import {
+  deleteOldData,
+  getDataRootInfo,
+  migrateDataRoot,
+  preflightDataMigration,
+  rollbackDataRoot,
+} from './lib/data-migration-service'
 import {
   listAgentWorkspaces,
   listAgentWorkspacesWithProjectRootStatus,
@@ -1352,6 +1360,24 @@ let liveCompactSyncService: LiveCompactSyncService | undefined
 function getLiveCompactSyncService(): LiveCompactSyncService {
   liveCompactSyncService ??= createLiveCompactSyncService({ configDir: getConfigDir() })
   return liveCompactSyncService
+}
+
+/** 目录选择对话框：项目新建与数据目录迁移共用同一套窗口/取消语义。 */
+async function showDirectoryPicker(options: {
+  title: string
+  allowCreate?: boolean
+  buttonLabel?: string
+}): Promise<string | null> {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!win) return null
+
+  const result = await dialog.showOpenDialog(win, {
+    title: options.title,
+    properties: options.allowCreate ? ['openDirectory', 'createDirectory'] : ['openDirectory'],
+    ...(options.buttonLabel ? { buttonLabel: options.buttonLabel } : {}),
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0] ?? null
 }
 
 export function registerIpcHandlers(): void {
@@ -3497,17 +3523,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.OPEN_FOLDER_DIALOG,
     async (): Promise<{ path: string; name: string } | null> => {
-      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (!win) return null
-
-      const result = await dialog.showOpenDialog(win, {
-        properties: ['openDirectory'],
-        title: '选择文件夹',
-      })
-
-      if (result.canceled || result.filePaths.length === 0) return null
-
-      const folderPath = result.filePaths[0]!
+      const folderPath = await showDirectoryPicker({ title: '选择文件夹' })
+      if (!folderPath) return null
       const name = basename(folderPath) || 'folder'
       return { path: folderPath, name }
     }
@@ -4940,6 +4957,59 @@ export function registerIpcHandlers(): void {
     return cleanupTempFiles()
   })
 
+  /** 孤儿清理阈值只接受 7/30/90，其他值一律按 30 处理。 */
+  const normalizeOrphanCleanupDays = (value: unknown): number => {
+    return value === 7 || value === 30 || value === 90 ? value : 30
+  }
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.SCAN_ORPHANS, async (_, days: unknown) => {
+    return scanOrphanData(normalizeOrphanCleanupDays(days), { configDir: getConfigDir() })
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_ORPHANS, async (_, days: unknown) => {
+    return cleanupOrphanData(normalizeOrphanCleanupDays(days), { configDir: getConfigDir() })
+  })
+
+  // ===== 数据目录迁移 =====
+
+  const sendDataRootProgress = (progress: DataMigrationProgress): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue
+      win.webContents.send(DATA_ROOT_IPC_CHANNELS.PROGRESS, progress)
+    }
+  }
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.GET_INFO, async () => {
+    return getDataRootInfo()
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.PREFLIGHT, async (_, target: unknown) => {
+    return preflightDataMigration(typeof target === 'string' ? target : '')
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.MIGRATE, async (_, target: unknown) => {
+    return migrateDataRoot(typeof target === 'string' ? target : '', sendDataRootProgress)
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.DELETE_OLD, async () => {
+    return deleteOldData()
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.ROLLBACK, async () => {
+    return rollbackDataRoot()
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.RESTART, async (): Promise<void> => {
+    // 先让 invoke 的回复有机会发出，再退出；否则渲染进程会看到未处理的 rejection。
+    app.relaunch()
+    setTimeout(() => app.exit(0), 150)
+  })
+
+  ipcMain.handle(DATA_ROOT_IPC_CHANNELS.SELECT_DIR, async (): Promise<string | null> => {
+    // 复用与「新建项目」相同的目录选择实现，只是允许用户在对话框里新建目录。
+    return showDirectoryPicker({ title: '选择新的数据目录', allowCreate: true, buttonLabel: '选择' })
+  })
+
   // 启动时自动清理临时文件
   const runStartupCleanup = async (): Promise<void> => {
     try {
@@ -4956,9 +5026,26 @@ export function registerIpcHandlers(): void {
           categories: ['agent-sessions', 'sdk-config'],
           orphansOnly: false,
           archivedBeforeDays: archiveDays,
+          roots: { configDir: getConfigDir() },
         })
         if (result.freedBytes > 0) {
           console.log(`[存储清理] 启动时清理了 ${(result.freedBytes / 1024 / 1024).toFixed(1)} MB 归档数据`)
+        }
+      }
+
+      // 过期孤儿数据：默认关闭；开启时先扫描取得当前预览集，再在安全网内清理。
+      if (settings.autoCleanupOrphansOnStart === true) {
+        const orphanDays = normalizeOrphanCleanupDays(settings.orphanCleanupDays ?? 30)
+        const roots = { configDir: getConfigDir() }
+        await scanOrphanData(orphanDays, roots)
+        const result = await cleanupOrphanData(orphanDays, roots)
+        if (result.deletedCount > 0) {
+          console.log(
+            `[存储清理] 启动时清理了 ${(result.freedBytes / 1024 / 1024).toFixed(1)} MB 过期孤儿数据（${result.deletedCount} 项）`,
+          )
+        }
+        for (const error of result.errors) {
+          console.warn('[存储清理] 启动孤儿清理提示:', error)
         }
       }
     } catch (e) {

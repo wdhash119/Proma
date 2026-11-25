@@ -1,5 +1,7 @@
 import { getAgentSessionMeta, getAgentSessionSDKMessages } from './agent-session-manager'
-import { getBundledCliPath, getConfigDirName } from './config-paths'
+import { homedir } from 'node:os'
+import { sep } from 'node:path'
+import { getAgentSessionMessagesPath, getBundledCliPath } from './config-paths'
 
 /** 最大回填消息条数 */
 export const MAX_CONTEXT_MESSAGES = 20
@@ -12,8 +14,16 @@ interface SessionPromptHint {
   workspaceSlug?: string
 }
 
+/**
+ * 会话历史路径：按当前数据根（可能已迁移）取真实路径，
+ * 位于 home 下时回缩成 `~/...` 便于阅读。
+ */
 function getSessionHistoryPath(sessionId: string): string {
-  return `~/${getConfigDirName()}/agent-sessions/${sessionId}.jsonl`
+  const absolutePath = getAgentSessionMessagesPath(sessionId)
+  const home = homedir()
+  return absolutePath.startsWith(home)
+    ? `~${absolutePath.slice(home.length).split(sep).join('/')}`
+    : absolutePath
 }
 
 function canUseSessionCleaner(): boolean {

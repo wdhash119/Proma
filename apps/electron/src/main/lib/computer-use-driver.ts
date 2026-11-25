@@ -15,8 +15,8 @@
 import { execFile } from 'node:child_process'
 import { statSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, posix, win32 } from 'node:path'
-import { getConfigDirName } from './config-paths'
+import { isAbsolute, posix, win32 } from 'node:path'
+import { resolveConfigDir } from './config-paths'
 
 /** 驱动调用错误分类。 */
 export type ComputerUseDriverErrorCode =
@@ -282,8 +282,8 @@ function createDefaultEnvironment(): ComputerUseDriverEnvironment {
   return {
     platform: process.platform,
     home,
-    // 只拼接目录名，不触发 config-paths 的目录创建副作用。
-    configDir: join(home, getConfigDirName()),
+    // 只解析数据根，不触发 config-paths 的目录创建副作用（数据根可能已迁移）。
+    configDir: resolveConfigDir(),
     localAppData: process.env.LOCALAPPDATA,
     path: process.env.PATH ?? '',
     recordVersion: statRecordVersion,

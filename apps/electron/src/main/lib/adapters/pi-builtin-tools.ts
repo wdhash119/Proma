@@ -36,6 +36,7 @@ import {
   runAutomationNow,
 } from '../automation-scheduler'
 import { getAgentSessionMeta, updateAgentSessionMeta } from '../agent-session-manager'
+import type { DelegationPolicySnapshot } from '../delegation-target'
 import { appendCheckoutEntry, checkoutFromActiveWorktree } from '../session-checkout'
 import { readWorktreeHeadCommit } from '../session-checkout-restore'
 import { getMainWindow } from '../main-window-store'
@@ -133,6 +134,8 @@ interface PiBuiltinToolsContext {
   requestPromaSelfApproval?: import('../proma-self-controller').PromaSelfApprovalRequester
   /** 已解析的项目规则维护上下文；省略时按工作区与会话现场解析。 */
   instructionContext?: import('../project-instruction-state').ProjectInstructionContext
+  /** 本轮委派策略快照；与系统提示词同源，保证工具 schema 与文案一致。 */
+  delegationPolicy?: DelegationPolicySnapshot
 }
 
 function jsonToolResult(payload: unknown): AgentToolResult<unknown> {
@@ -1694,6 +1697,7 @@ export async function buildPiBuiltinTools(
         workspaceId: ctx.workspaceId,
         permissionMode: ctx.permissionMode,
         triggeredBy: ctx.triggeredBy === 'external' ? 'user' : ctx.triggeredBy,
+        delegationPolicy: ctx.delegationPolicy,
       })
       tools.push(...collaborationTools as ToolDefinition[])
     } catch (error) {

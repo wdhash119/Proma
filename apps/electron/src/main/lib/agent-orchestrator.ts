@@ -70,6 +70,7 @@ import { exitPlanService } from './agent-exit-plan-service'
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
+import { buildDelegationPolicySnapshot } from './delegation-target'
 import { shouldForceVisionRelayRead } from './vision-relay-policy'
 import { resolveInstructionContext } from './adapters/pi-instruction-migration-tools'
 import type { PromaSelfApprovalRequester } from './proma-self-controller'
@@ -1114,6 +1115,9 @@ export class AgentOrchestrator {
         return hasPromaSelfProjectConsent(answers)
       }
 
+      // 委派策略快照：本轮工具 schema、工具文案与系统提示词共用同一对象，保证同轮一致。
+      const delegationPolicySnapshot = buildDelegationPolicySnapshot(sessionMeta?.delegationPolicy, listChannels())
+
       const builtinMcpResult = await buildPiBuiltinTools(piSdk, {
         sessionId,
         channelId,
@@ -1131,6 +1135,7 @@ export class AgentOrchestrator {
         productivityTools,
         requestPromaSelfApproval,
         instructionContext,
+        delegationPolicy: delegationPolicySnapshot,
       })
       piBuiltinTools = builtinMcpResult.tools
       const collaborationAvailable = builtinMcpResult.collaborationAvailable
@@ -1331,6 +1336,7 @@ export class AgentOrchestrator {
         selfControlAvailable,
         instructionContext,
         persona: sessionPersona,
+        delegationPolicy: delegationPolicySnapshot,
       }) + (automationContext ? `\n\n## 定时任务执行上下文\n\n${automationContext}` : '')
       const startAutoTitleGeneration = (): void => {
         if (titleGenerationStarted) return

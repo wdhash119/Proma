@@ -4,7 +4,8 @@
  */
 
 import type { PromaPermissionMode, SessionWorkbenchLayout } from '@proma/shared'
-import { buildPersonaPromptSection, type Persona } from '@proma/shared'
+import { buildPersonaPromptSection, resolveDelegationConcurrencyCap, type Persona } from '@proma/shared'
+import { MAX_RUNNING_DELEGATIONS_PER_PARENT } from './agent-collaboration-utils'
 import { lstatSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { getUserProfile } from './user-profile-service'
@@ -18,6 +19,7 @@ import { buildProjectMapActionPrompt, readProjectMapReviewState } from './projec
 import { instructionMaintenancePrompt } from './project-instruction-maintenance'
 import type { ProjectInstructionContext } from './project-instruction-state'
 import type { BrowserUserContextSnapshot } from './browser-controller'
+import type { DelegationPolicySnapshot } from './delegation-target'
 import type { VaultUserContextSnapshot } from './vault-service'
 import type { ProductivityToolsSettings } from '../../types'
 
@@ -51,6 +53,8 @@ interface SystemPromptContext {
   instructionContext?: ProjectInstructionContext
   /** 会话生效的人设；默认助手与空正文不注入，产品提示词契约始终保留。 */
   persona?: Persona
+  /** 本轮委派策略快照；与协作工具 schema 同源，保证提示词与工具参数一致。 */
+  delegationPolicy?: DelegationPolicySnapshot
 }
 
 function buildWorkspacePaths(
@@ -140,9 +144,22 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     : undefined
   const sessionContextDir = workspace?.sessionContextDir ?? '.context'
   const projectContextDir = workspace?.workspaceContextDir ?? '.context'
-  const modelRule = ctx.currentModelId?.trim()
-    ? `委派默认复用当前模型 \`${ctx.currentModelId.trim()}\`；用户指定其他模型时，先查询可用模型。`
-    : '未提供当前模型时不自行选择其他模型。'
+  const delegationMode = ctx.delegationPolicy?.effectiveMode ?? 'default'
+  const policyModelId = ctx.delegationPolicy?.policy?.modelId
+  // 委派上限从第一轮就对 Agent 可见；用户未设置时不额外声明（与历史行为一致）。
+  const delegationCap = ctx.delegationPolicy?.policy?.maxConcurrent !== undefined
+    ? resolveDelegationConcurrencyCap(ctx.delegationPolicy.policy, MAX_RUNNING_DELEGATIONS_PER_PARENT)
+    : undefined
+  const capRule = delegationCap !== undefined
+    ? `本会话同时运行的委派子会话上限 ${delegationCap} 个，一次批量委派不得超过剩余额度。`
+    : ''
+  const modelRule = delegationMode === 'inherit'
+    ? `委派模型已由用户固定为当前对话模型；不要也不能为委派指定其他模型。${capRule}`
+    : delegationMode === 'specified'
+      ? `委派模型已由用户固定为 \`${policyModelId ?? '既定模型'}\`；不要也不能为委派指定其他模型。${capRule}`
+      : (ctx.currentModelId?.trim()
+        ? `委派默认复用当前模型 \`${ctx.currentModelId.trim()}\`；用户指定其他模型时，先查询可用模型。`
+        : '未提供当前模型时不自行选择其他模型。') + capRule
   const canMaintainProjectKnowledge = ctx.projectKnowledgeMaintenanceApproved === true
   const agentsMaintenanceMode = canMaintainProjectKnowledge
     ? '已获明确授权：基于本轮核验过的项目证据主动创建或小幅更新'
@@ -166,7 +183,9 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     WORKFLOW_PROMPT,
     planningPrompt,
     ctx.collaborationAvailable
-      ? '## 协作\n独立并行探索或对抗审查才使用 \`collaboration\`；先建可见进度项，委派说明保持自包含，收敛结果后更新父任务。子会话不得继续委派。'
+      ? delegationMode === 'default'
+        ? '## 协作\n独立并行探索或对抗审查才使用 \`collaboration\`；先建可见进度项，委派说明保持自包含，收敛结果后更新父任务。子会话不得继续委派。'
+        : '## 协作\n独立并行探索或对抗审查才使用 \`collaboration\`；先建可见进度项，委派说明保持自包含，收敛结果后更新父任务。子会话不得继续委派。委派模型已由用户策略固定，不要为委派选择模型。'
       : undefined,
     workspace
       ? `## 工作区与 Context

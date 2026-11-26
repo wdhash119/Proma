@@ -43,7 +43,14 @@ import {
   resolveDelegationPermissionMode,
 } from './agent-collaboration-utils'
 import { listChannels } from './channel-manager'
-import { listAvailableAgentModelsAcrossChannels, resolveDelegationTarget } from './delegation-target'
+import {
+  listAvailableAgentModelsAcrossChannels,
+  resolveDelegationTarget,
+  resolveDelegationTargetWithPolicy,
+  type DelegationPolicyResolution,
+  type DelegationPolicySnapshot,
+} from './delegation-target'
+import { resolveDelegationConcurrencyCap } from '@proma/shared'
 import { serializePiToolResultPayload } from './adapters/pi-tool-result-json'
 
 interface CollaborationToolContext {
@@ -53,6 +60,8 @@ interface CollaborationToolContext {
   workspaceId?: string
   permissionMode?: PromaPermissionMode
   triggeredBy?: 'user' | 'automation' | 'delegation'
+  /** 本轮生效的委派策略快照；缺省 = 默认模式，行为与历史一致。 */
+  delegationPolicy?: DelegationPolicySnapshot
 }
 
 interface DelegationRecord {
@@ -247,6 +256,10 @@ interface StartDelegationResult {
   effectivePermissionMode: PromaPermissionMode
   effectiveModelId?: string
   configuredThinkingLevel: AgentThinkingLevel
+  /** 本次委派使用的并发上限（策略可下调） */
+  maxConcurrent: number
+  /** 返回给 Agent 的策略信息：模式、被忽略的传参、降级原因 */
+  delegationPolicy: Record<string, unknown>
 }
 
 interface PiDelegationToolResult {
@@ -254,6 +267,10 @@ interface PiDelegationToolResult {
   effectivePermissionMode: PromaPermissionMode
   effectiveModelId?: string
   configuredThinkingLevel: AgentThinkingLevel
+  /** 本次委派使用的并发上限（策略可下调） */
+  maxConcurrent: number
+  /** 返回给 Agent 的策略生效信息 */
+  delegationPolicy: Record<string, unknown>
 }
 
 interface PiBatchDelegationResult {
@@ -306,8 +323,9 @@ function assertCanCreateDelegation(
   }
 
   const runningCount = getRunningDelegationCount(ctx.sessionId)
-  if (runningCount + requestedCount > MAX_RUNNING_DELEGATIONS_PER_PARENT) {
-    throw new Error(`当前父会话已有 ${runningCount} 个运行中的协作子会话，最多允许 ${MAX_RUNNING_DELEGATIONS_PER_PARENT} 个`)
+  const cap = resolveDelegationConcurrencyCap(ctx.delegationPolicy?.policy, MAX_RUNNING_DELEGATIONS_PER_PARENT)
+  if (runningCount + requestedCount > cap) {
+    throw new Error(`当前父会话已有 ${runningCount} 个运行中的协作子会话，本会话上限 ${cap} 个（可在模型选择弹窗的「委派」设置中调整）`)
   }
 
   if (!ctx.channelId) {
@@ -635,7 +653,13 @@ function getCurrentParentPermissionMode(
 
 function getAvailableAgentModels(ctx: CollaborationToolContext): Record<string, unknown> {
   // 跨渠道清单是结构化对象；工具结果统一按 Record 序列化，这里显式展开一次。
-  const summary = listAvailableAgentModelsAcrossChannels(ctx.channelId, ctx.modelId, listChannels())
+  const summary = listAvailableAgentModelsAcrossChannels(
+    ctx.channelId,
+    ctx.modelId,
+    listChannels(),
+    ctx.delegationPolicy?.effectiveMode,
+    resolveDelegationConcurrencyCap(ctx.delegationPolicy?.policy, MAX_RUNNING_DELEGATIONS_PER_PARENT),
+  )
   return { ...summary }
 }
 
@@ -684,22 +708,59 @@ function startDelegation(
   )
   const thinkingLevel = assertThinkingLevel(args.thinkingLevel)
   // 未显式指定时继承父会话渠道与模型；指定 channelId/modelId 时才跨供应商。
-  const target = resolveDelegationTarget(
-    {
-      parentChannelId: ctx.channelId,
-      parentModelId: ctx.modelId,
-      channelId: args.channelId,
-      modelId: args.modelId,
-    },
-    listChannels(),
-  )
+  // 会话委派策略（inherit/specified）会在此强制目标并忽略 Agent 传参。
+  // 默认模式（无策略 / 策略降级）与改动前完全一致：直接走 resolveDelegationTarget( 解析；
+  // inherit / specified 才引入策略解析（resolveDelegationTargetWithPolicy 内部同参复用该函数）。
+  const resolution: DelegationPolicyResolution = ctx.delegationPolicy
+    && ctx.delegationPolicy.effectiveMode !== 'default'
+    ? resolveDelegationTargetWithPolicy(
+        {
+          parentChannelId: ctx.channelId,
+          parentModelId: ctx.modelId,
+          argsChannelId: args.channelId,
+          argsModelId: args.modelId,
+          snapshot: ctx.delegationPolicy,
+        },
+        listChannels(),
+      )
+    : {
+        ...resolveDelegationTarget(
+          {
+            parentChannelId: ctx.channelId,
+            parentModelId: ctx.modelId,
+            channelId: args.channelId,
+            modelId: args.modelId,
+          },
+          listChannels(),
+        ),
+        policyMode: 'default',
+        // specified 快照降级为默认模式时，保留降级信息供结果体说明。
+        ...(ctx.delegationPolicy?.fallback ? { fallback: ctx.delegationPolicy.fallback } : {}),
+      }
+  const target = resolution
   const effectiveChannelId = target.channelId
   const effectiveModelId = target.modelId
+  // 并发上限：策略可下调，缺省或超范围时回落到全局常量。
+  const maxConcurrent = resolveDelegationConcurrencyCap(
+    ctx.delegationPolicy?.policy,
+    MAX_RUNNING_DELEGATIONS_PER_PARENT,
+  )
+  // 结果体向 Agent 说明策略实际生效情况，避免它误以为传参生效。
+  const delegationPolicyInfo: Record<string, unknown> = {
+    mode: resolution.policyMode,
+    ...(resolution.policyMode !== 'default'
+      ? { channelId: effectiveChannelId, modelId: effectiveModelId ?? null }
+      : {}),
+    ...(resolution.ignoredArgs ? { ignoredArgs: resolution.ignoredArgs } : {}),
+    ...(resolution.fallback ? { fallback: resolution.fallback } : {}),
+  }
 
   const { completion, resolveCompletion } = createDelegationCompletion()
 
   const child = createAgentSession(title, effectiveChannelId, ctx.workspaceId, effectiveModelId)
-  const childThinkingLevel: AgentThinkingLevel = thinkingLevel ?? child.reasoningLevel ?? 'high'
+  // 用户设定的策略思考强度硬覆盖 Agent 传参；未设定时沿用历史优先级。
+  const childThinkingLevel: AgentThinkingLevel =
+    ctx.delegationPolicy?.policy?.thinkingLevel ?? thinkingLevel ?? child.reasoningLevel ?? 'high'
   const rootSessionId = parent?.rootSessionId ?? parent?.id ?? ctx.sessionId
   updateAgentSessionMeta(child.id, {
     parentSessionId: ctx.sessionId,
@@ -778,6 +839,8 @@ function startDelegation(
     effectivePermissionMode: permissionMode,
     effectiveModelId,
     configuredThinkingLevel: childThinkingLevel,
+    maxConcurrent,
+    delegationPolicy: delegationPolicyInfo,
   }
 }
 
@@ -793,6 +856,8 @@ export function buildPiCollaborationTools(
   ctx: CollaborationToolContext,
 ): unknown[] {
   const { Type } = require('typebox') as typeof import('typebox')
+  // TypeBox 的属性容器类型，用于条件拼装参数时收窄 Record。
+  type TSchema = Parameters<typeof Type.Optional>[0]
 
   const roleType = Type.Optional(Type.Union([
     Type.Literal('explore'),
@@ -812,14 +877,37 @@ export function buildPiCollaborationTools(
     Type.Literal('max'),
   ], { description: '子会话思考强度；未传则使用新会话默认值' }))
 
+  // 会话委派策略：非默认模式下模型由策略固定，不再向 Agent 暴露 channelId/modelId；
+  // 策略已设定思考强度时，thinkingLevel 参数也不再暴露（硬覆盖，传了也会被忽略）。
+  const effectiveMode = ctx.delegationPolicy?.effectiveMode ?? 'default'
+  const exposeModelParams = effectiveMode === 'default'
+  const policyThinkingLevel = ctx.delegationPolicy?.policy?.thinkingLevel
+  // TypeBox 的 TProperties 不接受 undefined 值，缺省时用空对象展开，而不是给字段赋值 undefined。
+  const thinkingLevelParam: Record<string, TSchema> = policyThinkingLevel
+    ? {}
+    : { thinkingLevel: thinkingLevelType }
+
+  // 用 Record 收窄类型：条件分支展开会让 TypeBox 的 TProperties 推导出 undefined 字段。
+  const modelParams: Record<string, TSchema> = {
+    ...(exposeModelParams ? {
+      channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；跨供应商时填写，省略则继承父会话渠道。' })),
+      modelId: Type.Optional(Type.String({ description: '可选目标模型 ID' })),
+    } : {}),
+  }
+  const delegateModelParams: Record<string, TSchema> = {
+    ...(exposeModelParams ? {
+      channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；仅在需要让子会话改用其它供应商时填写，省略则继承父会话渠道。' })),
+      modelId: Type.Optional(Type.String({ description: '可选目标模型 ID；跨渠道时须与 channelId 一起给出以确保归属明确。' })),
+    } : {}),
+  }
+
   const delegateItemType = Type.Object({
     title: Type.Optional(Type.String({ description: '子会话标题' })),
     role: roleType,
     task: Type.String({ description: '发送给子 Agent 的完整任务说明' }),
     expectedOutput: Type.Optional(Type.String({ description: '希望子 Agent 最终返回的格式或要点' })),
-    channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；跨供应商时填写，省略则继承父会话渠道。' })),
-    modelId: Type.Optional(Type.String({ description: '可选目标模型 ID' })),
-    thinkingLevel: thinkingLevelType,
+    ...modelParams,
+    ...thinkingLevelParam,
   })
 
   function piJsonResult(payload: unknown): { content: Array<{ type: 'text'; text: string }>; details: unknown } {
@@ -829,6 +917,26 @@ export function buildPiCollaborationTools(
       details: serialized.details,
     }
   }
+
+  // 委派策略固定模型时，工具文案开头改为策略说明；默认模式（含 specified 降级）沿用原文案。
+  const specifiedTarget = ctx.delegationPolicy?.policy
+  // 本会话并发上限：每轮重建 schema，从第一次委派就对 Agent 可见，避免先超额再报错。
+  const concurrencyCap = resolveDelegationConcurrencyCap(specifiedTarget, MAX_RUNNING_DELEGATIONS_PER_PARENT)
+  const policyLead = effectiveMode === 'inherit'
+    ? `本会话委派模型已固定为当前对话模型（用户设定），同时运行的子会话上限 ${concurrencyCap} 个；参数中不提供 channelId/modelId，不要尝试指定模型。`
+    : effectiveMode === 'specified'
+      ? `本会话委派模型已固定为 ${ctx.delegationPolicy?.channelName ?? '既定渠道'} · ${specifiedTarget?.modelId ?? '既定模型'}（用户设定），同时运行的子会话上限 ${concurrencyCap} 个；参数中不提供 channelId/modelId，不要尝试指定模型。`
+      : ''
+  // 策略固定模型时不再输出「默认继承 / 显式传参」句，避免与策略说明自相矛盾。
+  const modelParamsNote = exposeModelParams
+    ? '默认继承父会话的渠道与模型；需要让子任务改用其它供应商时显式传 channelId 与 modelId。'
+    : ''
+  const batchModelParamsNote = exposeModelParams
+    ? '默认继承父会话渠道与模型；每个 item 可独立指定 channelId/modelId 让子任务使用不同供应商。'
+    : ''
+  const thinkingLevelNote = policyThinkingLevel
+    ? `子会话思考强度已由用户设定为 ${policyThinkingLevel}，参数中不提供 thinkingLevel。`
+    : '可选 thinkingLevel 指定子会话首轮思考强度；模型不支持时运行时会安全归一化。'
 
   return [
     sdk.defineTool({
@@ -843,15 +951,14 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__delegate_agent',
       label: '委派子 Agent',
-      description: '创建一个真实可见的 Proma 协作子 Agent 会话来并行处理独立子任务。默认继承父会话的渠道与模型；需要让子任务改用其它供应商时显式传 channelId 与 modelId。可选 thinkingLevel 指定子会话首轮思考强度；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevel/thinkingLevel 表示配置/请求值，不代表模型 capability normalization 后的实际运行档位。委派只表示子会话已启动。',
+      description: `${policyLead}创建一个真实可见的 Proma 协作子 Agent 会话来并行处理独立子任务。${modelParamsNote}${thinkingLevelNote}返回中的 configuredThinkingLevel/thinkingLevel 表示配置/请求值，不代表模型 capability normalization 后的实际运行档位。委派只表示子会话已启动。`,
       parameters: Type.Object({
         title: Type.Optional(Type.String({ description: '子会话标题' })),
         role: roleType,
         task: Type.String({ description: '发送给子 Agent 的完整任务说明，必须自包含必要上下文' }),
         expectedOutput: Type.Optional(Type.String({ description: '希望子 Agent 最终返回的格式或要点' })),
-        channelId: Type.Optional(Type.String({ description: '可选目标渠道 ID；仅在需要让子会话改用其它供应商时填写，省略则继承父会话渠道。' })),
-        modelId: Type.Optional(Type.String({ description: '可选目标模型 ID；跨渠道时须与 channelId 一起给出以确保归属明确。' })),
-        thinkingLevel: thinkingLevelType,
+        ...delegateModelParams,
+        ...thinkingLevelParam,
       }),
       async execute(toolCallId: string, params: unknown) {
         const args = params as DelegateAgentArgs
@@ -863,6 +970,8 @@ export function buildPiCollaborationTools(
             effectivePermissionMode: created.effectivePermissionMode,
             effectiveModelId: created.effectiveModelId,
             configuredThinkingLevel: created.configuredThinkingLevel,
+            maxConcurrent: created.maxConcurrent,
+            delegationPolicy: created.delegationPolicy,
           }
         })
         return piJsonResult({
@@ -870,6 +979,8 @@ export function buildPiCollaborationTools(
           effectivePermissionMode: result.effectivePermissionMode,
           effectiveModelId: result.effectiveModelId,
           configuredThinkingLevel: result.configuredThinkingLevel,
+          maxRunningDelegations: result.maxConcurrent,
+          delegationPolicy: result.delegationPolicy,
           note: '子会话已启动，尚未完成或回传结果。记录 delegationId；如果本轮回复、决策或交付依赖它，必须在回复前调用 wait_for_delegations 收敛。仅在父会话还有完全独立的工作时才继续推进。',
         })
       },
@@ -877,10 +988,10 @@ export function buildPiCollaborationTools(
     sdk.defineTool({
       name: 'mcp__collaboration__delegate_agents',
       label: '批量委派子 Agent',
-      description: '批量创建多个真实可见的 Proma 协作子 Agent 会话。默认继承父会话渠道与模型；每个 item 可独立指定 channelId/modelId 让子任务使用不同供应商，也可独立指定首轮 thinkingLevel；模型不支持时运行时会安全归一化。返回中的 configuredThinkingLevels/delegations[].thinkingLevel 表示各项配置/请求值，不代表模型 capability normalization 后的实际运行档位。',
+      description: `${policyLead}批量创建多个真实可见的 Proma 协作子 Agent 会话。${batchModelParamsNote}${thinkingLevelNote}返回中的 configuredThinkingLevels/delegations[].thinkingLevel 表示各项配置/请求值，不代表模型 capability normalization 后的实际运行档位。`,
       parameters: Type.Object({
         sharedContext: Type.Optional(Type.String({ description: '批量子任务共用背景' })),
-        items: Type.Array(delegateItemType, { description: '要创建的子会话列表，最多 50 个' }),
+        items: Type.Array(delegateItemType, { description: `要创建的子会话列表，最多 50 个；本会话同时运行上限 ${concurrencyCap} 个（含已运行的子会话），超出时整批拒绝` }),
       }),
       async execute(toolCallId: string, params: unknown) {
         const args = params as { sharedContext?: string; items: DelegateAgentArgs[] }
@@ -904,6 +1015,8 @@ export function buildPiCollaborationTools(
                 effectivePermissionMode: started.effectivePermissionMode,
                 effectiveModelId: started.effectiveModelId,
                 configuredThinkingLevel: started.configuredThinkingLevel,
+                maxConcurrent: started.maxConcurrent,
+                delegationPolicy: started.delegationPolicy,
               })
             } catch (error) {
               failures.push({
@@ -932,7 +1045,14 @@ export function buildPiCollaborationTools(
           failures: batch.failures,
           createdCount: batch.created.length,
           failedCount: batch.failures.length,
-          maxRunningDelegations: MAX_RUNNING_DELEGATIONS_PER_PARENT,
+          maxRunningDelegations: resolveDelegationConcurrencyCap(
+            ctx.delegationPolicy?.policy,
+            MAX_RUNNING_DELEGATIONS_PER_PARENT,
+          ),
+          delegationPolicy: {
+            mode: ctx.delegationPolicy?.effectiveMode ?? 'default',
+            ...(ctx.delegationPolicy?.fallback ? { fallback: ctx.delegationPolicy.fallback } : {}),
+          },
         })
       },
     }),

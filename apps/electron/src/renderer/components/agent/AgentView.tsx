@@ -25,6 +25,7 @@ import { SkillMentionNamesProvider } from './SkillMentionNamesProvider'
 import { ContextUsageBadge } from './ContextUsageBadge'
 import { AskUserBanner } from './AskUserBanner'
 import { ModelSelector } from '@/components/models/ModelSelector'
+import { DelegationCheckbox, DelegationPanel } from '@/components/agent/AgentDelegationPanel'
 import { ChannelPlanQuotaBadge } from '@/components/models/ChannelPlanQuotaBadge'
 import { AttachmentPreviewItem } from '@/components/ai-elements/AttachmentPreviewItem'
 import { QuotedSelectionChip } from '@/components/diff/QuotedSelectionChip'
@@ -118,8 +119,8 @@ import { useOpenSession } from '@/hooks/useOpenSession'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { sendWithCmdEnterAtom } from '@/atoms/shortcut-atoms'
 import { useOpenPreview } from '@/components/diff/preview-opener'
-import type { AgentDeferredQueueMessageInput, AgentSendInput, AgentPendingFile, AgentThinkingLevel, FileDialogLargeFile, FileDialogResult, ModelOption, ReasoningCapability, SDKMessage, SDKUserMessage } from '@proma/shared'
-import { inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@proma/shared'
+import type { AgentDeferredQueueMessageInput, AgentDelegationPolicy, AgentSendInput, AgentPendingFile, AgentThinkingLevel, FileDialogLargeFile, FileDialogResult, ModelOption, ReasoningCapability, SDKMessage, SDKUserMessage } from '@proma/shared'
+import { inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, MAX_ATTACHMENT_SIZE, normalizeDelegationPolicy, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@proma/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
 import {
@@ -503,6 +504,12 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   )
   const sessionMetaChannelId = sessionMeta?.channelId
   const sessionMetaModelId = sessionMeta?.modelId
+  // 委派策略：历史数据可能带脏字段，统一经 normalize 规范化；null = 默认模式。
+  const delegationPolicy = React.useMemo(
+    () => normalizeDelegationPolicy(sessionMeta?.delegationPolicy) ?? null,
+    [sessionMeta?.delegationPolicy],
+  )
+  const isDelegationChildSession = (sessionMeta?.delegationDepth ?? 0) > 0
   const hasSessionMeta = Boolean(sessionMeta)
   const isLegacyTranscript = sessionMeta?.legacyTranscript?.continuationRequired === true
   const agentChannelId = sessionMetaChannelId ?? sessionChannelMap.get(sessionId) ?? defaultChannelId
@@ -1971,6 +1978,27 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       })
   }, [sessionId, sessionMeta, setAgentSessions])
 
+  /** 委派策略变更：乐观写入会话列表，主进程持久化成功后用返回 meta 覆盖，失败回滚 */
+  const handleDelegationPolicyChange = React.useCallback((policy: AgentDelegationPolicy | null): void => {
+    const previousSessionMeta = sessionMeta
+    setAgentSessions((prev) => prev.map((item) => (
+      item.id === sessionId
+        ? { ...item, delegationPolicy: policy ?? undefined, updatedAt: Date.now() }
+        : item
+    )))
+    window.electronAPI.updateAgentSessionDelegationPolicy(sessionId, policy)
+      .then((updated) => {
+        setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? updated : item))
+      })
+      .catch((error) => {
+        console.error('[AgentView] 更新委派策略失败:', error)
+        if (previousSessionMeta) {
+          setAgentSessions((prev) => prev.map((item) => item.id === sessionId ? previousSessionMeta : item))
+        }
+        toast.error('委派设置更新失败')
+      })
+  }, [sessionId, sessionMeta, setAgentSessions])
+
   const handleCodexFastModeChange = React.useCallback(async (): Promise<void> => {
     if (!isCodexFastModeAvailable || streaming || backgroundWaiting || !sessionMeta) return
 
@@ -2060,6 +2088,18 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const stableSelectedModelRef = React.useRef(computedSelectedModel)
   if (computedSelectedModel) stableSelectedModelRef.current = computedSelectedModel
   const externalSelectedModel = computedSelectedModel ?? stableSelectedModelRef.current
+
+  /** 当前主模型信息（含显示名），供委派面板继承模式下拉框禁用回显 */
+  const delegationCurrentModel = React.useMemo(() => {
+    if (!externalSelectedModel) return undefined
+    const channel = globalChannels.find((item) => item.id === externalSelectedModel.channelId)
+    const model = channel?.models.find((item) => item.id === externalSelectedModel.modelId)
+    return {
+      channelId: externalSelectedModel.channelId,
+      modelId: externalSelectedModel.modelId,
+      modelName: model?.name ?? externalSelectedModel.modelId,
+    }
+  }, [externalSelectedModel, globalChannels])
 
   /** 发送消息 */
   const handleSend = React.useCallback(async (overrideText?: string, fromEditor = false): Promise<void> => {
@@ -3015,6 +3055,20 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
           // 全局打开状态只供主会话的“选择模型”引导使用；右侧嵌入会话必须保持独立，
           // 否则任一触发器打开时会同时挂载两侧的 Popover，遮挡并阻断模型切换。
           useSharedOpenState={!embedded}
+          searchRowEnd={
+            <DelegationCheckbox
+              enabled={delegationPolicy !== null}
+              disabled={isDelegationChildSession}
+              disabledReason="委派子会话不会再继续委派"
+              onEnabledChange={(enabled) => handleDelegationPolicyChange(enabled ? { mode: 'inherit' } : null)}
+            />
+          }
+          sidePanel={delegationPolicy ? (
+            <DelegationPanel policy={delegationPolicy} onChange={handleDelegationPolicyChange} currentModel={delegationCurrentModel} />
+          ) : undefined}
+          triggerBadge={delegationPolicy ? (
+            <span className="pointer-events-none absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-primary" />
+          ) : undefined}
         />
       </div>
       {sendControl}

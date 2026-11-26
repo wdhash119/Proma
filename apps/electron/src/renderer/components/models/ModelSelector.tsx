@@ -114,6 +114,12 @@ interface ModelSelectorProps {
   excludedProviders?: readonly ProviderType[]
   /** 是否使用全局 modelSelectorOpenAtom 控制打开状态（用于外部拉起，如错误提示按钮） */
   useSharedOpenState?: boolean
+  /** 渲染在搜索行最右端的节点（如「委派」复选框） */
+  searchRowEnd?: React.ReactNode
+  /** 提供时弹层扩展为双栏，此节点渲染为右栏（如委派设置面板） */
+  sidePanel?: React.ReactNode
+  /** 触发按钮右上角的状态小标识（如「已配置委派」小圆点） */
+  triggerBadge?: React.ReactNode
 }
 
 export function ModelSelector({
@@ -124,6 +130,9 @@ export function ModelSelector({
   showChannelInTrigger = false,
   excludedProviders,
   useSharedOpenState = false,
+  searchRowEnd,
+  sidePanel,
+  triggerBadge,
 }: ModelSelectorProps = {}): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   const channelsLoaded = useAtomValue(channelsLoadedAtom)
@@ -239,6 +248,107 @@ export function ModelSelector({
     }
   }
 
+  // 搜索行：输入框之后追加 searchRowEnd，flex 行内自然落到最右端。
+  const searchRow = (
+    <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-border/60">
+      <Search className="size-4 text-muted-foreground/60 flex-shrink-0" />
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        onKeyDown={handleSearchKeyDown}
+        placeholder="搜索模型..."
+        className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+        autoFocus
+      />
+      {searchRowEnd}
+    </div>
+  )
+
+  // 模型列表：单栏与双栏布局共用，避免两份拷贝。
+  const modelList = (
+    <div className="max-h-[min(360px,55vh)] overflow-y-auto scrollbar-thin">
+      {filteredGrouped.size === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          未找到模型
+        </div>
+      ) : (
+        (() => {
+          let flatIndex = 0
+          return Array.from(filteredGrouped.entries()).map(([channelId, options]) => {
+            const first = options[0]
+            if (!first) return null
+            const channel = channels.find((c) => c.id === channelId)
+
+            return (
+              <div
+                key={channelId}
+                role="group"
+                aria-label={first.channelName}
+                className="border-b border-border/40 py-1 last:border-b-0"
+              >
+                {/* 渠道标题与模型行共用栅格，仅通过字号和色阶区分层级。 */}
+                <div className={cn(MODEL_SELECTOR_ROW_LAYOUT, 'min-h-7 py-0.5')}>
+                  <ModelSelectorListIcon
+                    src={channel ? getChannelLogo(channel) : DefaultLogo}
+                  />
+                  <span className="min-w-0 truncate text-xs font-medium text-muted-foreground/80">
+                    {first.channelName}
+                  </span>
+                  {channel ? <ChannelPlanQuotaBadge channel={channel} /> : null}
+                </div>
+
+                {/* 该渠道下的模型列表 */}
+                {options.map((option) => {
+                  const isSelected =
+                    selectedModel?.channelId === option.channelId &&
+                    selectedModel?.modelId === option.modelId
+                  const currentFlatIndex = flatIndex++
+                  const isHighlighted = currentFlatIndex === highlightIndex
+                  const visualState = getModelSelectorOptionVisualState(isSelected, isHighlighted)
+
+                  return (
+                    <button
+                      key={`${option.channelId}:${option.modelId}`}
+                      ref={(el) => {
+                        if (el) itemRefs.current.set(currentFlatIndex, el)
+                        else itemRefs.current.delete(currentFlatIndex)
+                      }}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => handleSelect(option)}
+                      onMouseEnter={() => setHighlightIndex(currentFlatIndex)}
+                      className={cn(
+                        MODEL_SELECTOR_ROW_LAYOUT,
+                        'min-h-9 rounded-lg py-1.5 text-left transition-colors',
+                        'hover:bg-accent/60 focus:outline-none focus-visible:bg-accent/70',
+                        visualState === 'highlighted' && 'bg-accent/60',
+                        visualState === 'selected' && 'bg-accent',
+                      )}
+                    >
+                      <ModelSelectorListIcon
+                        src={getModelLogo(option.modelId, option.provider)}
+                      />
+                      <span className={cn(
+                        'min-w-0 truncate text-sm',
+                        isSelected ? 'font-medium text-foreground' : 'text-foreground/80',
+                      )}>
+                        {option.modelName}
+                      </span>
+                      <span className="flex size-5 items-center justify-center" aria-hidden="true">
+                        {isSelected ? <Check className="size-4 text-primary" strokeWidth={2.5} /> : null}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })
+        })()
+      )}
+    </div>
+  )
+
   if (channelsLoaded && modelOptions.length === 0) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1">
@@ -260,7 +370,8 @@ export function ModelSelector({
             <button
               type="button"
               className={cn(
-                'model-selector-trigger flex items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors',
+                // relative 供 triggerBadge 在右上角绝对定位。
+                'model-selector-trigger relative flex items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors',
                 'hover:bg-accent hover:text-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-foreground',
                 inputToolbarControlHeightClass,
               )}
@@ -280,6 +391,7 @@ export function ModelSelector({
                   : '选择模型'}
               </span>
               <ChevronDown className="size-3" />
+              {triggerBadge}
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
@@ -287,110 +399,32 @@ export function ModelSelector({
       </Tooltip>
 
       {/* 模型选择 Popover — 锚定触发按钮，向上展开（end 对齐，内容向左上延伸）。
-          宽度优先让模型名称完整显示，并在窄窗口内保留 12px 的安全边距。 */}
+          宽度优先让模型名称完整显示，并在窄窗口内保留 12px 的安全边距。
+          提供 sidePanel 时向左扩展为双栏：左栏模型列表，右栏由宿主渲染（如委派设置）。 */}
       <PopoverContent
         side="top"
         align="end"
         sideOffset={8}
         collisionPadding={12}
-        className="w-[min(400px,calc(100vw-24px))] p-0"
+        className={cn('p-0', sidePanel ? 'w-[min(712px,calc(100vw-24px))]' : 'w-[min(400px,calc(100vw-24px))]')}
         aria-label="选择模型"
       >
-        {/* 搜索栏 */}
-        <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-border/60">
-          <Search className="size-4 text-muted-foreground/60 flex-shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="搜索模型..."
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-            autoFocus
-          />
-        </div>
-
-        {/* 模型列表 */}
-        <div className="max-h-[min(360px,55vh)] overflow-y-auto scrollbar-thin">
-          {filteredGrouped.size === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              未找到模型
+        {sidePanel ? (
+          <div className="flex items-stretch">
+            {/* 左栏：窄窗口下允许收缩（min-w-0），保证整体不超出视口。 */}
+            <div className="min-w-0 w-[400px] max-w-full shrink">
+              {searchRow}
+              {modelList}
             </div>
-          ) : (
-            (() => {
-              let flatIndex = 0
-              return Array.from(filteredGrouped.entries()).map(([channelId, options]) => {
-                const first = options[0]
-                if (!first) return null
-                const channel = channels.find((c) => c.id === channelId)
-
-                return (
-                  <div
-                    key={channelId}
-                    role="group"
-                    aria-label={first.channelName}
-                    className="border-b border-border/40 py-1 last:border-b-0"
-                  >
-                    {/* 渠道标题与模型行共用栅格，仅通过字号和色阶区分层级。 */}
-                    <div className={cn(MODEL_SELECTOR_ROW_LAYOUT, 'min-h-7 py-0.5')}>
-                      <ModelSelectorListIcon
-                        src={channel ? getChannelLogo(channel) : DefaultLogo}
-                      />
-                      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground/80">
-                        {first.channelName}
-                      </span>
-                      {channel ? <ChannelPlanQuotaBadge channel={channel} /> : null}
-                    </div>
-
-                    {/* 该渠道下的模型列表 */}
-                    {options.map((option) => {
-                      const isSelected =
-                        selectedModel?.channelId === option.channelId &&
-                        selectedModel?.modelId === option.modelId
-                      const currentFlatIndex = flatIndex++
-                      const isHighlighted = currentFlatIndex === highlightIndex
-                      const visualState = getModelSelectorOptionVisualState(isSelected, isHighlighted)
-
-                      return (
-                        <button
-                          key={`${option.channelId}:${option.modelId}`}
-                          ref={(el) => {
-                            if (el) itemRefs.current.set(currentFlatIndex, el)
-                            else itemRefs.current.delete(currentFlatIndex)
-                          }}
-                          type="button"
-                          aria-pressed={isSelected}
-                          onClick={() => handleSelect(option)}
-                          onMouseEnter={() => setHighlightIndex(currentFlatIndex)}
-                          className={cn(
-                            MODEL_SELECTOR_ROW_LAYOUT,
-                            'min-h-9 rounded-lg py-1.5 text-left transition-colors',
-                            'hover:bg-accent/60 focus:outline-none focus-visible:bg-accent/70',
-                            visualState === 'highlighted' && 'bg-accent/60',
-                            visualState === 'selected' && 'bg-accent',
-                          )}
-                        >
-                          <ModelSelectorListIcon
-                            src={getModelLogo(option.modelId, option.provider)}
-                          />
-                          <span className={cn(
-                            'min-w-0 truncate text-sm',
-                            isSelected ? 'font-medium text-foreground' : 'text-foreground/80',
-                          )}>
-                            {option.modelName}
-                          </span>
-                          <span className="flex size-5 items-center justify-center" aria-hidden="true">
-                            {isSelected ? <Check className="size-4 text-primary" strokeWidth={2.5} /> : null}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )
-              })
-            })()
-          )}
-        </div>
+            {/* 右栏：高度随左栏拉伸，面板内部自行滚动；限高避免弹出层超出视口。 */}
+            <div className="w-[300px] shrink-0 border-l border-border/60 overflow-hidden max-h-[min(560px,70vh)] min-h-[min(340px,50vh)]">{sidePanel}</div>
+          </div>
+        ) : (
+          <>
+            {searchRow}
+            {modelList}
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )

@@ -31,6 +31,7 @@ import type {
   SetAgentSessionActiveWorktreeInput,
   SDKMessage,
   AgentSendInput,
+  AgentDelegationPolicy,
   AgentThinkingLevel,
   AgentStreamEvent,
   AgentStreamCompletePayload,
@@ -540,6 +541,9 @@ export interface ElectronAPI {
 
   /** 更新 Agent 会话人设选择（下一轮生效；undefined 回退默认人设） */
   updateAgentSessionPersona: (id: string, personaId?: string) => Promise<AgentSessionMeta>
+
+  /** 更新会话委派策略（下一轮生效；null 清除回默认模式） */
+  updateAgentSessionDelegationPolicy: (sessionId: string, policy: AgentDelegationPolicy | null) => Promise<AgentSessionMeta>
 
   /** 选择或清除当前会话的活动 worktree */
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => Promise<AgentSessionMeta>
@@ -1716,6 +1720,10 @@ const electronAPI: ElectronAPI = {
 
   updateAgentSessionPersona: (id: string, personaId?: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_SESSION_PERSONA, id, personaId)
+  },
+
+  updateAgentSessionDelegationPolicy: (sessionId: string, policy: AgentDelegationPolicy | null) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_SESSION_DELEGATION_POLICY, sessionId, policy)
   },
 
   setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => {

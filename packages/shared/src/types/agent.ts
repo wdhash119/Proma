@@ -76,6 +76,86 @@ export type AgentEffort = 'low' | 'medium' | 'high' | 'max'
 /** Agent 思考等级（用于 Pi runtime；Claude runtime 继续使用 ThinkingConfig/AgentEffort） */
 export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
+/** 委派策略模式。default 不写入 meta（缺省即 default）。 */
+export type AgentDelegationMode = 'default' | 'inherit' | 'specified'
+
+/** 会话级委派策略；写在 AgentSessionMeta.delegationPolicy 上。 */
+export interface AgentDelegationPolicy {
+  mode: AgentDelegationMode
+  /** 仅 mode='specified' 有意义；与 modelId 成对出现 */
+  channelId?: string
+  modelId?: string
+  /** 同时运行的子会话上限；读取时钳制 [1,50]，undefined 表示用系统默认 */
+  maxConcurrent?: number
+  /** 委派子会话思考强度；设置后硬覆盖 Agent 传参 */
+  thinkingLevel?: AgentThinkingLevel
+}
+
+/** 思考强度七档白名单，用于丢弃非法值。 */
+const AGENT_THINKING_LEVELS: readonly string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+
+/** 并发上限的取值范围。 */
+const DELEGATION_CONCURRENCY_MIN = 1
+const DELEGATION_CONCURRENCY_MAX = 50
+
+/** 把数值钳制到 [1,50] 的整数；非有限数字返回 undefined。 */
+function clampDelegationConcurrency(value: number): number | undefined {
+  if (!Number.isFinite(value)) return undefined
+  const rounded = Math.trunc(value)
+  return Math.min(DELEGATION_CONCURRENCY_MAX, Math.max(DELEGATION_CONCURRENCY_MIN, rounded))
+}
+
+/**
+ * 兼容读取：非对象、mode 缺失/非法/'default'、specified 缺 channelId+modelId → undefined（= 默认模式），绝不抛错。
+ *
+ * maxConcurrent 仅保留数字（越界钳制到 [1,50]，非有限数字丢弃）；thinkingLevel 非七档值时丢弃。
+ */
+export function normalizeDelegationPolicy(raw: unknown): AgentDelegationPolicy | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const record = raw as Record<string, unknown>
+  const mode = record.mode
+  // default 缺省、非法值一律视为未设置策略。
+  if (mode !== 'inherit' && mode !== 'specified') return undefined
+
+  let channelId: string | undefined
+  let modelId: string | undefined
+  if (mode === 'specified') {
+    const rawChannelId = typeof record.channelId === 'string' ? record.channelId.trim() : ''
+    const rawModelId = typeof record.modelId === 'string' ? record.modelId.trim() : ''
+    // specified 必须成对给出渠道与模型，否则等于没有可用目标。
+    if (!rawChannelId || !rawModelId) return undefined
+    channelId = rawChannelId
+    modelId = rawModelId
+  }
+
+  const policy: AgentDelegationPolicy = { mode }
+  if (channelId !== undefined) policy.channelId = channelId
+  if (modelId !== undefined) policy.modelId = modelId
+
+  if (typeof record.maxConcurrent === 'number') {
+    const cap = clampDelegationConcurrency(record.maxConcurrent)
+    if (cap !== undefined) policy.maxConcurrent = cap
+  }
+
+  if (typeof record.thinkingLevel === 'string' && AGENT_THINKING_LEVELS.includes(record.thinkingLevel)) {
+    policy.thinkingLevel = record.thinkingLevel as AgentThinkingLevel
+  }
+
+  return policy
+}
+
+/**
+ * 并发上限解析：policy.maxConcurrent（钳制 [1,50]）优先，否则返回 fallback。
+ * 主进程调用方传 MAX_RUNNING_DELEGATIONS_PER_PARENT。
+ */
+export function resolveDelegationConcurrencyCap(
+  policy: AgentDelegationPolicy | undefined,
+  fallback: number,
+): number {
+  if (policy?.maxConcurrent === undefined) return fallback
+  return clampDelegationConcurrency(policy.maxConcurrent) ?? fallback
+}
+
 // Model-specific reasoning profiles and level normalization live in reasoning-profile.ts.
 
 /** 支持 ChatGPT Codex Fast Mode（priority service tier）的模型。 */
@@ -775,6 +855,14 @@ export interface AgentSessionMeta {
   reasoningLevel?: AgentThinkingLevel
   /** 本会话选择的人设 ID；未设置时使用人设配置的默认人设。 */
   personaId?: string
+  /**
+   * 会话级委派策略（子会话用哪个模型）。
+   * - default：缺省态，对委派零影响，Agent 可自由传 channelId/modelId
+   * - inherit：强制子会话继承当前对话的渠道与模型
+   * - specified：强制子会话使用 channelId + modelId 指定的模型
+   * 缺省 = 默认模式，对委派零影响；读取时一律经 normalizeDelegationPolicy 规范化。
+   */
+  delegationPolicy?: AgentDelegationPolicy
   /** @deprecated 使用 reasoningLevel；保留以读取历史会话数据。 */
   openAIThinkingLevel?: AgentThinkingLevel
   /** 所属工作区 ID */
@@ -2076,6 +2164,8 @@ export const AGENT_IPC_CHANNELS = {
   GET_PI_REASONING_CAPABILITY: 'agent:get-pi-reasoning-capability',
   /** 更新指定会话的推理深度（下一轮 Pi 请求生效） */
   UPDATE_SESSION_REASONING_LEVEL: 'agent:update-session-reasoning-level',
+  /** 更新指定会话的委派策略（下一轮运行生效） */
+  UPDATE_SESSION_DELEGATION_POLICY: 'agent:update-session-delegation-policy',
 
   // AskUserQuestion 交互式问答
   /** AskUser 响应（渲染进程 → 主进程） */

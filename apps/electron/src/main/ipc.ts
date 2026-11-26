@@ -10,7 +10,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { release as osRelease, tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, AGENT_IPC_CHANNELS, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, AGENT_IPC_CHANNELS, normalizeDelegationPolicy, COMPUTER_USE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, PERSONA_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, SLACK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, normalizePathForCompare, removeMcpServerFromConfig, TERMINAL_IPC_CHANNELS, CHANGE_REQUESTS_IPC_CHANNELS, LIVE_COMPACT_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, DATA_ROOT_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -145,6 +145,7 @@ import type {
   LiveCompactState,
   LiveCompactCheckResult,
   LiveCompactSyncResult,
+  AgentDelegationPolicy,
 } from '@proma/shared'
 import type { UserProfile, AppSettings, AppSettingsPatch } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
@@ -2434,6 +2435,25 @@ export function registerIpcHandlers(): void {
       // 模型切换允许在运行中提交；当前 query 继续使用启动时的模型，下一轮读取新配置。
       return updateAgentSessionMeta(id, { channelId, modelId })
     }
+  )
+
+  // 更新会话委派策略（下一轮生效；null 表示清除回默认模式）。
+  // policy 一律经 normalizeDelegationPolicy 规范化，无效组合直接拒绝，避免脏数据落 meta。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPDATE_SESSION_DELEGATION_POLICY,
+    async (_, sessionId: string, policy: AgentDelegationPolicy | null): Promise<AgentSessionMeta> => {
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        throw new Error('会话 ID 无效')
+      }
+      if (policy === null) {
+        return updateAgentSessionMeta(sessionId, { delegationPolicy: undefined })
+      }
+      const normalized = normalizeDelegationPolicy(policy)
+      if (!normalized) {
+        throw new Error('无效的委派策略')
+      }
+      return updateAgentSessionMeta(sessionId, { delegationPolicy: normalized })
+    },
   )
 
   // 更新 Agent 会话人设选择（下一轮生效；undefined 回退人设库默认）

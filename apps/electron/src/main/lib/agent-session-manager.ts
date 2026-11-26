@@ -628,7 +628,7 @@ export function getAgentSessionSDKMessages(id: string): SDKMessage[] {
  */
 export function updateAgentSessionMeta(
   id: string,
-  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'projectInstructionState' | 'codexFastMode' | 'liveCompact' | 'reasoningLevel' | 'personaId' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
+  updates: Partial<Pick<AgentSessionMeta, 'title' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'projectInstructionState' | 'codexFastMode' | 'liveCompact' | 'reasoningLevel' | 'personaId' | 'delegationPolicy' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'checkoutHistory' | 'changeRequests' | 'pullRequest' | 'pinned' | 'starred' | 'archived' | 'isDraft' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'explorationParentSessionId' | 'explorationSourceMessageId' | 'explorationSourceLabel' | 'explorationTitleInitializedAt' | 'stoppedByUser' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal'>>,
 ): AgentSessionMeta {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)
@@ -933,6 +933,8 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
       forkSourceDir: sourceDir,
       // 分叉继承源会话的人设选择，保持同一对话风格延续。
       ...(sourceMeta.personaId ? { personaId: sourceMeta.personaId } : {}),
+      // 委派策略属于会话级用户设定，分叉后保持同一委派行为。
+      ...(sourceMeta.delegationPolicy ? { delegationPolicy: sourceMeta.delegationPolicy } : {}),
       ...explorationMeta,
     })
     newMeta.sdkSessionId = forkedManager.getSessionId()
@@ -940,6 +942,7 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     newMeta.piEntryBindings = branchBindings
     newMeta.activeWorktree = sourceActiveWorktree
     if (sourceMeta.personaId) newMeta.personaId = sourceMeta.personaId
+    if (sourceMeta.delegationPolicy) newMeta.delegationPolicy = sourceMeta.delegationPolicy
     Object.assign(newMeta, explorationMeta)
 
     if (sourceWorkbenchDir && destWorkbenchDir) await copyForkWorkspaceFiles(sourceWorkbenchDir, destWorkbenchDir)
